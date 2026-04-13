@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>digit | command console</title>
+    <style>
+        body {
+            background-color: #0d0d0d;
+            color: #00ff41;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        #vitals {
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #terminal {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 1px solid #333;
+            padding: 15px;
+            background: #000;
+            margin-bottom: 10px;
+        }
+
+        .input-line {
+            display: flex;
+            background: #000;
+            padding: 5px;
+        }
+
+        .prompt {
+            color: #00ff41;
+            margin-right: 10px;
+        }
+
+        input {
+            background: transparent;
+            border: none;
+            color: #00ff41;
+            font-family: inherit;
+            font-size: 1em;
+            outline: none;
+            flex-grow: 1;
+        }
+
+        .log-entry { margin-bottom: 8px; }
+        .user-cmd { color: #5dade2; }
+        .digit-res { color: #f4d03f; }
+    </style>
+</head>
+<body>
+
+    <div id="vitals">
+        <span>status: <span id="st-val">checking...</span></span>
+        <span>weights: <span id="w-val">590</span></span>
+        <span>os: <span id="os-val">nominal</span></span>
+    </div>
+
+    <div id="terminal">
+        <div class="log-entry">digit online. protocol initialized.</div>
+    </div>
+
+    <div class="input-line">
+        <span class="prompt">></span>
+        <input type="text" id="cmdInput" autofocus autocomplete="off">
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const cmdInput = document.getElementById('cmdInput');
+
+        // Fetch vitals every 5 seconds
+        async function updateVitals() {
+            try {
+                const res = await fetch('/api/vitals');
+                const data = await res.json();
+                document.getElementById('st-val').innerText = data.status;
+                document.getElementById('w-val').innerText = data.weights;
+                document.getElementById('os-val').innerText = data.os;
+            } catch (err) {
+                document.getElementById('st-val').innerText = "offline";
+            }
+        }
+
+        function appendLog(text, type) {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerText = text;
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        cmdInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const cmd = cmdInput.value.trim();
+                if (!cmd) return;
+
+                appendLog(`> ${cmd}`, 'user-cmd');
+                cmdInput.value = '';
+
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        body: cmd
+                    });
+                    const text = await response.text();
+                    appendLog(text, 'digit-res');
+                } catch (err) {
+                    appendLog("error: failed to connect to digit api.", 'digit-res');
+                }
+            }
+        });
+
+        setInterval(updateVitals, 5000);
+        updateVitals();
+    </script>
+</body>
+</html>
