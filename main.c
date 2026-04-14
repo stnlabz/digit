@@ -14,6 +14,9 @@ int active_count = 0;
 /* External function from api.c */
 extern void start_api_server(int port);
 
+int logged_in = 0;
+long current_session_id = 0;
+
 void load_core_commands() {
     active_count = 0;
     int r_count = get_restricted_count();

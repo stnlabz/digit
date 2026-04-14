@@ -65,7 +65,6 @@
 
     <div id="vitals">
         <span>status: <span id="st-val">checking...</span></span>
-        <span>weights: <span id="w-val">590</span></span>
         <span>os: <span id="os-val">nominal</span></span>
     </div>
 
@@ -88,7 +87,6 @@
                 const res = await fetch('/api/vitals');
                 const data = await res.json();
                 document.getElementById('st-val').innerText = data.status;
-                document.getElementById('w-val').innerText = data.weights;
                 document.getElementById('os-val').innerText = data.os;
             } catch (err) {
                 document.getElementById('st-val').innerText = "offline";

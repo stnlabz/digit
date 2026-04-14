@@ -9,6 +9,9 @@
 /* This is where all core output is stored for the Web API to pick up */
 extern char digit_out_buffer[4096];
 
+extern int logged_in;
+extern long current_session_id;
+
 /* --- Tokenizer & Integrity --- */
 typedef enum {
     TOKEN_LITERAL,
@@ -29,6 +32,8 @@ typedef struct {
     const char *name;
     const char *description;
     int (*handler)(const char *);
+    int restricted;
+    int min_role;
 } command_t;
 
 /* --- Brain & LLM Weights --- */
@@ -63,6 +68,7 @@ int cmd_ingest(const char *args);
 int cmd_chat(const char *args);
 int cmd_think(const char *args);
 int cmd_exit(const char *args);
+void add_command(char *name, void (*handler)(char *), char *desc, int role);
 
 // Neural/LLM Logic (core/llm_trainer.c & core/inference.c)
 void train_from_source(sqlite3 *db);

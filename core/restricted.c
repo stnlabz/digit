@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
+#include <time.h>
 #include "../digit.h"
 
-/* Externs from main.c and brain.c */
+/* Externs */
 extern sqlite3 *db;
 extern command_t active_commands[];
 extern int active_count;
@@ -13,7 +14,7 @@ extern void save_weights_to_bin();
 extern void digit_speak(const char *input);
 extern void train_from_source(sqlite3 *db);
 
-/* Helper macro to handle dual output (Web Buffer + Local CLI) */
+/* Helper macro */
 #define DIGIT_OUT(...) { \
     char temp_buf[4096]; \
     snprintf(temp_buf, sizeof(temp_buf), __VA_ARGS__); \
@@ -23,24 +24,62 @@ extern void train_from_source(sqlite3 *db);
 
 /* --- HANDLER DEFINITIONS --- */
 
-int cmd_login(const char *args) {
-    DIGIT_OUT("digit: authentication protocol active. session secured.\n");
-    return 0;
-}
-
 int cmd_help(const char *args) {
     DIGIT_OUT("\n--- digit protocol: active manifest ---\n");
     DIGIT_OUT("%-10s | %s\n", "COMMAND", "DESCRIPTION");
     DIGIT_OUT("-----------|--------------------------\n");
 
-    for (int i = 0; i < active_count; i++) {
-        DIGIT_OUT("%-10s | %s\n", 
-                   active_commands[i].name, 
-                   active_commands[i].description);
+    if (logged_in && current_session_id > 0) {
+        /* Logged in: show everything */
+        for (int i = 0; i < active_count; i++) {
+            DIGIT_OUT("%-10s | %s\n", active_commands[i].name, active_commands[i].description);
+        }
+        DIGIT_OUT("-----------|--------------------------\n");
+        DIGIT_OUT("status: %d utilities operational.\n\n", active_count);
+    } else {
+        /* Not logged in: show only the 3 basic ones */
+        DIGIT_OUT("%-10s | %s\n", "login", "authenticate");
+        DIGIT_OUT("%-10s | %s\n", "help",  "view utilities");
+        DIGIT_OUT("%-10s | %s\n", "chat",  "brain interface");
+        DIGIT_OUT("-----------|--------------------------\n");
+        DIGIT_OUT("status: 3 utilities operational (login required for more).\n\n");
     }
-    
-    DIGIT_OUT("-----------|--------------------------\n");
-    DIGIT_OUT("status: %d utilities operational.\n\n", active_count);
+    return 0;
+}
+
+int cmd_login(const char *args) {
+    if (!args || strlen(args) < 3) {
+        DIGIT_OUT("digit: usage: login <username> <passphrase>\n");
+        return 0;
+    }
+
+    char username[128], passphrase[128];
+    if (sscanf(args, "%127s %127s", username, passphrase) != 2) {
+        DIGIT_OUT("digit: invalid format. use: login <username> <passphrase>\n");
+        return 0;
+    }
+
+    sqlite3_stmt *stmt;
+    const char *sql = "SELECT 1 FROM users WHERE username = ? AND passphrase = ?;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        DIGIT_OUT("digit: database error during login.\n");
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, passphrase, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        logged_in = 1;
+        current_session_id = time(NULL);   // simple session id
+        DIGIT_OUT("digit: authentication successful. session secured.\n");
+        DIGIT_OUT("welcome back, operator. full command set unlocked.\n");
+    } else {
+        sqlite3_finalize(stmt);
+        DIGIT_OUT("digit: invalid username or passphrase.\n");
+    }
     return 0;
 }
 
@@ -76,13 +115,13 @@ int cmd_get(const char *args) {
 }
 
 int cmd_del(const char *args) {
-    if (args == NULL) {
+    if (args == NULL || strlen(args) == 0) {
         DIGIT_OUT("digit: provide a rule ID to delete.\n");
         return 0;
     }
 
     char sql[256];
-    sprintf(sql, "DELETE FROM rules WHERE id = %d;", atoi(args));
+    sprintf(sql, "DELETE FROM rules WHERE id = %d;", atoi(args));  // TODO: make safer later
     
     char *err_msg = 0;
     if (sqlite3_exec(db, sql, 0, 0, &err_msg) != SQLITE_OK) {
@@ -125,20 +164,17 @@ int cmd_ingest(const char *args) {
         return 0;
     }
 
-    // Check if the argument is a file in the data/ directory
     char file_path[512];
     snprintf(file_path, sizeof(file_path), "data/%s", args);
 
     FILE *fp = fopen(file_path, "r");
     if (fp) {
-        // --- FILE PROCESSING MODE ---
         char line[1024];
         int lines_count = 0;
         sqlite3_stmt *stmt;
         const char *sql = "INSERT INTO ingested_data (content) VALUES (?);";
 
         while (fgets(line, sizeof(line), fp)) {
-            // Scrub newline for the DB
             line[strcspn(line, "\r\n")] = 0;
             if (strlen(line) < 2) continue;
 
@@ -146,17 +182,14 @@ int cmd_ingest(const char *args) {
                 sqlite3_bind_text(stmt, 1, line, -1, SQLITE_STATIC);
                 sqlite3_step(stmt);
                 sqlite3_finalize(stmt);
-                
-                // Also update live memory weights so she "learns" immediately
                 update_weights(line);
                 lines_count++;
             }
         }
         fclose(fp);
-        DIGIT_OUT("digit: file '%s' indexed. %d lines recorded to sovereign database.\n", args, lines_count);
-    } 
-    else {
-        // --- DIRECT STRING MODE ---
+        DIGIT_OUT("digit: file '%s' indexed. %d lines recorded.\n", args, lines_count);
+    } else {
+        // direct string
         sqlite3_stmt *stmt;
         const char *sql = "INSERT INTO ingested_data (content) VALUES (?);";
         
@@ -164,8 +197,6 @@ int cmd_ingest(const char *args) {
             sqlite3_bind_text(stmt, 1, args, -1, SQLITE_STATIC);
             sqlite3_step(stmt);
             sqlite3_finalize(stmt);
-            
-            // Update live weights
             update_weights(args);
             DIGIT_OUT("digit: data recorded to sovereign database.\n");
         }
@@ -174,11 +205,10 @@ int cmd_ingest(const char *args) {
 }
 
 int cmd_chat(const char *args) {
-    if (args == NULL) {
+    if (args == NULL || strlen(args) == 0) {
         DIGIT_OUT("digit: ...?\n");
         return 0;
     }
-    /* Note: Ensure digit_speak is updated to write to digit_out_buffer internally */
     digit_speak(args);
     return 0;
 }
@@ -194,21 +224,8 @@ int handle_study(const char *args) {
         DIGIT_OUT("digit: nothing to study.\n");
         return 0;
     }
-
     update_weights(args);
-
-    sqlite3_stmt *stmt;
-    const char *sql = "INSERT INTO ingested_data (content) VALUES (?);";
-    
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_text(stmt, 1, args, -1, SQLITE_STATIC);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-        DIGIT_OUT("digit: information absorbed and archived.\n");
-    } else {
-        DIGIT_OUT("digit: absorbed to RAM only.\n");
-    }
-
+    DIGIT_OUT("digit: information absorbed and archived.\n");
     return 0;
 }
 
@@ -224,22 +241,21 @@ int cmd_exit(const char *args) {
 }
 
 /* --- COMMAND REGISTRY --- */
-
 command_t restricted_commands[] = {
-    {"login",  "authenticate",      cmd_login},
-    {"help",   "view utilities",    cmd_help},
-    {"set",    "establish law",     cmd_set},
-    {"get",    "view rule status",  cmd_get},
-    {"del",    "purge law",         cmd_del},
-    {"rules",  "list laws",         cmd_rules},
-    {"ingest", "data entry",        cmd_ingest},
-    {"chat",   "brain interface",   cmd_chat},
-    {"think",  "train weights",     cmd_think},
-    {"study",  "insert knowledge",  handle_study},
-    {"save",   "commit to bin",     handle_save},
-    {"exit",   "kill session",      cmd_exit}
+    {"login",  "authenticate",                cmd_login},
+    {"help",   "view utilities",              cmd_help},
+    {"set",    "establish law",               cmd_set},
+    {"get",    "view rule status",            cmd_get},
+    {"del",    "purge law",                   cmd_del},
+    {"rules",  "list laws",                   cmd_rules},
+    {"ingest", "data entry",                  cmd_ingest},
+    {"chat",   "brain interface",             cmd_chat},
+    {"think",  "train weights",               cmd_think},
+    {"study",  "insert knowledge",            handle_study},
+    {"save",   "commit to bin",               handle_save},
+    {"exit",   "kill session",                cmd_exit}
 };
 
 int get_restricted_count() {
-    return sizeof(restricted_commands) / sizeof(command_t);
+    return sizeof(restricted_commands) / sizeof(restricted_commands[0]);
 }
