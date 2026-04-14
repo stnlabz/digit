@@ -47,6 +47,23 @@ const char* get_word_from_id(int id) {
     return vocab[id].text;
 }
 
+void load_weights_from_bin() {
+    FILE *fp = fopen("data/weights.bin", "rb");
+    if (fp == NULL) {
+        // Fallback for different directory structures
+        fp = fopen("weights.bin", "rb");
+    }
+
+    if (fp) {
+        size_t read = fread(neural_weights, sizeof(float), MAX_WEIGHTS, fp);
+        WEIGHT_COUNT = (int)read;
+        fclose(fp);
+        printf("[SYSTEM] Loaded %d weights from bin. Intelligence active.\n", WEIGHT_COUNT);
+    } else {
+        printf("[WARNING] weights.bin not found. Running on zero-state logic.\n");
+    }
+}
+
 void update_weights(const char *content) {
     if (content == NULL) return;
     char buffer[2048];

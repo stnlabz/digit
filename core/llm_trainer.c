@@ -35,22 +35,3 @@ void save_weights_to_bin() {
     fclose(f);
     printf("digit: %d weights and %d words saved to data/weights.bin\n", weight_count, vocab_count);
 }
-
-void load_weights_from_bin() {
-    FILE *f = fopen("data/weights.bin", "rb");
-    if (!f) {
-        printf("digit: no persistent memory found.\n");
-        return;
-    }
-
-    // Read metadata back in
-    fread(&weight_count, sizeof(int), 1, f);
-    fread(&vocab_count, sizeof(int), 1, f);
-
-    // Read the data back into the global arrays
-    fread(weight_matrix, sizeof(weight_node_t), weight_count, f);
-    fread(vocab, sizeof(vocabulary_t), vocab_count, f);
-
-    fclose(f);
-    printf("digit: %d neural connections and %d words loaded.\n", weight_count, vocab_count);
-}

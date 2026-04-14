@@ -5,12 +5,12 @@
 #include <stddef.h>
 #include <sqlite3.h>
 
+extern int logged_in;
+extern long current_session_id;
+
 /* --- Shared Communication Buffer --- */
 /* This is where all core output is stored for the Web API to pick up */
 extern char digit_out_buffer[4096];
-
-extern int logged_in;
-extern long current_session_id;
 
 /* --- Tokenizer & Integrity --- */
 typedef enum {
@@ -39,6 +39,9 @@ typedef struct {
 /* --- Brain & LLM Weights --- */
 #define MAX_TOKENS 5000
 #define MAX_TOKEN_LEN 64
+#define MAX_WEIGHTS 20000
+extern float neural_weights[MAX_WEIGHTS];
+extern int WEIGHT_COUNT;
 
 typedef struct {
     char text[MAX_TOKEN_LEN];
@@ -82,5 +85,7 @@ void load_weights_from_bin();
 /* Utility Handlers */
 int handle_study(const char *args);
 int handle_save(const char *args);
+
+void stitch_response(const char *input, char *output);
 
 #endif

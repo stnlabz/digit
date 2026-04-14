@@ -240,6 +240,17 @@ int cmd_exit(const char *args) {
     return 1;
 }
 
+int cmd_reload(const char *args) {
+    FILE *fp = fopen("data/weights.bin", "rb");
+    if (fp) {
+        fread(neural_weights, sizeof(float), WEIGHT_COUNT, fp);
+        fclose(fp);
+        DIGIT_OUT("Weights reloaded from bin. System at 100% capacity.");
+    } else {
+        DIGIT_OUT("Error: weights.bin access denied.");
+    }
+}
+
 /* --- COMMAND REGISTRY --- */
 command_t restricted_commands[] = {
     {"login",  "authenticate",                cmd_login},
@@ -251,6 +262,7 @@ command_t restricted_commands[] = {
     {"ingest", "data entry",                  cmd_ingest},
     {"chat",   "brain interface",             cmd_chat},
     {"think",  "train weights",               cmd_think},
+    {"reload",  "reload bin",                 cmd_reload},
     {"study",  "insert knowledge",            handle_study},
     {"save",   "commit to bin",               handle_save},
     {"exit",   "kill session",                cmd_exit}
