@@ -21,12 +21,30 @@ int is_logged_in(void) {
     return (logged_in && current_session_id > 0);
 }
 
+void log_interaction(const char *user, const char *msg) {
+    if (!db || !msg || strlen(msg) == 0) return;
+    sqlite3_stmt *stmt;
+    const char *sql = "INSERT INTO chat_logs (username, message) VALUES (?, ?);";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        if (user && strlen(user) > 0) {
+            sqlite3_bind_text(stmt, 1, user, -1, SQLITE_STATIC);
+        } else {
+            sqlite3_bind_text(stmt, 1, "GUEST", -1, SQLITE_STATIC);
+        }
+        sqlite3_bind_text(stmt, 2, msg, -1, SQLITE_STATIC);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+}
+
 /* ====================== MAIN COMMAND EXECUTOR ====================== */
 void execute_api_command(int client_sock, char *input) {
     memset(digit_out_buffer, 0, sizeof(digit_out_buffer));
     input[strcspn(input, "\r\n")] = 0;
 
     if (strlen(input) == 0) return;
+
+    log_interaction(NULL, input);
 
     char search_buf[1024];
     strncpy(search_buf, input, sizeof(search_buf));
@@ -56,24 +74,11 @@ void execute_api_command(int client_sock, char *input) {
     char *cmd = strtok(input_copy, " ");
     char *args = strtok(NULL, "");
 
-    /* ==================== LOGIN GATE ==================== */
-    if (!is_logged_in()) {
-        if (strcasecmp(cmd, "login") != 0 &&
-            strcasecmp(cmd, "help") != 0 &&
-            strcasecmp(cmd, "chat") != 0) {
-
-            snprintf(digit_out_buffer, sizeof(digit_out_buffer),
-                     "digit: access restricted.\nUse 'login <username> <passphrase>' to authenticate.\n");
-            goto send_response;
-        }
-    }
-    /* ==================================================== */
-
-    /* Social greetings */
+    /* ==================== SOCIAL CHECK (MOVED UP) ==================== */
     const char *social[] = {"hi", "hello", "hey", "morning", "afternoon", "evening", "digit"};
     int is_social = 0;
     for (int i = 0; i < 7; i++) {
-        if (strcasecmp(cmd, social[i]) == 0) {
+        if (cmd && strcasecmp(cmd, social[i]) == 0) {
             is_social = 1;
             break;
         }
@@ -85,20 +90,36 @@ void execute_api_command(int client_sock, char *input) {
         snprintf(digit_out_buffer, sizeof(digit_out_buffer),
                  "digit: Good %s. Link stable.\n", 
                  (t->tm_hour < 12) ? "morning" : (t->tm_hour < 17) ? "afternoon" : "evening");
-    } 
-    else {
-        /* Run the actual command */
-        int found = 0;
-        for (int i = 0; i < active_count; i++) {
-            if (strcasecmp(cmd, active_commands[i].name) == 0) {
-                active_commands[i].handler(args);
-                found = 1;
-                break;
-            }
+        goto send_response;
+    }
+    /* ================================================================ */
+
+    /* ==================== LOGIN GATE ==================== */
+    if (!is_logged_in()) {
+        if (!cmd ||
+            (strcasecmp(cmd, "login") != 0 &&
+             strcasecmp(cmd, "help") != 0 &&
+             strcasecmp(cmd, "chat") != 0)) {
+
+            snprintf(digit_out_buffer, sizeof(digit_out_buffer),
+                     "digit: access restricted.\nUse 'login <username> <passphrase>' to authenticate.\n");
+            goto send_response;
         }
-        if (!found) {
-            digit_speak(input);
+    }
+    /* ==================================================== */
+
+    /* Run command */
+    int found = 0;
+    for (int i = 0; i < active_count; i++) {
+        if (cmd && strcasecmp(cmd, active_commands[i].name) == 0) {
+            active_commands[i].handler(args);
+            found = 1;
+            break;
         }
+    }
+
+    if (!found) {
+        digit_speak(input);
     }
 
 send_response:
