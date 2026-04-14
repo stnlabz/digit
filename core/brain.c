@@ -102,7 +102,9 @@ void digit_speak(const char *input) {
     }
     
     char buffer[1024];
-    strncpy(buffer, input, sizeof(buffer));
+    strncpy(buffer, input, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+
     int best_fid = -1;
     char *anchor_word = NULL;
     char *token = strtok(buffer, " ,.!?");
@@ -137,7 +139,10 @@ void digit_speak(const char *input) {
         return;
     }
 
-    DIGIT_OUT("digit: ");
+    // --- NEW: build raw output instead of printing ---
+    char raw[1024] = {0};
+    char final[1024] = {0};
+
     char *current_word = anchor_word;
     char *prev_word = ""; 
     int words_generated = 0;
@@ -148,18 +153,28 @@ void digit_speak(const char *input) {
         const char *pred = get_word_from_id(n_id);
 
         if (pred) {
-            // 3. CIRCUIT BREAKER: Stop the "this house; this house" stutter
+            // 3. CIRCUIT BREAKER
             if (strcasecmp(pred, prev_word) == 0 || strcasecmp(pred, current_word) == 0) {
-                DIGIT_OUT("... and the rest is silence.");
+                strncat(raw, "... and the rest is silence.", sizeof(raw) - strlen(raw) - 1);
                 break;
             }
 
-            DIGIT_OUT("%s ", pred);
+            strncat(raw, pred, sizeof(raw) - strlen(raw) - 2);
+            strncat(raw, " ", sizeof(raw) - strlen(raw) - 2);
+
             prev_word = current_word;
             current_word = (char *)pred;
             words_generated++;
+
             if (strcmp(pred, ".") == 0) break;
-        } else break;
+        } else {
+            break;
+        }
     }
-    DIGIT_OUT("\n");
+
+    // --- NEW: stitch before output ---
+    stitch_response(raw, final);
+
+    // --- FINAL OUTPUT ---
+    DIGIT_OUT("digit: %s\n", final);
 }

@@ -101,44 +101,80 @@ void enforce_output_limit(char *text)
 }
 
 // --- MAIN STITCH FUNCTION ---
-void stitch_response(const char *query, char chunks[][MAX_LEN], int count, char *out)
+void stitch_response(const char *input, char *output)
 {
-    if (count <= 0) {
-        strcpy(out, "No relevant context found.");
-        return;
+    if (!input || !output) return;
+
+    output[0] = '\0';
+
+    // --- STEP 1: safe copy ---
+    char temp[1024] = {0};
+    strncpy(temp, input, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+
+    // --- STEP 2: collapse multiple spaces ---
+    char cleaned[1024] = {0};
+    int j = 0;
+    for (int i = 0; temp[i] != '\0' && j < 1023; i++) {
+        if (!(temp[i] == ' ' && temp[i+1] == ' ')) {
+            cleaned[j++] = temp[i];
+        }
+    }
+    cleaned[j] = '\0';
+
+    // --- STEP 3: trim leading space ---
+    char *start = cleaned;
+    while (*start == ' ') start++;
+
+    // --- STEP 4: remove weak leading tokens ---
+    const char *weak[] = {"you", "in", "that", "the"};
+    char *words[64];
+    int count = 0;
+
+    char buffer[1024];
+    strncpy(buffer, start, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+
+    char *tok = strtok(buffer, " ");
+    while (tok && count < 64) {
+        words[count++] = tok;
+        tok = strtok(NULL, " ");
     }
 
-    // clean all chunks
-    for (int i = 0; i < count; i++) {
-        clean_text(chunks[i]);
-    }
-
-    // score chunks
-    int best = 0;
-    int best_score = score_chunk(chunks[0], query);
-
-    for (int i = 1; i < count; i++) {
-        int s = score_chunk(chunks[i], query);
-        if (s > best_score) {
-            best = i;
-            best_score = s;
+    int shift = 0;
+    if (count > 1) {
+        for (int i = 0; i < 4; i++) {
+            if (strcasecmp(words[0], weak[i]) == 0) {
+                shift = 1;
+                break;
+            }
         }
     }
 
-    // try merge with next best if similar
-    for (int i = 0; i < count; i++) {
-        if (i == best) continue;
-
-        if (similar_chunks(chunks[best], chunks[i])) {
-            merge_chunks(chunks[best], chunks[i], out);
-            enforce_output_limit(out);
-            return;
+    // --- STEP 5: rebuild sentence ---
+    char rebuilt[1024] = {0};
+    for (int i = shift; i < count; i++) {
+        strncat(rebuilt, words[i], sizeof(rebuilt) - strlen(rebuilt) - 2);
+        if (i < count - 1) {
+            strncat(rebuilt, " ", sizeof(rebuilt) - strlen(rebuilt) - 2);
         }
     }
 
-    // fallback: best chunk only
-    strncpy(out, chunks[best], MAX_LEN - 1);
-    out[MAX_LEN - 1] = '\0';
+    // --- STEP 6: capitalize first letter ---
+    if (rebuilt[0] != '\0') {
+        rebuilt[0] = toupper(rebuilt[0]);
+    }
 
-    enforce_output_limit(out);
+    // --- STEP 7: ensure ending punctuation ---
+    size_t len = strlen(rebuilt);
+    if (len > 0) {
+        char last = rebuilt[len - 1];
+        if (last != '.' && last != '!' && last != '?') {
+            strncat(rebuilt, ".", sizeof(rebuilt) - len - 1);
+        }
+    }
+
+    // --- FINAL COPY ---
+    strncpy(output, rebuilt, 1023);
+    output[1023] = '\0';
 }
