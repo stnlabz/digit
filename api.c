@@ -8,6 +8,59 @@
 #include <ctype.h>
 #include "digit.h"
 
+/*=================== Response Shaping ======================*/
+const char *shape_response(const char *input, const char *raw)
+{
+    static char out[1024];
+
+    if (!raw || strlen(raw) == 0) {
+        return "digit: I don't have that yet.";
+    }
+
+    // remove duplicate prefix
+    const char *clean = raw;
+    if (strncasecmp(raw, "digit: ", 7) == 0) {
+        clean = raw + 7;
+    }
+
+    // block garbage / weak responses
+    if (strlen(clean) < 15 ||
+        strstr(clean, "delicious") ||
+        strstr(clean, "non-executable") ||
+        strstr(clean, "code blocks")) {
+
+        if (strstr(input, "how are you")) {
+            return "digit: Stable. Focused. What do you need?";
+        }
+        
+        if (strstr(input, "hi") || strstr(input, "hello") || strstr(input, "hey")) {
+            return "digit: Hey. You're good.";
+        }
+        
+        if (strstr(input, "more than you need")) {
+            return "digit: Bold statement. I like it.";
+        }
+
+        return "digit: Not enough signal yet.";
+    }
+    
+    // reject obvious broken fragments only
+    if (strlen(clean) < 5 ||
+        strstr(clean, "{") ||
+        strstr(clean, "}") ||
+        strstr(clean, "<?php")) {
+        return "digit: Not enough signal yet.";
+    }
+    
+    // basic sentence cleanup
+    if (clean[0] >= 'a' && clean[0] <= 'z') {
+        ((char*)clean)[0] = toupper(clean[0]);
+    }
+    snprintf(out, sizeof(out), "digit: %s", clean);
+    return out;
+}
+/*=============================================*/
+
 extern command_t active_commands[20];
 extern int active_count;
 extern sqlite3 *db;
@@ -23,14 +76,17 @@ int is_logged_in(void) {
 
 void log_interaction(const char *user, const char *msg) {
     if (!db || !msg || strlen(msg) == 0) return;
+
     sqlite3_stmt *stmt;
     const char *sql = "INSERT INTO chat_logs (username, message) VALUES (?, ?);";
+
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
         if (user && strlen(user) > 0) {
             sqlite3_bind_text(stmt, 1, user, -1, SQLITE_STATIC);
         } else {
             sqlite3_bind_text(stmt, 1, "GUEST", -1, SQLITE_STATIC);
         }
+
         sqlite3_bind_text(stmt, 2, msg, -1, SQLITE_STATIC);
         sqlite3_step(stmt);
         sqlite3_finalize(stmt);
@@ -56,15 +112,18 @@ void execute_api_command(int client_sock, char *input) {
 
     if (sqlite3_prepare_v2(db, fest_sql, -1, &fest_stmt, NULL) == SQLITE_OK) {
         sqlite3_bind_text(fest_stmt, 1, search_buf, -1, SQLITE_STATIC);
+
         if (sqlite3_step(fest_stmt) == SQLITE_ROW) {
             snprintf(digit_out_buffer, sizeof(digit_out_buffer),
                      "digit: [CODEX MATCH: %s]\nDate: %s\nArs Rosaic: \"%s\"\n",
                      sqlite3_column_text(fest_stmt, 0),
                      sqlite3_column_text(fest_stmt, 1),
                      sqlite3_column_text(fest_stmt, 2));
+
             digit_speak(input);
             goto send_response;
         }
+
         sqlite3_finalize(fest_stmt);
     }
 
@@ -73,60 +132,99 @@ void execute_api_command(int client_sock, char *input) {
     strncpy(input_copy, input, sizeof(input_copy));
     char *cmd = strtok(input_copy, " ");
     char *args = strtok(NULL, "");
-
-    /* ==================== SOCIAL CHECK (MOVED UP) ==================== */
-    const char *social[] = {"hi", "hello", "hey", "morning", "afternoon", "evening", "digit"};
-    int is_social = 0;
-    for (int i = 0; i < 7; i++) {
-        if (cmd && strcasecmp(cmd, social[i]) == 0) {
-            is_social = 1;
-            break;
+    // normalize command (strip punctuation like commas)
+    if (cmd) {
+        char *p = cmd;
+        while (*p) {
+            if (ispunct(*p)) {
+                *p = '\0';
+                break;
+            }
+            p++;
         }
     }
-
-    if (is_social) {
-        time_t raw = time(NULL);
-        struct tm *t = gmtime(&raw);
-        snprintf(digit_out_buffer, sizeof(digit_out_buffer),
-                 "digit: Good %s. Link stable.\n", 
-                 (t->tm_hour < 12) ? "morning" : (t->tm_hour < 17) ? "afternoon" : "evening");
-        goto send_response;
-    }
-    /* ================================================================ */
-
-    /* ==================== LOGIN GATE ==================== */
-    if (!is_logged_in()) {
-        if (!cmd ||
-            (strcasecmp(cmd, "login") != 0 &&
-             strcasecmp(cmd, "help") != 0 &&
-             strcasecmp(cmd, "chat") != 0)) {
+    /* ==================== SOCIAL CHECK ==================== */
+    const char *social[] = {"hi", "hello", "hey", "morning", "afternoon", "evening", "digit"};
+    for (int i = 0; i < 7; i++) {
+        if (cmd && strcasecmp(cmd, social[i]) == 0) {
+            time_t raw = time(NULL);
+            struct tm *t = gmtime(&raw);
 
             snprintf(digit_out_buffer, sizeof(digit_out_buffer),
-                     "digit: access restricted.\nUse 'login <username> <passphrase>' to authenticate.\n");
+                     "digit: Good %s. Link stable.\n",
+                     (t->tm_hour < 12) ? "morning" :
+                     (t->tm_hour < 17) ? "afternoon" : "evening");
+
             goto send_response;
         }
     }
-    /* ==================================================== */
+    /* ====================================================== */
 
-    /* Run command */
-    int found = 0;
+    /* ==================== COMMAND DETECTION ==================== */
+    int is_known_command = 0;
+
     for (int i = 0; i < active_count; i++) {
         if (cmd && strcasecmp(cmd, active_commands[i].name) == 0) {
-            active_commands[i].handler(args);
-            found = 1;
+            is_known_command = 1;
             break;
         }
     }
+    /* =========================================================== */
 
-    if (!found) {
+    /* ==================== OPEN CHAT ==================== */
+    if (!is_known_command) {
         digit_speak(input);
+        goto send_response;
     }
+    /* ================================================ */
+
+    /* ==================== SAFE COMMANDS ==================== */
+    if (cmd &&
+       (strcasecmp(cmd, "login") == 0 ||
+        strcasecmp(cmd, "help")  == 0 ||
+        strcasecmp(cmd, "chat")  == 0)) {
+
+        for (int i = 0; i < active_count; i++) {
+            if (strcasecmp(cmd, active_commands[i].name) == 0) {
+                active_commands[i].handler(args);
+                goto send_response;
+            }
+        }
+    }
+    /* ====================================================== */
+
+    /* ==================== ADMIN GATE ==================== */
+    if (!is_logged_in()) {
+        snprintf(digit_out_buffer, sizeof(digit_out_buffer),
+                 "digit: access restricted.\nUse 'login <username> <passphrase>' to authenticate.\n");
+        goto send_response;
+    }
+    /* =================================================== */
+
+    /* ==================== ADMIN COMMAND EXECUTION ==================== */
+    for (int i = 0; i < active_count; i++) {
+        if (cmd && strcasecmp(cmd, active_commands[i].name) == 0) {
+            active_commands[i].handler(args);
+            goto send_response;
+        }
+    }
+    /* =============================================================== */
+
+    /* Fallback */
+    digit_speak(input);
 
 send_response:
     char header[5000];
+    //snprintf(header, sizeof(header),
+             //"HTTP/1.1 200 OK\nContent-Type: text/plain\nAccess-Control-Allow-Origin: *\n\n%s",
+             //digit_out_buffer);
+             
+    const char *final = shape_response(input, digit_out_buffer);
+
     snprintf(header, sizeof(header),
-             "HTTP/1.1 200 OK\nContent-Type: text/plain\nAccess-Control-Allow-Origin: *\n\n%s",
-             digit_out_buffer);
+         "HTTP/1.1 200 OK\nContent-Type: text/plain\nAccess-Control-Allow-Origin: *\n\n%s",
+         final);
+
     write(client_sock, header, strlen(header));
 }
 
@@ -137,8 +235,12 @@ void handle_request(int client_sock) {
     if (bytes <= 0) return;
 
     if (strstr(buffer, "GET /vitals")) {
-        const char *resp = "HTTP/1.1 200 OK\nContent-Type: application/json\nAccess-Control-Allow-Origin: *\n\n"
-                           "{\"status\":\"online\"}\n";
+        const char *resp =
+            "HTTP/1.1 200 OK\n"
+            "Content-Type: application/json\n"
+            "Access-Control-Allow-Origin: *\n\n"
+            "{\"status\":\"online\"}\n";
+
         write(client_sock, resp, strlen(resp));
     } 
     else if (strstr(buffer, "POST /chat")) {
@@ -169,6 +271,7 @@ void start_api_server(int port) {
         perror("bind");
         return;
     }
+
     if (listen(server_fd, 5) < 0) {
         perror("listen");
         return;

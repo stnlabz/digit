@@ -40,6 +40,7 @@ typedef struct {
 #define MAX_TOKENS 5000
 #define MAX_TOKEN_LEN 64
 #define MAX_WEIGHTS 20000
+#define DIGIT_DATA_PATH "data/weights.bin"
 extern float neural_weights[MAX_WEIGHTS];
 extern int WEIGHT_COUNT;
 

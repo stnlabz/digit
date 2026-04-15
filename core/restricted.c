@@ -10,9 +10,18 @@ extern sqlite3 *db;
 extern command_t active_commands[];
 extern int active_count;
 extern void update_weights(const char *content);
-extern void save_weights_to_bin();
 extern void digit_speak(const char *input);
 extern void train_from_source(sqlite3 *db);
+
+/* REAL BRAIN STRUCTURES */
+extern vocabulary_t vocab[MAX_TOKENS];
+extern int vocab_count;
+extern weight_node_t weight_matrix[MAX_TOKENS];
+extern int weight_count;
+
+/* Legacy (unused but kept safe) */
+float neural_weights[MAX_WEIGHTS];
+int WEIGHT_COUNT = 0;
 
 /* Helper macro */
 #define DIGIT_OUT(...) { \
@@ -22,7 +31,52 @@ extern void train_from_source(sqlite3 *db);
     printf("%s", temp_buf); \
 }
 
-/* --- HANDLER DEFINITIONS --- */
+/* ========================= */
+/* SAVE WEIGHTS (REAL) */
+/* ========================= */
+void save_weights_to_bin() {
+    FILE *fp = fopen(DIGIT_DATA_PATH, "wb");
+    if (!fp) {
+        DIGIT_OUT("digit: failed to open weights.bin for writing.\n");
+        return;
+    }
+
+    fwrite(&vocab_count, sizeof(int), 1, fp);
+    fwrite(vocab, sizeof(vocabulary_t), vocab_count, fp);
+
+    fwrite(&weight_count, sizeof(int), 1, fp);
+    fwrite(weight_matrix, sizeof(weight_node_t), weight_count, fp);
+
+    fclose(fp);
+}
+
+/* ========================= */
+/* RELOAD (REAL FIX) */
+/* ========================= */
+int cmd_reload() {
+    FILE *fp = fopen(DIGIT_DATA_PATH, "rb");
+
+    if (!fp) {
+        DIGIT_OUT("digit: error: weights.bin not found.\n");
+        return 0;
+    }
+
+    fread(&vocab_count, sizeof(int), 1, fp);
+    fread(vocab, sizeof(vocabulary_t), vocab_count, fp);
+
+    fread(&weight_count, sizeof(int), 1, fp);
+    fread(weight_matrix, sizeof(weight_node_t), weight_count, fp);
+
+    fclose(fp);
+
+    DIGIT_OUT("digit: weights, vocabulary, and chains restored.\n");
+    printf("[DEBUG] vocab_count: %d\n", vocab_count);
+    return 0;
+}
+
+/* ========================= */
+/* COMMAND HANDLERS */
+/* ========================= */
 
 int cmd_help(const char *args) {
     DIGIT_OUT("\n--- digit protocol: active manifest ---\n");
@@ -30,14 +84,12 @@ int cmd_help(const char *args) {
     DIGIT_OUT("-----------|--------------------------\n");
 
     if (logged_in && current_session_id > 0) {
-        /* Logged in: show everything */
         for (int i = 0; i < active_count; i++) {
             DIGIT_OUT("%-10s | %s\n", active_commands[i].name, active_commands[i].description);
         }
         DIGIT_OUT("-----------|--------------------------\n");
         DIGIT_OUT("status: %d utilities operational.\n\n", active_count);
     } else {
-        /* Not logged in: show only the 3 basic ones */
         DIGIT_OUT("%-10s | %s\n", "login", "authenticate");
         DIGIT_OUT("%-10s | %s\n", "help",  "view utilities");
         DIGIT_OUT("%-10s | %s\n", "chat",  "brain interface");
@@ -73,7 +125,7 @@ int cmd_login(const char *args) {
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         sqlite3_finalize(stmt);
         logged_in = 1;
-        current_session_id = time(NULL);   // simple session id
+        current_session_id = time(NULL);
         DIGIT_OUT("digit: authentication successful. session secured.\n");
         DIGIT_OUT("welcome back, operator. full command set unlocked.\n");
     } else {
@@ -84,21 +136,21 @@ int cmd_login(const char *args) {
 }
 
 int cmd_set(const char *args) {
-    if (args == NULL || strlen(args) == 0) {
+    if (!args || strlen(args) == 0) {
         DIGIT_OUT("digit: set requires a rule string.\n");
         return 0;
     }
 
     sqlite3_stmt *stmt;
     const char *sql = "INSERT INTO rules (rule_text) VALUES (?);";
-    
+
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
         DIGIT_OUT("digit: failed to prepare rule update: %s\n", sqlite3_errmsg(db));
         return 0;
     }
 
     sqlite3_bind_text(stmt, 1, args, -1, SQLITE_STATIC);
-    
+
     if (sqlite3_step(stmt) == SQLITE_DONE) {
         DIGIT_OUT("digit: law established.\n");
     } else {
@@ -115,14 +167,14 @@ int cmd_get(const char *args) {
 }
 
 int cmd_del(const char *args) {
-    if (args == NULL || strlen(args) == 0) {
+    if (!args || strlen(args) == 0) {
         DIGIT_OUT("digit: provide a rule ID to delete.\n");
         return 0;
     }
 
     char sql[256];
-    sprintf(sql, "DELETE FROM rules WHERE id = %d;", atoi(args));  // TODO: make safer later
-    
+    sprintf(sql, "DELETE FROM rules WHERE id = %d;", atoi(args));
+
     char *err_msg = 0;
     if (sqlite3_exec(db, sql, 0, 0, &err_msg) != SQLITE_OK) {
         DIGIT_OUT("digit: deletion failed: %s\n", err_msg);
@@ -159,7 +211,7 @@ int cmd_rules(const char *args) {
 }
 
 int cmd_ingest(const char *args) {
-    if (args == NULL || strlen(args) == 0) {
+    if (!args || strlen(args) == 0) {
         DIGIT_OUT("digit: provide content or filename to ingest.\n");
         return 0;
     }
@@ -186,13 +238,13 @@ int cmd_ingest(const char *args) {
                 lines_count++;
             }
         }
+
         fclose(fp);
         DIGIT_OUT("digit: file '%s' indexed. %d lines recorded.\n", args, lines_count);
     } else {
-        // direct string
         sqlite3_stmt *stmt;
         const char *sql = "INSERT INTO ingested_data (content) VALUES (?);";
-        
+
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
             sqlite3_bind_text(stmt, 1, args, -1, SQLITE_STATIC);
             sqlite3_step(stmt);
@@ -205,7 +257,7 @@ int cmd_ingest(const char *args) {
 }
 
 int cmd_chat(const char *args) {
-    if (args == NULL || strlen(args) == 0) {
+    if (!args || strlen(args) == 0) {
         DIGIT_OUT("digit: ...?\n");
         return 0;
     }
@@ -220,7 +272,7 @@ int cmd_think(const char *args) {
 }
 
 int handle_study(const char *args) {
-    if (args == NULL || strlen(args) == 0) {
+    if (!args || strlen(args) == 0) {
         DIGIT_OUT("digit: nothing to study.\n");
         return 0;
     }
@@ -240,18 +292,10 @@ int cmd_exit(const char *args) {
     return 1;
 }
 
-int cmd_reload(const char *args) {
-    FILE *fp = fopen("data/weights.bin", "rb");
-    if (fp) {
-        fread(neural_weights, sizeof(float), WEIGHT_COUNT, fp);
-        fclose(fp);
-        DIGIT_OUT("Weights reloaded from bin. System at 100% capacity.");
-    } else {
-        DIGIT_OUT("Error: weights.bin access denied.");
-    }
-}
+/* ========================= */
+/* COMMAND REGISTRY */
+/* ========================= */
 
-/* --- COMMAND REGISTRY --- */
 command_t restricted_commands[] = {
     {"login",  "authenticate",                cmd_login},
     {"help",   "view utilities",              cmd_help},
@@ -262,7 +306,7 @@ command_t restricted_commands[] = {
     {"ingest", "data entry",                  cmd_ingest},
     {"chat",   "brain interface",             cmd_chat},
     {"think",  "train weights",               cmd_think},
-    {"reload",  "reload bin",                 cmd_reload},
+    {"reload", "reload bin",                  cmd_reload},
     {"study",  "insert knowledge",            handle_study},
     {"save",   "commit to bin",               handle_save},
     {"exit",   "kill session",                cmd_exit}
