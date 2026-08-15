@@ -4,6 +4,13 @@
 
 > **Engineering systems worthy of trust when trust matters most.**
 
+![Language](https://img.shields.io/badge/Language-ISO%20C-blue)
+![Status](https://img.shields.io/badge/Status-Active%20Development-orange)
+![Architecture](https://img.shields.io/badge/Architecture-Core%20%2B%20Modules-blueviolet)
+![Core Qualification](https://img.shields.io/badge/Core%20Qualification-20%20Tests-yellow)
+![Module Qualification](https://img.shields.io/badge/Module%20Qualification-10%2B%20Tests-yellow)
+![Internet](https://img.shields.io/badge/Public%20Internet-Isolated-critical)
+
 Digit is a private autonomous engineering agent developed by **STN-LABZ** to assist authorized engineers in the execution of STN-LABZ engineering missions.
 
 Digit is not a public AI service, general-purpose chatbot, or conversational companion.
