@@ -1,0 +1,116 @@
+# -------------------------------------------------------------
+# Digit
+# STN-LABZ Engineering Intelligence
+# -------------------------------------------------------------
+
+# Build output
+/build/
+/bin/
+/obj/
+/out/
+/dist/
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Debug / profiling
+*.pdb
+*.ilk
+*.dSYM/
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+
+# Dependency files
+*.d
+
+# Runtime state
+/runtime/
+/state/
+/tmp/
+/temp/
+
+# Logs
+/logs/
+*.log
+
+# Qualification / test artifacts
+/test-results/
+/qualification-results/
+*.test-output
+
+# Coverage
+/coverage/
+
+# Generated documentation
+/docs/generated/
+/docs/html/
+/docs/latex/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.code-workspace
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+Debug/
+Release/
+x64/
+x86/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary / backup files
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.swp
+*.swo
+*~
+
+# Local environment / configuration
+.env
+.env.*
+!.env.example
+
+# Credentials / secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.secret
+secrets/
+
+# Archives / packages
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
