@@ -25,3 +25,15 @@ Approved policy determines the boundary. Internal source separation does not
 convert a core responsibility into a module responsibility.
 
 The working engineering specification is [docs/digit.md](docs/digit.md).
+
+## Out of Scope
+
+### Large Language Models
+
+Digit is not an LLM-based system.
+
+Large Language Model integration is outside the scope of the Digit project.
+
+Digit will not contain, invoke, depend upon, or communicate with an LLM as part of her operational architecture.
+
+Digit's engineering knowledge is derived from authorized STN-LABZ resources through her approved local knowledge and retrieval architecture. When sufficient authoritative information is unavailable, Digit will report `UNKNOWN` rather than substitute unsupported information.
