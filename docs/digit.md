@@ -1049,3 +1049,6 @@ Wait for human engineering direction.
 The objective is not to produce the most code.
 
 The objective is to produce a Digit core worthy of trust.
+
+Core may include minimal JSON and Markdown support when those formats are required for 
+Digit to understand her own governing and operational documents. Advanced tooling remains modular.
