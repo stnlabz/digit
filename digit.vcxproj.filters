@@ -33,6 +33,9 @@
     <ClCompile Include="core\digit_markdown.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="platform\windows\platform_console.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -48,6 +51,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\digit_markdown.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\platform_console.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

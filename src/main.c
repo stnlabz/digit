@@ -13,14 +13,15 @@
 #include "digit_core.h"
 #include "digit_markdown.h"
 #include "digit_policy.h"
+#include "platform_console.h"
 
 /**
  * @brief Application entry point.
  *
- * Initializes Digit Core, discovers the development policy corpus,
- * reads one known Markdown policy into bounded memory, performs
- * initial Markdown structural recognition, and reports recognized
- * document metadata.
+ * Initializes the platform presentation boundary and Digit Core,
+ * discovers the development policy corpus, reads one known Markdown
+ * policy into bounded memory, performs Markdown structural recognition,
+ * and reports recognized document metadata.
  *
  * Metadata recognition does not establish document validity, approval,
  * authority, semantic correctness, or operational acceptance.
@@ -55,6 +56,19 @@ int main(
 
     (void)argc;
     (void)argv;
+
+    /*
+     * Initialize the platform console before presenting UTF-8 content.
+     */
+    if (digit_platform_console_init() != 0)
+    {
+        fputs(
+            "Platform console initialization: FAILED\n",
+            stderr
+        );
+
+        return EXIT_FAILURE;
+    }
 
     puts("STN-LABZ Digit");
 
