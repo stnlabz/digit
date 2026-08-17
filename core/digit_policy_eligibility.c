@@ -2,8 +2,10 @@
  * @file digit_policy_eligibility.c
  * @brief Policy eligibility implementation for STN-LABZ Digit Core.
  *
- * This component determines whether a structurally complete governing
- * document is eligible to proceed to later validation stages.
+ * This component determines whether a governing document is eligible
+ * to proceed to later validation stages.
+ *
+ * Every completed decision preserves an explicit reason.
  *
  * Eligibility does not establish trust, authority, authenticity,
  * provenance, mission applicability, or operational acceptance.
@@ -33,24 +35,52 @@ int digit_policy_eligibility_check(
         sizeof(*result)
     );
 
+    /*
+     * Default state is denial.
+     *
+     * A document becomes eligible only after every current
+     * eligibility requirement is positively established.
+     */
     result->state =
         DIGIT_POLICY_ELIGIBILITY_NOT_ELIGIBLE;
 
+    result->reason =
+        DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_INCOMPLETE;
+
     /*
-     * Eligibility cannot proceed when structural requirements
-     * are not complete.
+     * Ambiguous structure receives its own deterministic reason.
+     *
+     * Digit does not choose between conflicting structural claims.
+     */
+    if (structure_result->state ==
+        DIGIT_POLICY_STRUCTURE_AMBIGUOUS)
+    {
+        result->reason =
+            DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_AMBIGUOUS;
+
+        return 0;
+    }
+
+    /*
+     * Incomplete or otherwise non-complete structure cannot proceed.
      */
     if (structure_result->state !=
         DIGIT_POLICY_STRUCTURE_COMPLETE)
     {
+        result->reason =
+            DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_INCOMPLETE;
+
         return 0;
     }
 
     result->structure_complete = 1;
 
     /*
-     * Structural validation already established exactly one
+     * Structural validation should already establish exactly one
      * Status field for a COMPLETE document.
+     *
+     * Eligibility still independently verifies that a usable value
+     * can actually be retrieved.
      */
     status =
         digit_markdown_metadata_get(
@@ -61,6 +91,9 @@ int digit_policy_eligibility_check(
     if (status == NULL ||
         status[0] == '\0')
     {
+        result->reason =
+            DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_MISSING;
+
         return 0;
     }
 
@@ -70,20 +103,30 @@ int digit_policy_eligibility_check(
      * Current STN-LABZ eligibility requires the exact approved
      * status value used by the governing corpus.
      *
-     * No case folding, inference, aliasing, or approximation is
+     * No case folding, aliasing, approximation, or inference is
      * performed.
      */
     if (strcmp(
             status,
             "Approved") != 0)
     {
+        result->reason =
+            DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_NOT_APPROVED;
+
         return 0;
     }
 
     result->status_approved = 1;
 
+    /*
+     * Every current eligibility requirement has been positively
+     * established.
+     */
     result->state =
         DIGIT_POLICY_ELIGIBILITY_ELIGIBLE;
+
+    result->reason =
+        DIGIT_POLICY_ELIGIBILITY_REASON_NONE;
 
     return 0;
 }

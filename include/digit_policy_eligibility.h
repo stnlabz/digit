@@ -2,9 +2,10 @@
  * @file digit_policy_eligibility.h
  * @brief Policy eligibility interface for STN-LABZ Digit Core.
  *
- * This interface determines whether a structurally complete governing
- * document is eligible to proceed to later authority, provenance, and
- * operational validation.
+ * This interface determines whether a governing document is eligible
+ * to proceed to later authority, provenance, and operational validation.
+ *
+ * Every eligibility decision includes an explicit reason.
  *
  * Eligibility does not establish trust, authority, authenticity,
  * mission applicability, or operational acceptance.
@@ -26,11 +27,30 @@ typedef enum digit_policy_eligibility_state
 } digit_policy_eligibility_state_t;
 
 /**
+ * @brief Deterministic reason for an eligibility decision.
+ */
+typedef enum digit_policy_eligibility_reason
+{
+    DIGIT_POLICY_ELIGIBILITY_REASON_NONE = 0,
+
+    DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_INCOMPLETE,
+
+    DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_AMBIGUOUS,
+
+    DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_MISSING,
+
+    DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_NOT_APPROVED
+
+} digit_policy_eligibility_reason_t;
+
+/**
  * @brief Result of policy eligibility evaluation.
  */
 typedef struct digit_policy_eligibility_result
 {
     digit_policy_eligibility_state_t state;
+
+    digit_policy_eligibility_reason_t reason;
 
     int structure_complete;
     int status_present;
@@ -46,6 +66,9 @@ typedef struct digit_policy_eligibility_result
  * - structural state is COMPLETE;
  * - exactly one Status field exists;
  * - Status value is exactly "Approved".
+ *
+ * Every completed evaluation produces both an eligibility state and
+ * an explicit reason.
  *
  * Eligibility is not equivalent to trust or authority.
  *

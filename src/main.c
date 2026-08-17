@@ -97,12 +97,46 @@ static const char *digit_policy_eligibility_state_name(
 }
 
 /**
+ * @brief Returns a printable eligibility decision reason.
+ *
+ * @param reason Eligibility reason.
+ *
+ * @return Static reason name.
+ */
+static const char *digit_policy_eligibility_reason_name(
+    digit_policy_eligibility_reason_t reason)
+{
+    switch (reason)
+    {
+        case DIGIT_POLICY_ELIGIBILITY_REASON_NONE:
+            return "NONE";
+
+        case DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_INCOMPLETE:
+            return "STRUCTURE INCOMPLETE";
+
+        case DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_AMBIGUOUS:
+            return "STRUCTURE AMBIGUOUS";
+
+        case DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_MISSING:
+            return "STATUS MISSING";
+
+        case DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_NOT_APPROVED:
+            return "STATUS NOT APPROVED";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+/**
  * @brief Application entry point.
  *
  * Initializes the Windows presentation boundary and Digit Core, loads the
  * local Markdown policy corpus, checks structural completeness, and evaluates
  * whether each structurally complete document is eligible to proceed to
  * later authority and provenance validation.
+ *
+ * Every eligibility decision includes an explicit reason.
  *
  * Eligibility does not establish policy trust, authority, authenticity,
  * mission applicability, or operational acceptance.
@@ -297,6 +331,10 @@ int main(
             )
         );
 
+        /*
+         * A document that did not reach Markdown recognition cannot
+         * proceed to structural or eligibility evaluation.
+         */
         if (document->state !=
             DIGIT_POLICY_DOCUMENT_RECOGNIZED)
         {
@@ -304,6 +342,10 @@ int main(
 
             puts(
                 "Policy eligibility: NOT ELIGIBLE"
+            );
+
+            puts(
+                "Eligibility reason: DOCUMENT NOT RECOGNIZED"
             );
 
             continue;
@@ -387,6 +429,10 @@ int main(
                 "Policy eligibility: NOT ELIGIBLE"
             );
 
+            puts(
+                "Eligibility reason: STRUCTURE CHECK FAILED"
+            );
+
             continue;
         }
 
@@ -447,6 +493,13 @@ int main(
             "Policy eligibility: %s\n",
             digit_policy_eligibility_state_name(
                 eligibility_result.state
+            )
+        );
+
+        printf(
+            "Eligibility reason: %s\n",
+            digit_policy_eligibility_reason_name(
+                eligibility_result.reason
             )
         );
 
