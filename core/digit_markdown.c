@@ -1,17 +1,14 @@
 /**
  * @file digit_markdown.c
- * @brief Initial Markdown structural recognition for STN-LABZ Digit Core.
- *
- * This component implements the earliest deterministic Markdown recognition
- * required by Digit Core.
+ * @brief Markdown structural recognition for STN-LABZ Digit Core.
  *
  * Current scope:
  *
  * - count document lines;
  * - recognize ATX headings;
- * - count recognized headings;
- * - preserve the first heading level;
- * - preserve the first heading text.
+ * - preserve the first heading;
+ * - recognize simple Markdown metadata;
+ * - recognize STN-LABZ bold metadata using "**Key:** Value".
  *
  * This is not a complete GitHub Flavored Markdown parser.
  */
@@ -22,18 +19,14 @@
 #include "digit_markdown.h"
 
 /**
- * @brief Copies bounded heading text into the structural result.
- *
- * Leading heading markers and the required separating space are not copied.
- *
- * Trailing carriage-return and newline characters are excluded.
+ * @brief Copies bounded text into a destination buffer.
  *
  * @param destination Destination buffer.
- * @param capacity Destination capacity.
- * @param start Beginning of heading text.
- * @param length Heading text length.
+ * @param capacity Destination buffer capacity.
+ * @param start Beginning of source text.
+ * @param length Number of source bytes to copy.
  */
-static void digit_markdown_copy_heading(
+static void digit_markdown_copy_text(
     char *destination,
     size_t capacity,
     const char *start,
@@ -71,7 +64,7 @@ static void digit_markdown_copy_heading(
  * @brief Examines one Markdown line for an ATX heading.
  *
  * Valid headings recognized during this stage use one through six '#'
- * characters followed by either a space or the end of the line.
+ * characters followed by whitespace or the end of the line.
  *
  * @param line Beginning of line.
  * @param length Length of line excluding newline characters.
@@ -126,7 +119,7 @@ static int digit_markdown_parse_atx_heading(
     }
 
     /*
-     * A heading marker must be followed by whitespace or line end.
+     * Heading marker must be followed by whitespace or line end.
      */
     if (index < length &&
         line[index] != ' ' &&
@@ -166,8 +159,7 @@ static int digit_markdown_parse_atx_heading(
     }
 
     /*
-     * Remove optional closing '#' sequence when separated from
-     * heading text by whitespace.
+     * Remove an optional closing ATX '#' sequence.
      */
     if (heading_length > 0U)
     {
@@ -216,6 +208,277 @@ static int digit_markdown_parse_atx_heading(
     return 1;
 }
 
+/**
+ * @brief Parses STN-LABZ bold Markdown metadata.
+ *
+ * Expected form:
+ *
+ *     **Key:** Value
+ *
+ * Example:
+ *
+ *     **Status:** Approved
+ *
+ * @param line Beginning of line.
+ * @param length Length of line.
+ * @param key_start Receives beginning of metadata key.
+ * @param key_length Receives metadata key length.
+ * @param value_start Receives beginning of metadata value.
+ * @param value_length Receives metadata value length.
+ *
+ * @return 1 when metadata is recognized, otherwise 0.
+ */
+static int digit_markdown_parse_bold_metadata(
+    const char *line,
+    size_t length,
+    const char **key_start,
+    size_t *key_length,
+    const char **value_start,
+    size_t *value_length)
+{
+    size_t colon;
+    size_t value_begin;
+    size_t value_end;
+
+    if (line == NULL ||
+        key_start == NULL ||
+        key_length == NULL ||
+        value_start == NULL ||
+        value_length == NULL ||
+        length < 7U)
+    {
+        return 0;
+    }
+
+    /*
+     * STN-LABZ metadata begins with Markdown bold markers.
+     */
+    if (line[0] != '*' ||
+        line[1] != '*')
+    {
+        return 0;
+    }
+
+    colon = 2U;
+
+    while (colon < length &&
+           line[colon] != ':')
+    {
+        colon++;
+    }
+
+    /*
+     * A key must exist between the opening "**" and ':'.
+     */
+    if (colon <= 2U ||
+        colon >= length)
+    {
+        return 0;
+    }
+
+    /*
+     * The colon must be immediately followed by the closing "**".
+     *
+     * Expected:
+     *
+     * **Status:** Approved
+     */
+    if ((colon + 2U) >= length ||
+        line[colon + 1U] != '*' ||
+        line[colon + 2U] != '*')
+    {
+        return 0;
+    }
+
+    value_begin = colon + 3U;
+
+    while (value_begin < length &&
+           (line[value_begin] == ' ' ||
+            line[value_begin] == '\t'))
+    {
+        value_begin++;
+    }
+
+    value_end = length;
+
+    while (value_end > value_begin &&
+           (line[value_end - 1U] == ' ' ||
+            line[value_end - 1U] == '\t'))
+    {
+        value_end--;
+    }
+
+    /*
+     * Empty values are not retained during this recognition stage.
+     */
+    if (value_begin >= value_end)
+    {
+        return 0;
+    }
+
+    *key_start = line + 2U;
+    *key_length = colon - 2U;
+
+    *value_start = line + value_begin;
+    *value_length = value_end - value_begin;
+
+    return 1;
+}
+
+/**
+ * @brief Parses plain metadata using "Key: Value" syntax.
+ *
+ * This form remains supported for structured Markdown documents that do
+ * not use bold metadata labels.
+ *
+ * @param line Beginning of line.
+ * @param length Length of line.
+ * @param key_start Receives beginning of metadata key.
+ * @param key_length Receives metadata key length.
+ * @param value_start Receives beginning of metadata value.
+ * @param value_length Receives metadata value length.
+ *
+ * @return 1 when metadata is recognized, otherwise 0.
+ */
+static int digit_markdown_parse_plain_metadata(
+    const char *line,
+    size_t length,
+    const char **key_start,
+    size_t *key_length,
+    const char **value_start,
+    size_t *value_length)
+{
+    size_t colon;
+    size_t key_end;
+    size_t value_begin;
+    size_t value_end;
+
+    if (line == NULL ||
+        key_start == NULL ||
+        key_length == NULL ||
+        value_start == NULL ||
+        value_length == NULL ||
+        length == 0U)
+    {
+        return 0;
+    }
+
+    /*
+     * Structural Markdown lines are not treated as plain metadata.
+     */
+    if (line[0] == '#' ||
+        line[0] == '>' ||
+        line[0] == '-' ||
+        line[0] == '*' ||
+        line[0] == '`')
+    {
+        return 0;
+    }
+
+    colon = 0U;
+
+    while (colon < length &&
+           line[colon] != ':')
+    {
+        colon++;
+    }
+
+    if (colon == 0U ||
+        colon >= length)
+    {
+        return 0;
+    }
+
+    key_end = colon;
+
+    while (key_end > 0U &&
+           (line[key_end - 1U] == ' ' ||
+            line[key_end - 1U] == '\t'))
+    {
+        key_end--;
+    }
+
+    if (key_end == 0U)
+    {
+        return 0;
+    }
+
+    value_begin = colon + 1U;
+
+    while (value_begin < length &&
+           (line[value_begin] == ' ' ||
+            line[value_begin] == '\t'))
+    {
+        value_begin++;
+    }
+
+    value_end = length;
+
+    while (value_end > value_begin &&
+           (line[value_end - 1U] == ' ' ||
+            line[value_end - 1U] == '\t'))
+    {
+        value_end--;
+    }
+
+    if (value_begin >= value_end)
+    {
+        return 0;
+    }
+
+    *key_start = line;
+    *key_length = key_end;
+
+    *value_start = line + value_begin;
+    *value_length = value_end - value_begin;
+
+    return 1;
+}
+
+/**
+ * @brief Attempts to recognize supported metadata syntax.
+ *
+ * STN-LABZ bold metadata is attempted first, followed by the plain
+ * "Key: Value" form.
+ *
+ * @param line Beginning of line.
+ * @param length Length of line.
+ * @param key_start Receives beginning of metadata key.
+ * @param key_length Receives metadata key length.
+ * @param value_start Receives beginning of metadata value.
+ * @param value_length Receives metadata value length.
+ *
+ * @return 1 when metadata is recognized, otherwise 0.
+ */
+static int digit_markdown_parse_metadata(
+    const char *line,
+    size_t length,
+    const char **key_start,
+    size_t *key_length,
+    const char **value_start,
+    size_t *value_length)
+{
+    if (digit_markdown_parse_bold_metadata(
+            line,
+            length,
+            key_start,
+            key_length,
+            value_start,
+            value_length) != 0)
+    {
+        return 1;
+    }
+
+    return digit_markdown_parse_plain_metadata(
+        line,
+        length,
+        key_start,
+        key_length,
+        value_start,
+        value_length
+    );
+}
+
 int digit_markdown_recognize(
     const char *markdown,
     digit_markdown_structure_t *structure)
@@ -246,6 +509,12 @@ int digit_markdown_recognize(
         const char *heading_text;
         size_t heading_text_length;
 
+        const char *metadata_key;
+        size_t metadata_key_length;
+
+        const char *metadata_value;
+        size_t metadata_value_length;
+
         line_start = cursor;
         line_end = cursor;
 
@@ -259,7 +528,7 @@ int digit_markdown_recognize(
             (size_t)(line_end - line_start);
 
         /*
-         * Strip a CR when reading CRLF input.
+         * Strip CR from CRLF input.
          */
         if (line_length > 0U &&
             line_start[line_length - 1U] == '\r')
@@ -283,7 +552,7 @@ int digit_markdown_recognize(
                 structure->first_heading_level =
                     heading_level;
 
-                digit_markdown_copy_heading(
+                digit_markdown_copy_text(
                     structure->first_heading,
                     sizeof(
                         structure->first_heading
@@ -292,6 +561,40 @@ int digit_markdown_recognize(
                     heading_text_length
                 );
             }
+        }
+        else if (
+            structure->metadata_count <
+                DIGIT_MARKDOWN_METADATA_MAX &&
+            digit_markdown_parse_metadata(
+                line_start,
+                line_length,
+                &metadata_key,
+                &metadata_key_length,
+                &metadata_value,
+                &metadata_value_length) != 0)
+        {
+            digit_markdown_metadata_t *field;
+
+            field =
+                &structure->metadata[
+                    structure->metadata_count
+                ];
+
+            digit_markdown_copy_text(
+                field->key,
+                sizeof(field->key),
+                metadata_key,
+                metadata_key_length
+            );
+
+            digit_markdown_copy_text(
+                field->value,
+                sizeof(field->value),
+                metadata_value,
+                metadata_value_length
+            );
+
+            structure->metadata_count++;
         }
 
         if (*line_end == '\n')
@@ -305,4 +608,31 @@ int digit_markdown_recognize(
     }
 
     return 0;
+}
+
+const char *digit_markdown_metadata_get(
+    const digit_markdown_structure_t *structure,
+    const char *key)
+{
+    size_t index;
+
+    if (structure == NULL ||
+        key == NULL)
+    {
+        return NULL;
+    }
+
+    for (index = 0U;
+         index < structure->metadata_count;
+         index++)
+    {
+        if (strcmp(
+                structure->metadata[index].key,
+                key) == 0)
+        {
+            return structure->metadata[index].value;
+        }
+    }
+
+    return NULL;
 }

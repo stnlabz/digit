@@ -18,11 +18,12 @@
  * @brief Application entry point.
  *
  * Initializes Digit Core, discovers the development policy corpus,
- * reads one known Markdown policy into bounded memory, and performs
- * initial Markdown structural recognition.
+ * reads one known Markdown policy into bounded memory, performs
+ * initial Markdown structural recognition, and reports recognized
+ * document metadata.
  *
- * Policy interpretation, approval verification, and operational
- * acceptance are intentionally outside this development step.
+ * Metadata recognition does not establish document validity, approval,
+ * authority, semantic correctness, or operational acceptance.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
@@ -48,11 +49,18 @@ int main(
 
     size_t policy_bytes;
 
+    const char *project;
+    const char *status;
+    const char *scope;
+
     (void)argc;
     (void)argv;
 
     puts("STN-LABZ Digit");
 
+    /*
+     * Initialize Digit Core.
+     */
     if (digit_core_init() != 0)
     {
         fputs(
@@ -80,6 +88,9 @@ int main(
 
     /*
      * Development-stage policy discovery.
+     *
+     * Discovery proves only that Digit can locate candidate Markdown
+     * documents through the platform filesystem boundary.
      */
     puts("");
 
@@ -114,6 +125,9 @@ int main(
 
     /*
      * Development-stage bounded policy read.
+     *
+     * Reading the document does not establish policy validity,
+     * approval, authority, or operational acceptance.
      */
     puts("");
 
@@ -149,9 +163,9 @@ int main(
     );
 
     /*
-     * Initial Markdown structural recognition.
+     * Markdown structural recognition.
      *
-     * Recognition does not establish document authority or validity.
+     * Recognition establishes document structure only.
      */
     puts("");
 
@@ -183,6 +197,11 @@ int main(
         structure.heading_count
     );
 
+    printf(
+        "Markdown metadata fields: %zu\n",
+        structure.metadata_count
+    );
+
     if (structure.heading_count > 0U)
     {
         printf(
@@ -202,11 +221,64 @@ int main(
         );
     }
 
+    /*
+     * Query recognized metadata.
+     *
+     * These values are reported exactly as recognized from the
+     * document. Their presence does not establish trust or authority.
+     */
+    puts("");
+
+    project =
+        digit_markdown_metadata_get(
+            &structure,
+            "Project"
+        );
+
+    status =
+        digit_markdown_metadata_get(
+            &structure,
+            "Status"
+        );
+
+    scope =
+        digit_markdown_metadata_get(
+            &structure,
+            "Scope"
+        );
+
+    printf(
+        "Project metadata: %s\n",
+        project != NULL
+            ? project
+            : "NOT PRESENT"
+    );
+
+    printf(
+        "Status metadata: %s\n",
+        status != NULL
+            ? status
+            : "NOT PRESENT"
+    );
+
+    printf(
+        "Scope metadata: %s\n",
+        scope != NULL
+            ? scope
+            : "NOT PRESENT"
+    );
+
+    /*
+     * Current operator interaction placeholder.
+     */
     puts("");
     puts("Greetings.");
     puts("");
     puts("What is today's mission?");
 
+    /*
+     * Controlled Core shutdown.
+     */
     digit_core_shutdown();
 
     return EXIT_SUCCESS;
