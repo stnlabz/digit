@@ -142,6 +142,7 @@
   <ItemGroup>
     <ClCompile Include="core\digit_config.c" />
     <ClCompile Include="core\digit_core.c" />
+    <ClCompile Include="core\digit_markdown.c" />
     <ClCompile Include="core\digit_policy.c" />
     <ClCompile Include="platform\windows\platform_fs.c" />
     <ClCompile Include="src\main.c" />
@@ -149,6 +150,7 @@
   <ItemGroup>
     <ClInclude Include="include\digit_config.h" />
     <ClInclude Include="include\digit_core.h" />
+    <ClInclude Include="include\digit_markdown.h" />
     <ClInclude Include="include\digit_policy.h" />
     <ClInclude Include="include\platform_fs.h" />
   </ItemGroup>

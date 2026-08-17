@@ -11,16 +11,18 @@
 #include <stdlib.h>
 
 #include "digit_core.h"
+#include "digit_markdown.h"
 #include "digit_policy.h"
 
 /**
  * @brief Application entry point.
  *
- * Initializes Digit Core, performs development-stage policy discovery,
- * and reads one known Markdown policy document into bounded memory.
+ * Initializes Digit Core, discovers the development policy corpus,
+ * reads one known Markdown policy into bounded memory, and performs
+ * initial Markdown structural recognition.
  *
- * Policy interpretation and validation are intentionally not performed
- * during this development step.
+ * Policy interpretation, approval verification, and operational
+ * acceptance are intentionally outside this development step.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
@@ -38,6 +40,7 @@ int main(
         "20260801.1_KISS_THEORY.md";
 
     digit_policy_discovery_t discovery;
+    digit_markdown_structure_t structure;
 
     char policy_buffer[
         DIGIT_POLICY_DOCUMENT_MAX + 1U
@@ -110,11 +113,7 @@ int main(
     );
 
     /*
-     * Development-stage policy read.
-     *
-     * The raw document body is intentionally not presented to the
-     * terminal. Presentation of document content will have its own
-     * validation and safety requirements.
+     * Development-stage bounded policy read.
      */
     puts("");
 
@@ -140,14 +139,68 @@ int main(
         return EXIT_FAILURE;
     }
 
-    printf(
-        "Policy read: PASS\n"
+    puts(
+        "Policy read: PASS"
     );
 
     printf(
         "Policy bytes read: %zu\n",
         policy_bytes
     );
+
+    /*
+     * Initial Markdown structural recognition.
+     *
+     * Recognition does not establish document authority or validity.
+     */
+    puts("");
+
+    if (digit_markdown_recognize(
+            policy_buffer,
+            &structure) != 0)
+    {
+        fputs(
+            "Markdown recognition: FAILED\n",
+            stderr
+        );
+
+        digit_core_shutdown();
+
+        return EXIT_FAILURE;
+    }
+
+    puts(
+        "Markdown recognition: PASS"
+    );
+
+    printf(
+        "Markdown lines: %zu\n",
+        structure.total_lines
+    );
+
+    printf(
+        "Markdown headings: %zu\n",
+        structure.heading_count
+    );
+
+    if (structure.heading_count > 0U)
+    {
+        printf(
+            "First heading level: %u\n",
+            structure.first_heading_level
+        );
+
+        printf(
+            "First heading: %s\n",
+            structure.first_heading
+        );
+    }
+    else
+    {
+        puts(
+            "First heading: NONE"
+        );
+    }
 
     puts("");
     puts("Greetings.");

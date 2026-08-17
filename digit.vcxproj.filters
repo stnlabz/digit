@@ -30,6 +30,9 @@
     <ClCompile Include="platform\windows\platform_fs.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="core\digit_markdown.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -42,6 +45,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\platform_fs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_markdown.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
