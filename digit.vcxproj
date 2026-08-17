@@ -145,6 +145,7 @@
     <ClCompile Include="core\digit_markdown.c" />
     <ClCompile Include="core\digit_policy.c" />
     <ClCompile Include="core\digit_policy_corpus.c" />
+    <ClCompile Include="core\digit_policy_eligibility.c" />
     <ClCompile Include="core\digit_policy_structure.c" />
     <ClCompile Include="platform\windows\platform_console.c" />
     <ClCompile Include="platform\windows\platform_fs.c" />
@@ -156,6 +157,7 @@
     <ClInclude Include="include\digit_markdown.h" />
     <ClInclude Include="include\digit_policy.h" />
     <ClInclude Include="include\digit_policy_corpus.h" />
+    <ClInclude Include="include\digit_policy_eligibility.h" />
     <ClInclude Include="include\digit_policy_structure.h" />
     <ClInclude Include="include\platform_console.h" />
     <ClInclude Include="include\platform_fs.h" />

@@ -5,7 +5,7 @@
  * Digit is a private STN-LABZ engineering intelligence.
  *
  * This development entry point exercises the current Digit Core policy
- * corpus path and structural policy-record checking.
+ * corpus path, structural checking, and policy eligibility evaluation.
  */
 
 #include <stdio.h>
@@ -14,6 +14,7 @@
 #include "digit_core.h"
 #include "digit_markdown.h"
 #include "digit_policy_corpus.h"
+#include "digit_policy_eligibility.h"
 #include "digit_policy_structure.h"
 #include "platform_console.h"
 
@@ -73,20 +74,44 @@ static const char *digit_policy_structure_state_name(
 }
 
 /**
+ * @brief Returns a printable name for policy eligibility state.
+ *
+ * @param state Eligibility state.
+ *
+ * @return Static state name.
+ */
+static const char *digit_policy_eligibility_state_name(
+    digit_policy_eligibility_state_t state)
+{
+    switch (state)
+    {
+        case DIGIT_POLICY_ELIGIBILITY_ELIGIBLE:
+            return "ELIGIBLE";
+
+        case DIGIT_POLICY_ELIGIBILITY_NOT_ELIGIBLE:
+            return "NOT ELIGIBLE";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+/**
  * @brief Application entry point.
  *
  * Initializes the Windows presentation boundary and Digit Core, loads the
- * local Markdown policy corpus, and checks the structural completeness of
- * every recognized policy document.
+ * local Markdown policy corpus, checks structural completeness, and evaluates
+ * whether each structurally complete document is eligible to proceed to
+ * later authority and provenance validation.
  *
- * Structural completeness does not establish policy approval, authority,
- * trust, authenticity, mission applicability, or operational acceptance.
+ * Eligibility does not establish policy trust, authority, authenticity,
+ * mission applicability, or operational acceptance.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
  *
- * @return EXIT_SUCCESS on successful corpus enumeration and structural
- *         inspection, otherwise EXIT_FAILURE.
+ * @return EXIT_SUCCESS on successful corpus processing, otherwise
+ *         EXIT_FAILURE.
  */
 int main(
     int argc,
@@ -98,9 +123,13 @@ int main(
     const digit_policy_corpus_t *corpus;
 
     size_t index;
+
     size_t complete_count;
     size_t incomplete_count;
     size_t ambiguous_count;
+
+    size_t eligible_count;
+    size_t not_eligible_count;
 
     (void)argc;
     (void)argv;
@@ -108,6 +137,9 @@ int main(
     complete_count = 0U;
     incomplete_count = 0U;
     ambiguous_count = 0U;
+
+    eligible_count = 0U;
+    not_eligible_count = 0U;
 
     /*
      * Initialize platform presentation before UTF-8 content is emitted.
@@ -168,7 +200,7 @@ int main(
     }
 
     /*
-     * Load the real local policy corpus.
+     * Load the local policy corpus.
      */
     puts("");
 
@@ -238,7 +270,12 @@ int main(
          index++)
     {
         const digit_policy_document_t *document;
-        digit_policy_structure_result_t structure_result;
+
+        digit_policy_structure_result_t
+            structure_result;
+
+        digit_policy_eligibility_result_t
+            eligibility_result;
 
         const char *status;
         const char *scope;
@@ -263,6 +300,12 @@ int main(
         if (document->state !=
             DIGIT_POLICY_DOCUMENT_RECOGNIZED)
         {
+            not_eligible_count++;
+
+            puts(
+                "Policy eligibility: NOT ELIGIBLE"
+            );
+
             continue;
         }
 
@@ -327,7 +370,7 @@ int main(
         );
 
         /*
-         * Check structural completeness.
+         * Structural completeness check.
          */
         if (digit_policy_structure_check(
                 &document->structure,
@@ -338,6 +381,11 @@ int main(
             );
 
             incomplete_count++;
+            not_eligible_count++;
+
+            puts(
+                "Policy eligibility: NOT ELIGIBLE"
+            );
 
             continue;
         }
@@ -377,6 +425,40 @@ int main(
                 incomplete_count++;
                 break;
         }
+
+        /*
+         * Policy eligibility evaluation.
+         */
+        if (digit_policy_eligibility_check(
+                &document->structure,
+                &structure_result,
+                &eligibility_result) != 0)
+        {
+            puts(
+                "Policy eligibility check: FAILED"
+            );
+
+            not_eligible_count++;
+
+            continue;
+        }
+
+        printf(
+            "Policy eligibility: %s\n",
+            digit_policy_eligibility_state_name(
+                eligibility_result.state
+            )
+        );
+
+        if (eligibility_result.state ==
+            DIGIT_POLICY_ELIGIBILITY_ELIGIBLE)
+        {
+            eligible_count++;
+        }
+        else
+        {
+            not_eligible_count++;
+        }
     }
 
     /*
@@ -414,6 +496,21 @@ int main(
             "Policy corpus structural contract: PARTIAL"
         );
     }
+
+    /*
+     * Corpus-level eligibility summary.
+     */
+    puts("");
+
+    printf(
+        "Policies eligible for further validation: %zu\n",
+        eligible_count
+    );
+
+    printf(
+        "Policies not eligible for further validation: %zu\n",
+        not_eligible_count
+    );
 
     /*
      * Current operator interaction placeholder.
