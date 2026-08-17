@@ -3,8 +3,9 @@
  * @brief Entry point for the STN-LABZ Digit core.
  *
  * Digit is a private STN-LABZ engineering intelligence.
- * This file provides the process entry point and delegates Core lifecycle
- * responsibility to Digit Core.
+ *
+ * This development entry point exercises the current Digit Core policy
+ * corpus path and structural policy-record checking.
  */
 
 #include <stdio.h>
@@ -12,24 +13,80 @@
 
 #include "digit_core.h"
 #include "digit_markdown.h"
-#include "digit_policy.h"
+#include "digit_policy_corpus.h"
+#include "digit_policy_structure.h"
 #include "platform_console.h"
+
+/**
+ * @brief Returns a printable name for a policy document state.
+ *
+ * @param state Policy document state.
+ *
+ * @return Static state name.
+ */
+static const char *digit_policy_state_name(
+    digit_policy_document_state_t state)
+{
+    switch (state)
+    {
+        case DIGIT_POLICY_DOCUMENT_DISCOVERED:
+            return "DISCOVERED";
+
+        case DIGIT_POLICY_DOCUMENT_READ:
+            return "READ";
+
+        case DIGIT_POLICY_DOCUMENT_RECOGNIZED:
+            return "RECOGNIZED";
+
+        case DIGIT_POLICY_DOCUMENT_FAILED:
+            return "FAILED";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+/**
+ * @brief Returns a printable name for policy structural state.
+ *
+ * @param state Structural state.
+ *
+ * @return Static state name.
+ */
+static const char *digit_policy_structure_state_name(
+    digit_policy_structure_state_t state)
+{
+    switch (state)
+    {
+        case DIGIT_POLICY_STRUCTURE_COMPLETE:
+            return "COMPLETE";
+
+        case DIGIT_POLICY_STRUCTURE_INCOMPLETE:
+            return "INCOMPLETE";
+
+        case DIGIT_POLICY_STRUCTURE_AMBIGUOUS:
+            return "AMBIGUOUS";
+
+        default:
+            return "UNKNOWN";
+    }
+}
 
 /**
  * @brief Application entry point.
  *
- * Initializes the platform presentation boundary and Digit Core,
- * discovers the development policy corpus, reads one known Markdown
- * policy into bounded memory, performs Markdown structural recognition,
- * and reports recognized document metadata.
+ * Initializes the Windows presentation boundary and Digit Core, loads the
+ * local Markdown policy corpus, and checks the structural completeness of
+ * every recognized policy document.
  *
- * Metadata recognition does not establish document validity, approval,
- * authority, semantic correctness, or operational acceptance.
+ * Structural completeness does not establish policy approval, authority,
+ * trust, authenticity, mission applicability, or operational acceptance.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
  *
- * @return EXIT_SUCCESS on successful operation, otherwise EXIT_FAILURE.
+ * @return EXIT_SUCCESS on successful corpus enumeration and structural
+ *         inspection, otherwise EXIT_FAILURE.
  */
 int main(
     int argc,
@@ -38,27 +95,22 @@ int main(
     const char *policy_directory =
         "C:\\stn-labz\\policies";
 
-    const char *test_policy =
-        "20260801.1_KISS_THEORY.md";
+    const digit_policy_corpus_t *corpus;
 
-    digit_policy_discovery_t discovery;
-    digit_markdown_structure_t structure;
-
-    char policy_buffer[
-        DIGIT_POLICY_DOCUMENT_MAX + 1U
-    ];
-
-    size_t policy_bytes;
-
-    const char *project;
-    const char *status;
-    const char *scope;
+    size_t index;
+    size_t complete_count;
+    size_t incomplete_count;
+    size_t ambiguous_count;
 
     (void)argc;
     (void)argv;
 
+    complete_count = 0U;
+    incomplete_count = 0U;
+    ambiguous_count = 0U;
+
     /*
-     * Initialize the platform console before presenting UTF-8 content.
+     * Initialize platform presentation before UTF-8 content is emitted.
      */
     if (digit_platform_console_init() != 0)
     {
@@ -101,10 +153,22 @@ int main(
     puts("Core initialization: READY");
 
     /*
-     * Development-stage policy discovery.
-     *
-     * Discovery proves only that Digit can locate candidate Markdown
-     * documents through the platform filesystem boundary.
+     * Initialize Core-owned policy corpus storage.
+     */
+    if (digit_policy_corpus_init() != 0)
+    {
+        fputs(
+            "Policy corpus initialization: FAILED\n",
+            stderr
+        );
+
+        digit_core_shutdown();
+
+        return EXIT_FAILURE;
+    }
+
+    /*
+     * Load the real local policy corpus.
      */
     puts("");
 
@@ -113,174 +177,243 @@ int main(
         policy_directory
     );
 
-    if (digit_policy_discover(
-            policy_directory,
-            &discovery) != 0)
+    if (digit_policy_corpus_load(
+            policy_directory) != 0)
     {
         fputs(
-            "Policy discovery: FAILED\n",
+            "Policy corpus load: FAILED\n",
             stderr
         );
 
+        digit_policy_corpus_shutdown();
         digit_core_shutdown();
 
         return EXIT_FAILURE;
     }
 
+    corpus = digit_policy_corpus_get();
+
+    if (corpus == NULL)
+    {
+        fputs(
+            "Policy corpus access: FAILED\n",
+            stderr
+        );
+
+        digit_policy_corpus_shutdown();
+        digit_core_shutdown();
+
+        return EXIT_FAILURE;
+    }
+
+    puts(
+        "Policy corpus enumeration: PASS"
+    );
+
     printf(
-        "Markdown policies discovered: %zu\n",
-        discovery.markdown_files
+        "Markdown documents represented: %zu\n",
+        corpus->document_count
+    );
+
+    printf(
+        "Markdown documents recognized: %zu\n",
+        corpus->recognized_count
+    );
+
+    printf(
+        "Markdown documents failed: %zu\n",
+        corpus->failed_count
     );
 
     printf(
         "Non-Markdown files ignored: %zu\n",
-        discovery.ignored_files
+        corpus->ignored_count
     );
 
     /*
-     * Development-stage bounded policy read.
-     *
-     * Reading the document does not establish policy validity,
-     * approval, authority, or operational acceptance.
+     * Inspect every represented policy independently.
+     */
+    for (index = 0U;
+         index < corpus->document_count;
+         index++)
+    {
+        const digit_policy_document_t *document;
+        digit_policy_structure_result_t structure_result;
+
+        const char *status;
+        const char *scope;
+
+        document =
+            &corpus->documents[index];
+
+        puts("");
+
+        printf(
+            "Policy: %s\n",
+            document->filename
+        );
+
+        printf(
+            "State: %s\n",
+            digit_policy_state_name(
+                document->state
+            )
+        );
+
+        if (document->state !=
+            DIGIT_POLICY_DOCUMENT_RECOGNIZED)
+        {
+            continue;
+        }
+
+        printf(
+            "Bytes read: %zu\n",
+            document->bytes_read
+        );
+
+        printf(
+            "Lines: %zu\n",
+            document->structure.total_lines
+        );
+
+        printf(
+            "Headings: %zu\n",
+            document->structure.heading_count
+        );
+
+        printf(
+            "Metadata fields: %zu\n",
+            document->structure.metadata_count
+        );
+
+        if (document->structure.heading_count > 0U)
+        {
+            printf(
+                "First heading: %s\n",
+                document->structure.first_heading
+            );
+        }
+        else
+        {
+            puts(
+                "First heading: NONE"
+            );
+        }
+
+        status =
+            digit_markdown_metadata_get(
+                &document->structure,
+                "Status"
+            );
+
+        scope =
+            digit_markdown_metadata_get(
+                &document->structure,
+                "Scope"
+            );
+
+        printf(
+            "Status metadata: %s\n",
+            status != NULL
+                ? status
+                : "NOT PRESENT"
+        );
+
+        printf(
+            "Scope metadata: %s\n",
+            scope != NULL
+                ? scope
+                : "NOT PRESENT"
+        );
+
+        /*
+         * Check structural completeness.
+         */
+        if (digit_policy_structure_check(
+                &document->structure,
+                &structure_result) != 0)
+        {
+            puts(
+                "Policy structure check: FAILED"
+            );
+
+            incomplete_count++;
+
+            continue;
+        }
+
+        printf(
+            "Policy structure: %s\n",
+            digit_policy_structure_state_name(
+                structure_result.state
+            )
+        );
+
+        printf(
+            "Status fields: %zu\n",
+            structure_result.status_count
+        );
+
+        printf(
+            "Scope fields: %zu\n",
+            structure_result.scope_count
+        );
+
+        switch (structure_result.state)
+        {
+            case DIGIT_POLICY_STRUCTURE_COMPLETE:
+                complete_count++;
+                break;
+
+            case DIGIT_POLICY_STRUCTURE_INCOMPLETE:
+                incomplete_count++;
+                break;
+
+            case DIGIT_POLICY_STRUCTURE_AMBIGUOUS:
+                ambiguous_count++;
+                break;
+
+            default:
+                incomplete_count++;
+                break;
+        }
+    }
+
+    /*
+     * Corpus-level structural summary.
      */
     puts("");
 
     printf(
-        "Policy read target: %s\n",
-        test_policy
+        "Structurally complete policies: %zu\n",
+        complete_count
     );
 
-    if (digit_policy_read(
-            policy_directory,
-            test_policy,
-            policy_buffer,
-            sizeof(policy_buffer),
-            &policy_bytes) != 0)
+    printf(
+        "Structurally incomplete policies: %zu\n",
+        incomplete_count
+    );
+
+    printf(
+        "Structurally ambiguous policies: %zu\n",
+        ambiguous_count
+    );
+
+    if (corpus->failed_count == 0U &&
+        incomplete_count == 0U &&
+        ambiguous_count == 0U &&
+        complete_count == corpus->recognized_count)
     {
-        fputs(
-            "Policy read: FAILED\n",
-            stderr
-        );
-
-        digit_core_shutdown();
-
-        return EXIT_FAILURE;
-    }
-
-    puts(
-        "Policy read: PASS"
-    );
-
-    printf(
-        "Policy bytes read: %zu\n",
-        policy_bytes
-    );
-
-    /*
-     * Markdown structural recognition.
-     *
-     * Recognition establishes document structure only.
-     */
-    puts("");
-
-    if (digit_markdown_recognize(
-            policy_buffer,
-            &structure) != 0)
-    {
-        fputs(
-            "Markdown recognition: FAILED\n",
-            stderr
-        );
-
-        digit_core_shutdown();
-
-        return EXIT_FAILURE;
-    }
-
-    puts(
-        "Markdown recognition: PASS"
-    );
-
-    printf(
-        "Markdown lines: %zu\n",
-        structure.total_lines
-    );
-
-    printf(
-        "Markdown headings: %zu\n",
-        structure.heading_count
-    );
-
-    printf(
-        "Markdown metadata fields: %zu\n",
-        structure.metadata_count
-    );
-
-    if (structure.heading_count > 0U)
-    {
-        printf(
-            "First heading level: %u\n",
-            structure.first_heading_level
-        );
-
-        printf(
-            "First heading: %s\n",
-            structure.first_heading
+        puts(
+            "Policy corpus structural contract: PASS"
         );
     }
     else
     {
         puts(
-            "First heading: NONE"
+            "Policy corpus structural contract: PARTIAL"
         );
     }
-
-    /*
-     * Query recognized metadata.
-     *
-     * These values are reported exactly as recognized from the
-     * document. Their presence does not establish trust or authority.
-     */
-    puts("");
-
-    project =
-        digit_markdown_metadata_get(
-            &structure,
-            "Project"
-        );
-
-    status =
-        digit_markdown_metadata_get(
-            &structure,
-            "Status"
-        );
-
-    scope =
-        digit_markdown_metadata_get(
-            &structure,
-            "Scope"
-        );
-
-    printf(
-        "Project metadata: %s\n",
-        project != NULL
-            ? project
-            : "NOT PRESENT"
-    );
-
-    printf(
-        "Status metadata: %s\n",
-        status != NULL
-            ? status
-            : "NOT PRESENT"
-    );
-
-    printf(
-        "Scope metadata: %s\n",
-        scope != NULL
-            ? scope
-            : "NOT PRESENT"
-    );
 
     /*
      * Current operator interaction placeholder.
@@ -291,8 +424,9 @@ int main(
     puts("What is today's mission?");
 
     /*
-     * Controlled Core shutdown.
+     * Controlled shutdown.
      */
+    digit_policy_corpus_shutdown();
     digit_core_shutdown();
 
     return EXIT_SUCCESS;
