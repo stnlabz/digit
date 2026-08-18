@@ -98,6 +98,7 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+.vs
 
 # Credentials / secrets
 *.key
