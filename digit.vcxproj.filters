@@ -60,6 +60,24 @@
     <ClCompile Include="core\digit_authority.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="core\digit_mission.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_result.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_audit.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_safe_mode.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_company_preservation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_operator_report.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -102,6 +120,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\digit_authority.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_mission.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_result.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_audit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_safe_mode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_company_preservation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_operator_report.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -1,0 +1,212 @@
+/**
+ * @file digit_audit.c
+ * @brief Audit and evidence implementation for STN-LABZ Digit Core.
+ *
+ * This component maintains bounded, append-only runtime evidence.
+ *
+ * Records receive monotonically increasing sequence numbers beginning
+ * with 1.
+ *
+ * Existing evidence is never overwritten to make room for newer records.
+ */
+
+#include <stddef.h>
+#include <string.h>
+
+#include "digit_audit.h"
+
+/**
+ * @brief Core-owned runtime audit ledger.
+ */
+static digit_audit_record_t g_digit_audit_records[
+    DIGIT_AUDIT_MAX_RECORDS
+];
+
+/**
+ * @brief Number of active records.
+ */
+static size_t g_digit_audit_count = 0U;
+
+/**
+ * @brief Next sequence number.
+ */
+static unsigned long g_digit_audit_next_sequence = 1UL;
+
+/**
+ * @brief Indicates whether audit is initialized.
+ */
+static int g_digit_audit_initialized = 0;
+
+/**
+ * @brief Copies bounded text into audit storage.
+ *
+ * @param destination Destination buffer.
+ * @param capacity Destination capacity.
+ * @param source Source text.
+ *
+ * @return 0 on success, non-zero on invalid or oversized input.
+ */
+static int digit_audit_copy_text(
+    char *destination,
+    size_t capacity,
+    const char *source)
+{
+    size_t length;
+
+    if (destination == NULL ||
+        source == NULL ||
+        capacity == 0U)
+    {
+        return -1;
+    }
+
+    length =
+        strlen(source);
+
+    if (length == 0U ||
+        length >= capacity)
+    {
+        return -1;
+    }
+
+    memcpy(
+        destination,
+        source,
+        length + 1U
+    );
+
+    return 0;
+}
+
+int digit_audit_init(void)
+{
+    if (g_digit_audit_initialized != 0)
+    {
+        return -1;
+    }
+
+    memset(
+        g_digit_audit_records,
+        0,
+        sizeof(g_digit_audit_records)
+    );
+
+    g_digit_audit_count = 0U;
+    g_digit_audit_next_sequence = 1UL;
+
+    g_digit_audit_initialized = 1;
+
+    return 0;
+}
+
+int digit_audit_append(
+    const char *component,
+    const char *event)
+{
+    digit_audit_record_t *record;
+
+    if (g_digit_audit_initialized == 0 ||
+        component == NULL ||
+        event == NULL)
+    {
+        return -1;
+    }
+
+    /*
+     * Audit evidence is append-only.
+     *
+     * Reaching capacity is a failure condition.
+     * Existing evidence is never overwritten.
+     */
+    if (g_digit_audit_count >=
+        DIGIT_AUDIT_MAX_RECORDS)
+    {
+        return -1;
+    }
+
+    record =
+        &g_digit_audit_records[
+            g_digit_audit_count
+        ];
+
+    memset(
+        record,
+        0,
+        sizeof(*record)
+    );
+
+    if (digit_audit_copy_text(
+            record->component,
+            sizeof(record->component),
+            component) != 0)
+    {
+        return -1;
+    }
+
+    if (digit_audit_copy_text(
+            record->event,
+            sizeof(record->event),
+            event) != 0)
+    {
+        memset(
+            record,
+            0,
+            sizeof(*record)
+        );
+
+        return -1;
+    }
+
+    record->sequence =
+        g_digit_audit_next_sequence;
+
+    g_digit_audit_next_sequence++;
+    g_digit_audit_count++;
+
+    return 0;
+}
+
+size_t digit_audit_count(void)
+{
+    if (g_digit_audit_initialized == 0)
+    {
+        return 0U;
+    }
+
+    return g_digit_audit_count;
+}
+
+const digit_audit_record_t *digit_audit_get(
+    size_t index)
+{
+    if (g_digit_audit_initialized == 0)
+    {
+        return NULL;
+    }
+
+    if (index >= g_digit_audit_count)
+    {
+        return NULL;
+    }
+
+    return &g_digit_audit_records[index];
+}
+
+int digit_audit_is_ready(void)
+{
+    return g_digit_audit_initialized;
+}
+
+void digit_audit_shutdown(void)
+{
+    memset(
+        g_digit_audit_records,
+        0,
+        sizeof(g_digit_audit_records)
+    );
+
+    g_digit_audit_count = 0U;
+    g_digit_audit_next_sequence = 1UL;
+
+    g_digit_audit_initialized = 0;
+}
