@@ -146,6 +146,8 @@
     <ClCompile Include="core\digit_policy.c" />
     <ClCompile Include="core\digit_policy_corpus.c" />
     <ClCompile Include="core\digit_policy_eligibility.c" />
+    <ClCompile Include="core\digit_policy_index.c" />
+    <ClCompile Include="core\digit_policy_index_validate.c" />
     <ClCompile Include="core\digit_policy_structure.c" />
     <ClCompile Include="platform\windows\platform_console.c" />
     <ClCompile Include="platform\windows\platform_fs.c" />
@@ -158,6 +160,8 @@
     <ClInclude Include="include\digit_policy.h" />
     <ClInclude Include="include\digit_policy_corpus.h" />
     <ClInclude Include="include\digit_policy_eligibility.h" />
+    <ClInclude Include="include\digit_policy_index.h" />
+    <ClInclude Include="include\digit_policy_index_validate.h" />
     <ClInclude Include="include\digit_policy_structure.h" />
     <ClInclude Include="include\platform_console.h" />
     <ClInclude Include="include\platform_fs.h" />

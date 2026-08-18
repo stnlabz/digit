@@ -4,68 +4,37 @@
  *
  * Digit is a private STN-LABZ engineering intelligence.
  *
- * This development entry point exercises the current Digit Core policy
- * corpus path, structural checking, and policy eligibility evaluation.
+ * This development entry point exercises the current machine-readable
+ * policy index recognition and semantic-validation boundaries.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "digit_core.h"
-#include "digit_markdown.h"
-#include "digit_policy_corpus.h"
-#include "digit_policy_eligibility.h"
-#include "digit_policy_structure.h"
+#include "digit_policy_index.h"
+#include "digit_policy_index_validate.h"
 #include "platform_console.h"
 
 /**
- * @brief Returns a printable name for a policy document state.
+ * @brief Returns a printable semantic-validation state.
  *
- * @param state Policy document state.
- *
- * @return Static state name.
- */
-static const char *digit_policy_state_name(
-    digit_policy_document_state_t state)
-{
-    switch (state)
-    {
-        case DIGIT_POLICY_DOCUMENT_DISCOVERED:
-            return "DISCOVERED";
-
-        case DIGIT_POLICY_DOCUMENT_READ:
-            return "READ";
-
-        case DIGIT_POLICY_DOCUMENT_RECOGNIZED:
-            return "RECOGNIZED";
-
-        case DIGIT_POLICY_DOCUMENT_FAILED:
-            return "FAILED";
-
-        default:
-            return "UNKNOWN";
-    }
-}
-
-/**
- * @brief Returns a printable name for policy structural state.
- *
- * @param state Structural state.
+ * @param state Validation state.
  *
  * @return Static state name.
  */
-static const char *digit_policy_structure_state_name(
-    digit_policy_structure_state_t state)
+static const char *digit_policy_index_validation_state_name(
+    digit_policy_index_validation_state_t state)
 {
     switch (state)
     {
-        case DIGIT_POLICY_STRUCTURE_COMPLETE:
-            return "COMPLETE";
+        case DIGIT_POLICY_INDEX_VALID:
+            return "VALID";
 
-        case DIGIT_POLICY_STRUCTURE_INCOMPLETE:
-            return "INCOMPLETE";
+        case DIGIT_POLICY_INDEX_INVALID:
+            return "INVALID";
 
-        case DIGIT_POLICY_STRUCTURE_AMBIGUOUS:
+        case DIGIT_POLICY_INDEX_AMBIGUOUS:
             return "AMBIGUOUS";
 
         default:
@@ -74,54 +43,43 @@ static const char *digit_policy_structure_state_name(
 }
 
 /**
- * @brief Returns a printable name for policy eligibility state.
+ * @brief Returns a printable semantic-validation reason.
  *
- * @param state Eligibility state.
- *
- * @return Static state name.
- */
-static const char *digit_policy_eligibility_state_name(
-    digit_policy_eligibility_state_t state)
-{
-    switch (state)
-    {
-        case DIGIT_POLICY_ELIGIBILITY_ELIGIBLE:
-            return "ELIGIBLE";
-
-        case DIGIT_POLICY_ELIGIBILITY_NOT_ELIGIBLE:
-            return "NOT ELIGIBLE";
-
-        default:
-            return "UNKNOWN";
-    }
-}
-
-/**
- * @brief Returns a printable eligibility decision reason.
- *
- * @param reason Eligibility reason.
+ * @param reason Validation reason.
  *
  * @return Static reason name.
  */
-static const char *digit_policy_eligibility_reason_name(
-    digit_policy_eligibility_reason_t reason)
+static const char *digit_policy_index_validation_reason_name(
+    digit_policy_index_validation_reason_t reason)
 {
     switch (reason)
     {
-        case DIGIT_POLICY_ELIGIBILITY_REASON_NONE:
+        case DIGIT_POLICY_INDEX_REASON_NONE:
             return "NONE";
 
-        case DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_INCOMPLETE:
-            return "STRUCTURE INCOMPLETE";
+        case DIGIT_POLICY_INDEX_REASON_ROOT_ID_INVALID:
+            return "ROOT DOCUMENT ID INVALID";
 
-        case DIGIT_POLICY_ELIGIBILITY_REASON_STRUCTURE_AMBIGUOUS:
-            return "STRUCTURE AMBIGUOUS";
+        case DIGIT_POLICY_INDEX_REASON_REVISION_ID_INVALID:
+            return "REVISION ID INVALID";
 
-        case DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_MISSING:
-            return "STATUS MISSING";
+        case DIGIT_POLICY_INDEX_REASON_REVISION_ROOT_MISMATCH:
+            return "REVISION ROOT MISMATCH";
 
-        case DIGIT_POLICY_ELIGIBILITY_REASON_STATUS_NOT_APPROVED:
-            return "STATUS NOT APPROVED";
+        case DIGIT_POLICY_INDEX_REASON_PREVIOUS_REVISION_INVALID:
+            return "PREVIOUS REVISION INVALID";
+
+        case DIGIT_POLICY_INDEX_REASON_PREVIOUS_REVISION_MISMATCH:
+            return "PREVIOUS REVISION MISMATCH";
+
+        case DIGIT_POLICY_INDEX_REASON_SHA256_INVALID:
+            return "SHA-256 INVALID";
+
+        case DIGIT_POLICY_INDEX_REASON_DUPLICATE_ROOT_ID:
+            return "DUPLICATE ROOT DOCUMENT ID";
+
+        case DIGIT_POLICY_INDEX_REASON_DUPLICATE_REVISION_ID:
+            return "DUPLICATE REVISION ID";
 
         default:
             return "UNKNOWN";
@@ -131,21 +89,19 @@ static const char *digit_policy_eligibility_reason_name(
 /**
  * @brief Application entry point.
  *
- * Initializes the Windows presentation boundary and Digit Core, loads the
- * local Markdown policy corpus, checks structural completeness, and evaluates
- * whether each structurally complete document is eligible to proceed to
- * later authority and provenance validation.
+ * Initializes the Windows presentation boundary and Digit Core, reads the
+ * machine-readable STN-LABZ policy index, and performs semantic validation
+ * of controlled-document identity relationships represented by the index.
  *
- * Every eligibility decision includes an explicit reason.
- *
- * Eligibility does not establish policy trust, authority, authenticity,
- * mission applicability, or operational acceptance.
+ * Successful index recognition and semantic validation do not independently
+ * establish authorization, cryptographic integrity, Trust Chain validity,
+ * or operational acceptance.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
  *
- * @return EXIT_SUCCESS on successful corpus processing, otherwise
- *         EXIT_FAILURE.
+ * @return EXIT_SUCCESS on successful development-stage processing,
+ *         otherwise EXIT_FAILURE.
  */
 int main(
     int argc,
@@ -154,26 +110,18 @@ int main(
     const char *policy_directory =
         "C:\\stn-labz\\policies";
 
-    const digit_policy_corpus_t *corpus;
+    const char *policy_index_filename =
+        "policy.index.json";
+
+    const digit_policy_index_t *policy_index;
+
+    digit_policy_index_validation_report_t
+        validation_report;
 
     size_t index;
 
-    size_t complete_count;
-    size_t incomplete_count;
-    size_t ambiguous_count;
-
-    size_t eligible_count;
-    size_t not_eligible_count;
-
     (void)argc;
     (void)argv;
-
-    complete_count = 0U;
-    incomplete_count = 0U;
-    ambiguous_count = 0U;
-
-    eligible_count = 0U;
-    not_eligible_count = 0U;
 
     /*
      * Initialize platform presentation before UTF-8 content is emitted.
@@ -219,12 +167,12 @@ int main(
     puts("Core initialization: READY");
 
     /*
-     * Initialize Core-owned policy corpus storage.
+     * Initialize machine-readable policy index storage.
      */
-    if (digit_policy_corpus_init() != 0)
+    if (digit_policy_index_init() != 0)
     {
         fputs(
-            "Policy corpus initialization: FAILED\n",
+            "Policy index initialization: FAILED\n",
             stderr
         );
 
@@ -233,337 +181,181 @@ int main(
         return EXIT_FAILURE;
     }
 
-    /*
-     * Load the local policy corpus.
-     */
     puts("");
 
     printf(
-        "Policy directory: %s\n",
-        policy_directory
+        "Policy index: %s\\%s\n",
+        policy_directory,
+        policy_index_filename
     );
 
-    if (digit_policy_corpus_load(
-            policy_directory) != 0)
+    /*
+     * JSON syntax and index structural recognition.
+     */
+    if (digit_policy_index_load(
+            policy_directory,
+            policy_index_filename) != 0)
     {
         fputs(
-            "Policy corpus load: FAILED\n",
+            "Policy index recognition: FAILED\n",
             stderr
         );
 
-        digit_policy_corpus_shutdown();
+        digit_policy_index_shutdown();
         digit_core_shutdown();
 
         return EXIT_FAILURE;
     }
 
-    corpus = digit_policy_corpus_get();
+    policy_index =
+        digit_policy_index_get();
 
-    if (corpus == NULL)
+    if (policy_index == NULL)
     {
         fputs(
-            "Policy corpus access: FAILED\n",
+            "Policy index access: FAILED\n",
             stderr
         );
 
-        digit_policy_corpus_shutdown();
+        digit_policy_index_shutdown();
         digit_core_shutdown();
 
         return EXIT_FAILURE;
     }
 
     puts(
-        "Policy corpus enumeration: PASS"
+        "Policy index recognition: PASS"
     );
 
     printf(
-        "Markdown documents represented: %zu\n",
-        corpus->document_count
+        "Policy index bytes: %zu\n",
+        policy_index->bytes_read
     );
 
     printf(
-        "Markdown documents recognized: %zu\n",
-        corpus->recognized_count
-    );
-
-    printf(
-        "Markdown documents failed: %zu\n",
-        corpus->failed_count
-    );
-
-    printf(
-        "Non-Markdown files ignored: %zu\n",
-        corpus->ignored_count
+        "Policy index records: %zu\n",
+        policy_index->record_count
     );
 
     /*
-     * Inspect every represented policy independently.
+     * Semantic validation.
+     *
+     * This validates internal controlled-document identity relationships.
+     * It does not establish authorization or Trust Chain PASS.
      */
-    for (index = 0U;
-         index < corpus->document_count;
-         index++)
+    if (digit_policy_index_validate(
+            policy_index,
+            &validation_report) != 0)
     {
-        const digit_policy_document_t *document;
-
-        digit_policy_structure_result_t
-            structure_result;
-
-        digit_policy_eligibility_result_t
-            eligibility_result;
-
-        const char *status;
-        const char *scope;
-
-        document =
-            &corpus->documents[index];
-
-        puts("");
-
-        printf(
-            "Policy: %s\n",
-            document->filename
+        fputs(
+            "Policy index semantic validation: FAILED\n",
+            stderr
         );
 
-        printf(
-            "State: %s\n",
-            digit_policy_state_name(
-                document->state
-            )
-        );
+        digit_policy_index_shutdown();
+        digit_core_shutdown();
 
-        /*
-         * A document that did not reach Markdown recognition cannot
-         * proceed to structural or eligibility evaluation.
-         */
-        if (document->state !=
-            DIGIT_POLICY_DOCUMENT_RECOGNIZED)
-        {
-            not_eligible_count++;
-
-            puts(
-                "Policy eligibility: NOT ELIGIBLE"
-            );
-
-            puts(
-                "Eligibility reason: DOCUMENT NOT RECOGNIZED"
-            );
-
-            continue;
-        }
-
-        printf(
-            "Bytes read: %zu\n",
-            document->bytes_read
-        );
-
-        printf(
-            "Lines: %zu\n",
-            document->structure.total_lines
-        );
-
-        printf(
-            "Headings: %zu\n",
-            document->structure.heading_count
-        );
-
-        printf(
-            "Metadata fields: %zu\n",
-            document->structure.metadata_count
-        );
-
-        if (document->structure.heading_count > 0U)
-        {
-            printf(
-                "First heading: %s\n",
-                document->structure.first_heading
-            );
-        }
-        else
-        {
-            puts(
-                "First heading: NONE"
-            );
-        }
-
-        status =
-            digit_markdown_metadata_get(
-                &document->structure,
-                "Status"
-            );
-
-        scope =
-            digit_markdown_metadata_get(
-                &document->structure,
-                "Scope"
-            );
-
-        printf(
-            "Status metadata: %s\n",
-            status != NULL
-                ? status
-                : "NOT PRESENT"
-        );
-
-        printf(
-            "Scope metadata: %s\n",
-            scope != NULL
-                ? scope
-                : "NOT PRESENT"
-        );
-
-        /*
-         * Structural completeness check.
-         */
-        if (digit_policy_structure_check(
-                &document->structure,
-                &structure_result) != 0)
-        {
-            puts(
-                "Policy structure check: FAILED"
-            );
-
-            incomplete_count++;
-            not_eligible_count++;
-
-            puts(
-                "Policy eligibility: NOT ELIGIBLE"
-            );
-
-            puts(
-                "Eligibility reason: STRUCTURE CHECK FAILED"
-            );
-
-            continue;
-        }
-
-        printf(
-            "Policy structure: %s\n",
-            digit_policy_structure_state_name(
-                structure_result.state
-            )
-        );
-
-        printf(
-            "Status fields: %zu\n",
-            structure_result.status_count
-        );
-
-        printf(
-            "Scope fields: %zu\n",
-            structure_result.scope_count
-        );
-
-        switch (structure_result.state)
-        {
-            case DIGIT_POLICY_STRUCTURE_COMPLETE:
-                complete_count++;
-                break;
-
-            case DIGIT_POLICY_STRUCTURE_INCOMPLETE:
-                incomplete_count++;
-                break;
-
-            case DIGIT_POLICY_STRUCTURE_AMBIGUOUS:
-                ambiguous_count++;
-                break;
-
-            default:
-                incomplete_count++;
-                break;
-        }
-
-        /*
-         * Policy eligibility evaluation.
-         */
-        if (digit_policy_eligibility_check(
-                &document->structure,
-                &structure_result,
-                &eligibility_result) != 0)
-        {
-            puts(
-                "Policy eligibility check: FAILED"
-            );
-
-            not_eligible_count++;
-
-            continue;
-        }
-
-        printf(
-            "Policy eligibility: %s\n",
-            digit_policy_eligibility_state_name(
-                eligibility_result.state
-            )
-        );
-
-        printf(
-            "Eligibility reason: %s\n",
-            digit_policy_eligibility_reason_name(
-                eligibility_result.reason
-            )
-        );
-
-        if (eligibility_result.state ==
-            DIGIT_POLICY_ELIGIBILITY_ELIGIBLE)
-        {
-            eligible_count++;
-        }
-        else
-        {
-            not_eligible_count++;
-        }
+        return EXIT_FAILURE;
     }
 
-    /*
-     * Corpus-level structural summary.
-     */
     puts("");
 
+    for (index = 0U;
+         index < validation_report.entry_count;
+         index++)
+    {
+        const digit_policy_index_record_t *record;
+
+        const digit_policy_index_validation_entry_t
+            *validation;
+
+        record =
+            &policy_index->records[index];
+
+        validation =
+            &validation_report.entries[index];
+
+        printf(
+            "Root Document ID: %s\n",
+            record->root_document_id
+        );
+
+        printf(
+            "Revision ID: %s\n",
+            record->revision_id
+        );
+
+        printf(
+            "Previous Revision: %s\n",
+            record->previous_revision
+        );
+
+        printf(
+            "Status: %s\n",
+            record->status
+        );
+
+        printf(
+            "SHA-256: %s\n",
+            record->sha256
+        );
+
+        printf(
+            "Index semantics: %s\n",
+            digit_policy_index_validation_state_name(
+                validation->state
+            )
+        );
+
+        printf(
+            "Semantic reason: %s\n",
+            digit_policy_index_validation_reason_name(
+                validation->reason
+            )
+        );
+
+        if (validation->state ==
+            DIGIT_POLICY_INDEX_VALID)
+        {
+            printf(
+                "Revision number: %lu\n",
+                validation->revision_number
+            );
+        }
+
+        puts("");
+    }
+
     printf(
-        "Structurally complete policies: %zu\n",
-        complete_count
+        "Valid index records: %zu\n",
+        validation_report.valid_count
     );
 
     printf(
-        "Structurally incomplete policies: %zu\n",
-        incomplete_count
+        "Invalid index records: %zu\n",
+        validation_report.invalid_count
     );
 
     printf(
-        "Structurally ambiguous policies: %zu\n",
-        ambiguous_count
+        "Ambiguous index records: %zu\n",
+        validation_report.ambiguous_count
     );
 
-    if (corpus->failed_count == 0U &&
-        incomplete_count == 0U &&
-        ambiguous_count == 0U &&
-        complete_count == corpus->recognized_count)
+    if (validation_report.invalid_count == 0U &&
+        validation_report.ambiguous_count == 0U &&
+        validation_report.valid_count ==
+            policy_index->record_count)
     {
         puts(
-            "Policy corpus structural contract: PASS"
+            "Policy index semantic contract: PASS"
         );
     }
     else
     {
         puts(
-            "Policy corpus structural contract: PARTIAL"
+            "Policy index semantic contract: PARTIAL"
         );
     }
-
-    /*
-     * Corpus-level eligibility summary.
-     */
-    puts("");
-
-    printf(
-        "Policies eligible for further validation: %zu\n",
-        eligible_count
-    );
-
-    printf(
-        "Policies not eligible for further validation: %zu\n",
-        not_eligible_count
-    );
 
     /*
      * Current operator interaction placeholder.
@@ -576,7 +368,7 @@ int main(
     /*
      * Controlled shutdown.
      */
-    digit_policy_corpus_shutdown();
+    digit_policy_index_shutdown();
     digit_core_shutdown();
 
     return EXIT_SUCCESS;
