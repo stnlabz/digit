@@ -17,6 +17,7 @@
  * - Company Preservation;
  * - operator reporting;
  * - mission-control integration;
+ * - policy worker;
  * - deterministic configuration.
  */
 
@@ -31,6 +32,7 @@
 #include "digit_mission.h"
 #include "digit_mission_control.h"
 #include "digit_operator_report.h"
+#include "digit_policy_worker.h"
 #include "digit_result.h"
 #include "digit_safe_mode.h"
 
@@ -265,11 +267,37 @@ int digit_core_init(void)
     }
 
     /*
+     * Establish the Core-owned policy worker.
+     *
+     * Initialization creates an IDLE worker only. No policy-processing
+     * job is started during Core initialization.
+     */
+    if (digit_policy_worker_init() != 0)
+    {
+        digit_mission_control_shutdown();
+        digit_operator_report_shutdown();
+        digit_company_preservation_shutdown();
+        digit_safe_mode_shutdown();
+        digit_audit_shutdown();
+        digit_result_shutdown();
+        digit_mission_shutdown();
+        digit_authority_shutdown();
+        digit_general_orders_shutdown();
+        digit_identity_shutdown();
+
+        g_digit_core_state =
+            DIGIT_CORE_STOPPED;
+
+        return -1;
+    }
+
+    /*
      * Initialize deterministic Core configuration.
      */
     if (digit_config_init(
             &g_core_config) != 0)
     {
+        digit_policy_worker_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -295,6 +323,7 @@ int digit_core_init(void)
             "Core initialization boundaries satisfied.") != 0)
     {
         digit_config_shutdown();
+        digit_policy_worker_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -322,6 +351,7 @@ int digit_core_init(void)
             "Digit Core initialization complete.") != 0)
     {
         digit_config_shutdown();
+        digit_policy_worker_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -390,6 +420,7 @@ void digit_core_shutdown(void)
      * Shutdown occurs in reverse dependency order.
      */
     digit_config_shutdown();
+    digit_policy_worker_shutdown();
     digit_mission_control_shutdown();
     digit_operator_report_shutdown();
     digit_company_preservation_shutdown();

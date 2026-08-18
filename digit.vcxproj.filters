@@ -81,6 +81,12 @@
     <ClCompile Include="core\digit_mission_control.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="core\digit_policy_worker.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\windows\platform_thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -144,6 +150,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\digit_mission_control.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_policy_worker.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\platform_thread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

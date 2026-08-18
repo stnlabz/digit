@@ -6,8 +6,9 @@
  *
  * This development entry point exercises the current machine-readable
  * policy index recognition and semantic-validation boundaries, accepts
- * a local human-operator mission, and maintains the operational runtime
- * until controlled shutdown is requested.
+ * a local human-operator mission, dispatches applicable policy work to
+ * the Core-owned policy worker, and maintains operational runtime until
+ * controlled shutdown is requested.
  */
 
 #include <stdio.h>
@@ -20,6 +21,7 @@
 #include "digit_mission_control.h"
 #include "digit_policy_index.h"
 #include "digit_policy_index_validate.h"
+#include "digit_policy_worker.h"
 #include "platform_console.h"
 
  /**
@@ -28,12 +30,18 @@
 #define DIGIT_OPERATOR_COMMAND_MAX 64U
 
   /**
-   * @brief Returns a printable semantic-validation state.
-   *
-   * @param state Validation state.
-   *
-   * @return Static state name.
+   * @brief Development mission currently associated with policy work.
    */
+#define DIGIT_POLICY_MISSION \
+    "Learn company policies"
+
+   /**
+    * @brief Returns a printable semantic-validation state.
+    *
+    * @param state Validation state.
+    *
+    * @return Static state name.
+    */
 static const char* digit_policy_index_validation_state_name(
     digit_policy_index_validation_state_t state)
 {
@@ -128,6 +136,97 @@ static size_t digit_console_trim_newline(
 }
 
 /**
+ * @brief Dispatches mission-specific development work.
+ *
+ * Current scope is intentionally narrow.
+ *
+ * The exact development mission "Learn company policies" starts one
+ * Core-owned asynchronous policy worker job using the recognized policy
+ * index as immutable job input.
+ *
+ * No other mission is interpreted or inferred to require policy work.
+ *
+ * @param mission_text Active mission text.
+ * @param policy_index Recognized policy index for the worker job.
+ *
+ * @return 0 on successful dispatch or when no current worker action applies,
+ *         otherwise non-zero.
+ */
+static int digit_dispatch_mission_work(
+    const char* mission_text,
+    const digit_policy_index_t* policy_index)
+{
+    if (mission_text == NULL)
+    {
+        return -1;
+    }
+
+    /*
+     * Do not infer mission meaning.
+     *
+     * Only the explicitly established development mission currently
+     * activates the policy worker.
+     */
+    if (strcmp(
+        mission_text,
+        DIGIT_POLICY_MISSION) != 0)
+    {
+        return 0;
+    }
+
+    if (policy_index == NULL)
+    {
+        if (digit_audit_append(
+            "POLICY_WORKER",
+            "Policy worker dispatch rejected: policy index unavailable.") != 0)
+        {
+            return -1;
+        }
+
+        return -1;
+    }
+
+    if (digit_policy_worker_get_state() !=
+        DIGIT_POLICY_WORKER_IDLE)
+    {
+        if (digit_audit_append(
+            "POLICY_WORKER",
+            "Policy worker unavailable for mission dispatch.") != 0)
+        {
+            return -1;
+        }
+
+        return -1;
+    }
+
+    if (digit_audit_append(
+        "MISSION",
+        "Policy mission dispatched to policy worker.") != 0)
+    {
+        return -1;
+    }
+
+    /*
+     * The worker copies the recognized policy index into worker-owned
+     * job storage before asynchronous execution begins.
+     */
+    if (digit_policy_worker_start(
+        policy_index) != 0)
+    {
+        if (digit_audit_append(
+            "POLICY_WORKER",
+            "Policy worker start failed.") != 0)
+        {
+            return -1;
+        }
+
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
  * @brief Runs the current local operational console.
  *
  * The runtime remains active until the local human operator explicitly
@@ -205,12 +304,13 @@ static int digit_operational_runtime(void)
  * Initializes the Windows presentation boundary and Digit Core, reads the
  * machine-readable STN-LABZ policy index, performs semantic validation of
  * controlled-document identity relationships represented by the index,
- * accepts a mission from the local human-operator interface, and maintains
- * operational runtime until controlled shutdown.
+ * accepts a mission from the local human-operator interface, dispatches
+ * applicable asynchronous work using the recognized policy index, and
+ * maintains operational runtime until controlled shutdown.
  *
- * Successful index recognition and semantic validation do not independently
- * establish authorization, cryptographic integrity, Trust Chain validity,
- * or operational acceptance.
+ * Successful index recognition, semantic validation, discovery, and index
+ * matching do not independently establish authorization, cryptographic
+ * integrity, Trust Chain validity, or operational acceptance.
  *
  * @param argc Number of command-line arguments.
  * @param argv Command-line argument vector.
@@ -534,6 +634,27 @@ int main(
     puts("Mission state: ACTIVE");
 
     /*
+     * Dispatch currently implemented mission-specific work.
+     *
+     * The already-recognized policy index is supplied as worker job
+     * input. The worker owns its asynchronous snapshot.
+     */
+    if (digit_dispatch_mission_work(
+        mission_text,
+        policy_index) != 0)
+    {
+        fputs(
+            "Mission work dispatch: FAILED\n",
+            stderr
+        );
+
+        digit_policy_index_shutdown();
+        digit_core_shutdown();
+
+        return EXIT_FAILURE;
+    }
+
+    /*
      * Record establishment of operational runtime before entering the
      * operator loop.
      */
@@ -555,7 +676,7 @@ int main(
     /*
      * Enter operational runtime.
      *
-     * Digit remains alive after mission acceptance.
+     * Digit remains responsive while policy work executes asynchronously.
      */
     if (digit_operational_runtime() != 0)
     {
@@ -572,6 +693,9 @@ int main(
 
     /*
      * Controlled shutdown.
+     *
+     * Core owns policy-worker shutdown and waits for active worker work
+     * before releasing the worker boundary.
      */
     digit_policy_index_shutdown();
     digit_core_shutdown();

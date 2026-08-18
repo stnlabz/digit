@@ -157,10 +157,12 @@
     <ClCompile Include="core\digit_policy_index.c" />
     <ClCompile Include="core\digit_policy_index_validate.c" />
     <ClCompile Include="core\digit_policy_structure.c" />
+    <ClCompile Include="core\digit_policy_worker.c" />
     <ClCompile Include="core\digit_result.c" />
     <ClCompile Include="core\digit_safe_mode.c" />
     <ClCompile Include="platform\windows\platform_console.c" />
     <ClCompile Include="platform\windows\platform_fs.c" />
+    <ClCompile Include="platform\windows\platform_thread.c" />
     <ClCompile Include="src\main.c" />
   </ItemGroup>
   <ItemGroup>
@@ -181,10 +183,12 @@
     <ClInclude Include="include\digit_policy_index.h" />
     <ClInclude Include="include\digit_policy_index_validate.h" />
     <ClInclude Include="include\digit_policy_structure.h" />
+    <ClInclude Include="include\digit_policy_worker.h" />
     <ClInclude Include="include\digit_result.h" />
     <ClInclude Include="include\digit_safe_mode.h" />
     <ClInclude Include="include\platform_console.h" />
     <ClInclude Include="include\platform_fs.h" />
+    <ClInclude Include="include\platform_thread.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
