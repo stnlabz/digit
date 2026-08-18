@@ -149,6 +149,7 @@
     <ClCompile Include="core\digit_identity.c" />
     <ClCompile Include="core\digit_markdown.c" />
     <ClCompile Include="core\digit_mission.c" />
+    <ClCompile Include="core\digit_mission_control.c" />
     <ClCompile Include="core\digit_operator_report.c" />
     <ClCompile Include="core\digit_policy.c" />
     <ClCompile Include="core\digit_policy_corpus.c" />
@@ -172,6 +173,7 @@
     <ClInclude Include="include\digit_identity.h" />
     <ClInclude Include="include\digit_markdown.h" />
     <ClInclude Include="include\digit_mission.h" />
+    <ClInclude Include="include\digit_mission_control.h" />
     <ClInclude Include="include\digit_operator_report.h" />
     <ClInclude Include="include\digit_policy.h" />
     <ClInclude Include="include\digit_policy_corpus.h" />

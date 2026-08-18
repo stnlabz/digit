@@ -5,7 +5,7 @@
  * Digit Core owns the system safety nucleus and controls initialization
  * and shutdown of Core components.
  *
- * Current initialized Core safety-nucleus components:
+ * Current initialized Core components:
  *
  * - Core identity;
  * - General Orders;
@@ -16,10 +16,12 @@
  * - Safe Mode;
  * - Company Preservation;
  * - operator reporting;
+ * - mission-control integration;
  * - deterministic configuration.
  */
 
 #include "digit_core.h"
+
 #include "digit_audit.h"
 #include "digit_authority.h"
 #include "digit_company_preservation.h"
@@ -27,6 +29,7 @@
 #include "digit_general_orders.h"
 #include "digit_identity.h"
 #include "digit_mission.h"
+#include "digit_mission_control.h"
 #include "digit_operator_report.h"
 #include "digit_result.h"
 #include "digit_safe_mode.h"
@@ -44,6 +47,10 @@ static digit_config_t g_core_config;
 
 int digit_core_init(void)
 {
+    /*
+     * Core may initialize only from an uninitialized or previously
+     * stopped state.
+     */
     if (g_digit_core_state !=
             DIGIT_CORE_UNINITIALIZED &&
         g_digit_core_state !=
@@ -55,6 +62,9 @@ int digit_core_init(void)
     g_digit_core_state =
         DIGIT_CORE_INITIALIZING;
 
+    /*
+     * Establish immutable Digit identity.
+     */
     if (digit_identity_init() != 0)
     {
         g_digit_core_state =
@@ -63,6 +73,9 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Activate standing General Orders.
+     */
     if (digit_general_orders_init() != 0)
     {
         digit_identity_shutdown();
@@ -73,6 +86,9 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish the human-authority boundary.
+     */
     if (digit_authority_init() != 0)
     {
         digit_general_orders_shutdown();
@@ -84,6 +100,11 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish deterministic runtime mission state.
+     *
+     * Digit begins with no assigned mission.
+     */
     if (digit_mission_init() != 0)
     {
         digit_authority_shutdown();
@@ -96,6 +117,9 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish deterministic result and epistemic states.
+     */
     if (digit_result_init() != 0)
     {
         digit_mission_shutdown();
@@ -109,6 +133,12 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish persistent Core audit and evidence logging.
+     *
+     * If required logging cannot be established, Core does not
+     * proceed to READY.
+     */
     if (digit_audit_init() != 0)
     {
         digit_result_shutdown();
@@ -140,6 +170,12 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish Safe Mode.
+     *
+     * Safe Mode begins inactive but must exist before normal
+     * operational capability becomes available.
+     */
     if (digit_safe_mode_init() != 0)
     {
         digit_audit_shutdown();
@@ -155,6 +191,11 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * Establish Company Preservation.
+     *
+     * This remains separate from ordinary mission state and Safe Mode.
+     */
     if (digit_company_preservation_init() != 0)
     {
         digit_safe_mode_shutdown();
@@ -172,8 +213,7 @@ int digit_core_init(void)
     }
 
     /*
-     * Operator reporting becomes available before configuration and before
-     * Core declares READY.
+     * Establish structured operator reporting.
      */
     if (digit_operator_report_init() != 0)
     {
@@ -192,30 +232,22 @@ int digit_core_init(void)
         return -1;
     }
 
-    if (digit_config_init(
-            &g_core_config) != 0)
+    /*
+     * Establish Core mission-control integration.
+     *
+     * Mission control depends upon:
+     *
+     * - authority;
+     * - mission state;
+     * - audit;
+     * - Safe Mode;
+     * - Company Preservation;
+     * - operator reporting.
+     *
+     * Those boundaries therefore initialize first.
+     */
+    if (digit_mission_control_init() != 0)
     {
-        digit_operator_report_shutdown();
-        digit_company_preservation_shutdown();
-        digit_safe_mode_shutdown();
-        digit_audit_shutdown();
-        digit_result_shutdown();
-        digit_mission_shutdown();
-        digit_authority_shutdown();
-        digit_general_orders_shutdown();
-        digit_identity_shutdown();
-
-        g_digit_core_state =
-            DIGIT_CORE_STOPPED;
-
-        return -1;
-    }
-
-    if (digit_audit_append(
-            "CORE",
-            "Core initialization boundaries satisfied.") != 0)
-    {
-        digit_config_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
         digit_safe_mode_shutdown();
@@ -233,14 +265,12 @@ int digit_core_init(void)
     }
 
     /*
-     * Emit initial operator-visible readiness report.
+     * Initialize deterministic Core configuration.
      */
-    if (digit_operator_report_emit(
-            DIGIT_OPERATOR_REPORT_INFO,
-            "CORE",
-            "Digit Core initialization complete.") != 0)
+    if (digit_config_init(
+            &g_core_config) != 0)
     {
-        digit_config_shutdown();
+        digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
         digit_safe_mode_shutdown();
@@ -257,6 +287,62 @@ int digit_core_init(void)
         return -1;
     }
 
+    /*
+     * All current Core initialization boundaries have succeeded.
+     */
+    if (digit_audit_append(
+            "CORE",
+            "Core initialization boundaries satisfied.") != 0)
+    {
+        digit_config_shutdown();
+        digit_mission_control_shutdown();
+        digit_operator_report_shutdown();
+        digit_company_preservation_shutdown();
+        digit_safe_mode_shutdown();
+        digit_audit_shutdown();
+        digit_result_shutdown();
+        digit_mission_shutdown();
+        digit_authority_shutdown();
+        digit_general_orders_shutdown();
+        digit_identity_shutdown();
+
+        g_digit_core_state =
+            DIGIT_CORE_STOPPED;
+
+        return -1;
+    }
+
+    /*
+     * Produce operator-visible readiness evidence before Core declares
+     * itself READY.
+     */
+    if (digit_operator_report_emit(
+            DIGIT_OPERATOR_REPORT_INFO,
+            "CORE",
+            "Digit Core initialization complete.") != 0)
+    {
+        digit_config_shutdown();
+        digit_mission_control_shutdown();
+        digit_operator_report_shutdown();
+        digit_company_preservation_shutdown();
+        digit_safe_mode_shutdown();
+        digit_audit_shutdown();
+        digit_result_shutdown();
+        digit_mission_shutdown();
+        digit_authority_shutdown();
+        digit_general_orders_shutdown();
+        digit_identity_shutdown();
+
+        g_digit_core_state =
+            DIGIT_CORE_STOPPED;
+
+        return -1;
+    }
+
+    /*
+     * Core reaches READY only after all currently required boundaries
+     * have initialized successfully.
+     */
     g_digit_core_state =
         DIGIT_CORE_READY;
 
@@ -270,6 +356,10 @@ digit_core_state_t digit_core_get_state(void)
 
 void digit_core_shutdown(void)
 {
+    /*
+     * Shutdown is unnecessary when Core has never initialized or has
+     * already stopped.
+     */
     if (g_digit_core_state ==
             DIGIT_CORE_UNINITIALIZED ||
         g_digit_core_state ==
@@ -282,8 +372,8 @@ void digit_core_shutdown(void)
         DIGIT_CORE_SHUTTING_DOWN;
 
     /*
-     * Produce operator and audit evidence before reporting and audit
-     * boundaries are withdrawn.
+     * Produce operator and audit evidence before those boundaries
+     * are withdrawn.
      */
     (void)digit_operator_report_emit(
         DIGIT_OPERATOR_REPORT_NOTICE,
@@ -297,9 +387,10 @@ void digit_core_shutdown(void)
     );
 
     /*
-     * Shutdown occurs in reverse initialization order.
+     * Shutdown occurs in reverse dependency order.
      */
     digit_config_shutdown();
+    digit_mission_control_shutdown();
     digit_operator_report_shutdown();
     digit_company_preservation_shutdown();
     digit_safe_mode_shutdown();

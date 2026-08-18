@@ -78,6 +78,9 @@
     <ClCompile Include="core\digit_operator_report.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="core\digit_mission_control.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -138,6 +141,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\digit_operator_report.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_mission_control.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

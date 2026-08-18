@@ -4,10 +4,11 @@
  *
  * Audit and evidence are part of Digit's Core safety nucleus.
  *
- * The initial implementation provides bounded, append-only, Core-owned
- * runtime evidence.
+ * Audit evidence is retained in bounded runtime memory and persisted to
+ * the governed Digit log location.
  *
- * Evidence is not silently overwritten or deleted during operation.
+ * Persistent evidence is append-only. Existing evidence is never
+ * intentionally truncated or overwritten by this component.
  */
 
 #ifndef STN_LABZ_DIGIT_AUDIT_H
@@ -15,24 +16,30 @@
 
 #include <stddef.h>
 
-/**
- * @brief Maximum number of runtime audit records.
- */
+ /**
+  * @brief Governed Digit audit-log location.
+  */
+#define DIGIT_AUDIT_LOG_PATH \
+    "C:\\stn-labz\\digit\\logs\\digit-audit.log"
+
+  /**
+   * @brief Maximum number of runtime audit records.
+   */
 #define DIGIT_AUDIT_MAX_RECORDS 256U
 
-/**
- * @brief Maximum component-name length excluding null termination.
- */
+   /**
+    * @brief Maximum component-name length excluding null termination.
+    */
 #define DIGIT_AUDIT_COMPONENT_MAX 64U
 
-/**
- * @brief Maximum event-text length excluding null termination.
- */
+    /**
+     * @brief Maximum event-text length excluding null termination.
+     */
 #define DIGIT_AUDIT_EVENT_MAX 256U
 
-/**
- * @brief One immutable runtime audit record.
- */
+     /**
+      * @brief One immutable runtime audit record.
+      */
 typedef struct digit_audit_record
 {
     unsigned long sequence;
@@ -48,9 +55,11 @@ typedef struct digit_audit_record
 } digit_audit_record_t;
 
 /**
- * @brief Initializes Core-owned audit state.
+ * @brief Initializes Core-owned audit state and persistent logging.
  *
- * The ledger begins empty.
+ * The persistent log is opened in append mode.
+ *
+ * Initialization fails if the governed audit log cannot be opened.
  *
  * @return 0 on success, non-zero on failure.
  */
@@ -59,15 +68,10 @@ int digit_audit_init(void);
 /**
  * @brief Appends one evidence record.
  *
- * Existing records are never overwritten.
+ * A record is accepted only when it can be written and flushed to the
+ * persistent audit log.
  *
- * The operation fails when:
- *
- * - the audit component is inactive;
- * - component or event is NULL;
- * - component or event is empty;
- * - either value exceeds its bounded length;
- * - the ledger has reached capacity.
+ * Existing persistent evidence is never intentionally overwritten.
  *
  * @param component Component producing the evidence.
  * @param event Deterministic event description.
@@ -75,25 +79,25 @@ int digit_audit_init(void);
  * @return 0 on success, non-zero on failure.
  */
 int digit_audit_append(
-    const char *component,
-    const char *event
+    const char* component,
+    const char* event
 );
 
 /**
- * @brief Returns the current number of evidence records.
+ * @brief Returns the current number of runtime evidence records.
  *
  * @return Record count, or 0 when audit is not initialized.
  */
 size_t digit_audit_count(void);
 
 /**
- * @brief Returns one audit record by zero-based index.
+ * @brief Returns one runtime audit record by zero-based index.
  *
  * @param index Record index.
  *
  * @return Read-only record pointer, or NULL when unavailable.
  */
-const digit_audit_record_t *digit_audit_get(
+const digit_audit_record_t* digit_audit_get(
     size_t index
 );
 
@@ -105,11 +109,9 @@ const digit_audit_record_t *digit_audit_get(
 int digit_audit_is_ready(void);
 
 /**
- * @brief Clears runtime audit storage during controlled Core shutdown.
+ * @brief Closes persistent audit logging and clears runtime storage.
  *
- * Persistent audit preservation is outside this initial runtime component
- * and will be implemented separately when the applicable evidence-storage
- * boundary is developed.
+ * Persistent log contents are not deleted or truncated.
  */
 void digit_audit_shutdown(void);
 
