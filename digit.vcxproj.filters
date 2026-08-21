@@ -87,6 +87,27 @@
     <ClCompile Include="platform\windows\platform_thread.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="core\digit_module.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_module_catalog.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_module_discovery_win.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_module_inventory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_module_registry.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_loader.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="core\digit_modules.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\digit_core.h">
@@ -156,6 +177,27 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\platform_thread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module_catalog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module_discovery.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module_inventory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_module_registry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\digit_modules.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

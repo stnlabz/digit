@@ -17,8 +17,8 @@
  * - Company Preservation;
  * - operator reporting;
  * - mission-control integration;
- * - policy worker;
- * - deterministic configuration.
+ * - deterministic configuration;
+ * - Core-controlled module subsystem.
  */
 
 #include "digit_core.h"
@@ -31,8 +31,8 @@
 #include "digit_identity.h"
 #include "digit_mission.h"
 #include "digit_mission_control.h"
+#include "digit_modules.h"
 #include "digit_operator_report.h"
-#include "digit_policy_worker.h"
 #include "digit_result.h"
 #include "digit_safe_mode.h"
 
@@ -104,8 +104,6 @@ int digit_core_init(void)
 
     /*
      * Establish deterministic runtime mission state.
-     *
-     * Digit begins with no assigned mission.
      */
     if (digit_mission_init() != 0)
     {
@@ -137,9 +135,6 @@ int digit_core_init(void)
 
     /*
      * Establish persistent Core audit and evidence logging.
-     *
-     * If required logging cannot be established, Core does not
-     * proceed to READY.
      */
     if (digit_audit_init() != 0)
     {
@@ -174,9 +169,6 @@ int digit_core_init(void)
 
     /*
      * Establish Safe Mode.
-     *
-     * Safe Mode begins inactive but must exist before normal
-     * operational capability becomes available.
      */
     if (digit_safe_mode_init() != 0)
     {
@@ -195,8 +187,6 @@ int digit_core_init(void)
 
     /*
      * Establish Company Preservation.
-     *
-     * This remains separate from ordinary mission state and Safe Mode.
      */
     if (digit_company_preservation_init() != 0)
     {
@@ -236,45 +226,9 @@ int digit_core_init(void)
 
     /*
      * Establish Core mission-control integration.
-     *
-     * Mission control depends upon:
-     *
-     * - authority;
-     * - mission state;
-     * - audit;
-     * - Safe Mode;
-     * - Company Preservation;
-     * - operator reporting.
-     *
-     * Those boundaries therefore initialize first.
      */
     if (digit_mission_control_init() != 0)
     {
-        digit_operator_report_shutdown();
-        digit_company_preservation_shutdown();
-        digit_safe_mode_shutdown();
-        digit_audit_shutdown();
-        digit_result_shutdown();
-        digit_mission_shutdown();
-        digit_authority_shutdown();
-        digit_general_orders_shutdown();
-        digit_identity_shutdown();
-
-        g_digit_core_state =
-            DIGIT_CORE_STOPPED;
-
-        return -1;
-    }
-
-    /*
-     * Establish the Core-owned policy worker.
-     *
-     * Initialization creates an IDLE worker only. No policy-processing
-     * job is started during Core initialization.
-     */
-    if (digit_policy_worker_init() != 0)
-    {
-        digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
         digit_safe_mode_shutdown();
@@ -297,7 +251,36 @@ int digit_core_init(void)
     if (digit_config_init(
             &g_core_config) != 0)
     {
-        digit_policy_worker_shutdown();
+        digit_mission_control_shutdown();
+        digit_operator_report_shutdown();
+        digit_company_preservation_shutdown();
+        digit_safe_mode_shutdown();
+        digit_audit_shutdown();
+        digit_result_shutdown();
+        digit_mission_shutdown();
+        digit_authority_shutdown();
+        digit_general_orders_shutdown();
+        digit_identity_shutdown();
+
+        g_digit_core_state =
+            DIGIT_CORE_STOPPED;
+
+        return -1;
+    }
+
+    /*
+     * Initialize the Core-controlled module subsystem.
+     *
+     * Module discovery is resolved relative to digit.exe.
+     */
+    if (digit_modules_init() != 0)
+    {
+        (void)digit_audit_append(
+            "MODULE",
+            "Core module subsystem initialization failed."
+        );
+
+        digit_config_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -322,8 +305,8 @@ int digit_core_init(void)
             "CORE",
             "Core initialization boundaries satisfied.") != 0)
     {
+        digit_modules_shutdown();
         digit_config_shutdown();
-        digit_policy_worker_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -350,8 +333,8 @@ int digit_core_init(void)
             "CORE",
             "Digit Core initialization complete.") != 0)
     {
+        digit_modules_shutdown();
         digit_config_shutdown();
-        digit_policy_worker_shutdown();
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -370,7 +353,7 @@ int digit_core_init(void)
     }
 
     /*
-     * Core reaches READY only after all currently required boundaries
+     * Core reaches READY only after all required boundaries
      * have initialized successfully.
      */
     g_digit_core_state =
@@ -386,10 +369,6 @@ digit_core_state_t digit_core_get_state(void)
 
 void digit_core_shutdown(void)
 {
-    /*
-     * Shutdown is unnecessary when Core has never initialized or has
-     * already stopped.
-     */
     if (g_digit_core_state ==
             DIGIT_CORE_UNINITIALIZED ||
         g_digit_core_state ==
@@ -419,8 +398,8 @@ void digit_core_shutdown(void)
     /*
      * Shutdown occurs in reverse dependency order.
      */
+    digit_modules_shutdown();
     digit_config_shutdown();
-    digit_policy_worker_shutdown();
     digit_mission_control_shutdown();
     digit_operator_report_shutdown();
     digit_company_preservation_shutdown();
