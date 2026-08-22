@@ -329,7 +329,8 @@ static int digit_console_kb_query(
     digit_sqlite_retrieval_result_t
         result;
 
-    FARPROC export_address;
+    FARPROC export_address =
+        NULL;
 
     size_t result_count =
         0U;
@@ -354,26 +355,25 @@ static int digit_console_kb_query(
     }
 
 
-    export_address =
-        digit_modules_get_export(
-            "sqlite",
-            DIGIT_SQLITE_SEARCH_EXPORT
-        );
-
-
     if (
+        digit_modules_acquire_export(
+            "sqlite",
+            DIGIT_SQLITE_SEARCH_EXPORT,
+            &export_address
+        ) != 0 ||
         export_address == NULL
     )
     {
         fputs(
-            "KB retrieval unavailable.\n",
+            "KB retrieval temporarily unavailable.\n",
             stderr
         );
 
 
         (void)digit_audit_append(
             "KB",
-            "Knowledge query rejected: sqlite search export unavailable."
+            "Knowledge query rejected: "
+            "sqlite module unavailable or replacing."
         );
 
 
@@ -400,6 +400,16 @@ static int digit_console_kb_query(
             DIGIT_KB_RESULT_LIMIT,
             &result_count
         );
+
+
+    /*
+     * Release the module lease immediately after
+     * returning from module code.
+     */
+
+    digit_modules_release_export(
+        "sqlite"
+    );
 
 
     if (
@@ -474,6 +484,7 @@ static int digit_console_kb_query(
         puts(
             "UNKNOWN"
         );
+
 
         return 0;
     }
@@ -641,6 +652,7 @@ int main(
             stderr
         );
 
+
         return EXIT_FAILURE;
     }
 
@@ -666,6 +678,7 @@ int main(
             stderr
         );
 
+
         return EXIT_FAILURE;
     }
 
@@ -680,7 +693,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
@@ -720,7 +735,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
@@ -737,7 +754,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
@@ -755,7 +774,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
@@ -786,7 +807,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
@@ -801,7 +824,9 @@ int main(
             stderr
         );
 
+
         digit_core_shutdown();
+
 
         return EXIT_FAILURE;
     }
