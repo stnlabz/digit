@@ -4,21 +4,31 @@
  *
  * digit_modules.c
  *
- * Core-controlled dynamic module orchestration.
+ * Thin Digit host integration for STN-LABZ Module ABI 1.4.
  *
- * Responsibilities:
+ * Digit owns:
  *
- * - executable-relative module discovery
- * - module inventory loading
- * - module verification
- * - module qualification
- * - qualification restoration
- * - qualification persistence
- * - module activation
- * - operator-visible lifecycle reporting
- * - persistent audit reporting
- * - controlled module stop
- * - DLL unload
+ * - executable-relative module location;
+ * - Digit artifact naming;
+ * - operator-visible lifecycle reporting;
+ * - persistent Digit audit reporting;
+ * - host-service callbacks.
+ *
+ * STN-LABZ ABI owns:
+ *
+ * - module descriptors;
+ * - loader state;
+ * - registry state;
+ * - verification;
+ * - qualification;
+ * - authorization;
+ * - activation;
+ * - STOPPED;
+ * - UNREGISTERED;
+ * - controlled unload boundary.
+ *
+ * Digit does not maintain a duplicate module lifecycle
+ * implementation.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -28,20 +38,19 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "abi.h"
 #include "digit_audit.h"
-#include "digit_module.h"
-#include "digit_module_discovery.h"
-#include "digit_module_inventory.h"
-#include "digit_module_loader.h"
-#include "digit_module_registry.h"
 #include "digit_modules.h"
+#include "module.h"
+#include "module_loader.h"
+#include "module_registry.h"
 
 
 #define DIGIT_MODULE_PATH_MAX \
     1024
 
-#define DIGIT_MODULE_STATE_DIRECTORY \
-    "C:\\stn-labz\\digit"
+#define DIGIT_MODULE_CONF_NAME \
+    "module.conf"
 
 #define DIGIT_MODULE_AUDIT_MESSAGE_MAX \
     512
@@ -49,18 +58,15 @@
 
 /*
  * ------------------------------------------------
- * MODULE STATE
+ * ABI STATE
  * ------------------------------------------------
  */
 
-static digit_module_registry_t
+static stnlabz_module_registry_t
     g_module_registry;
 
-static digit_module_loader_t
+static stnlabz_module_loader_t
     g_module_loader;
-
-static digit_module_inventory_t
-    g_module_inventory;
 
 static char g_modules_path[
     DIGIT_MODULE_PATH_MAX
@@ -72,17 +78,14 @@ static int g_modules_initialized =
 
 /*
  * ------------------------------------------------
- * MODULE HOST API
+ * HOST SERVICES
  * ------------------------------------------------
  *
- * SQLite currently requires no Core host-service
- * callbacks.
- *
- * The host structure remains present so additional
- * Digit modules may use the established ABI later.
+ * Current Digit modules do not require command-style
+ * host callbacks.
  */
 
-static const digit_module_host_t
+static const stnlabz_module_host_t
     g_module_host =
 {
     NULL,
@@ -93,7 +96,7 @@ static const digit_module_host_t
 
 /*
  * ------------------------------------------------
- * AUDIT MESSAGE
+ * AUDIT
  * ------------------------------------------------
  */
 
@@ -112,66 +115,6 @@ static void digit_modules_audit(
 
     (void)digit_audit_append(
         "MODULE",
-        message
-    );
-}
-
-
-/*
- * ------------------------------------------------
- * FORMATTED AUDIT MESSAGE
- * ------------------------------------------------
- */
-
-static void digit_modules_audit_module(
-    const char *event,
-    const digit_module_record_t *record
-)
-{
-    char message[
-        DIGIT_MODULE_AUDIT_MESSAGE_MAX
-    ];
-
-    int written;
-
-
-    if (
-        event == NULL ||
-        record == NULL
-    )
-    {
-        return;
-    }
-
-
-    written =
-        snprintf(
-            message,
-            sizeof(message),
-            "%s: id=%s name=%s version=%u.%u.%u state=%s",
-            event,
-            record->descriptor.id,
-            record->descriptor.name,
-            record->descriptor.version_major,
-            record->descriptor.version_minor,
-            record->descriptor.version_patch,
-            digit_module_state_string(
-                record->state
-            )
-        );
-
-
-    if (
-        written < 0 ||
-        (size_t)written >=
-            sizeof(message)
-    )
-    {
-        return;
-    }
-
-
-    digit_modules_audit(
         message
     );
 }
@@ -239,18 +182,380 @@ static int digit_modules_ensure_directory(
 
 /*
  * ------------------------------------------------
- * INITIALIZE MODULE INFRASTRUCTURE
+ * PATH JOIN
  * ------------------------------------------------
  */
 
-static int digit_modules_initialize_core(void)
+static int digit_modules_join_path(
+    char *output,
+    size_t output_size,
+    const char *left,
+    const char *right
+)
 {
-    digit_module_result_t
-        module_result;
+    int written;
 
-    digit_module_inventory_result_t
-        inventory_result;
 
+    if (
+        output == NULL ||
+        output_size == 0U ||
+        left == NULL ||
+        right == NULL
+    )
+    {
+        return 0;
+    }
+
+
+    written =
+        snprintf(
+            output,
+            output_size,
+            "%s\\%s",
+            left,
+            right
+        );
+
+
+    if (
+        written < 0 ||
+        (size_t)written >=
+            output_size
+    )
+    {
+        return 0;
+    }
+
+
+    return 1;
+}
+
+
+/*
+ * ------------------------------------------------
+ * MODULE ROOT
+ * ------------------------------------------------
+ */
+
+static int digit_modules_resolve_path(
+    char *modules_path,
+    size_t modules_path_size
+)
+{
+    char executable_path[
+        DIGIT_MODULE_PATH_MAX
+    ];
+
+    char *separator;
+
+    DWORD length;
+
+    int written;
+
+
+    if (
+        modules_path == NULL ||
+        modules_path_size == 0U
+    )
+    {
+        return 0;
+    }
+
+
+    memset(
+        executable_path,
+        0,
+        sizeof(executable_path)
+    );
+
+
+    length =
+        GetModuleFileNameA(
+            NULL,
+            executable_path,
+            (DWORD)sizeof(executable_path)
+        );
+
+
+    if (
+        length == 0U ||
+        length >=
+            sizeof(executable_path)
+    )
+    {
+        return 0;
+    }
+
+
+    separator =
+        strrchr(
+            executable_path,
+            '\\'
+        );
+
+
+    if (
+        separator == NULL
+    )
+    {
+        separator =
+            strrchr(
+                executable_path,
+                '/'
+            );
+    }
+
+
+    if (
+        separator == NULL
+    )
+    {
+        return 0;
+    }
+
+
+    *separator =
+        '\0';
+
+
+    written =
+        snprintf(
+            modules_path,
+            modules_path_size,
+            "%s\\modules",
+            executable_path
+        );
+
+
+    if (
+        written < 0 ||
+        (size_t)written >=
+            modules_path_size
+    )
+    {
+        return 0;
+    }
+
+
+    return 1;
+}
+
+
+/*
+ * ------------------------------------------------
+ * MODULE.CONF
+ * ------------------------------------------------
+ *
+ * Accepted:
+ *
+ *     id=<module-id>
+ *
+ * Blank lines and '#' comments are permitted.
+ *
+ * Unknown keys, duplicate id declarations, malformed
+ * lines, and empty IDs are rejected.
+ */
+
+static int digit_modules_read_id(
+    const char *config_path,
+    char *module_id,
+    size_t module_id_size
+)
+{
+    FILE *file =
+        NULL;
+
+    char line[
+        512
+    ];
+
+    int id_seen =
+        0;
+
+
+    if (
+        config_path == NULL ||
+        module_id == NULL ||
+        module_id_size == 0U
+    )
+    {
+        return 0;
+    }
+
+
+    module_id[0] =
+        '\0';
+
+
+    if (
+        fopen_s(
+            &file,
+            config_path,
+            "r"
+        ) != 0 ||
+        file == NULL
+    )
+    {
+        return 0;
+    }
+
+
+    while (
+        fgets(
+            line,
+            sizeof(line),
+            file
+        ) != NULL
+    )
+    {
+        char *separator;
+
+        char *key;
+
+        char *value;
+
+        size_t length;
+
+
+        length =
+            strlen(
+                line
+            );
+
+
+        while (
+            length > 0U &&
+            (
+                line[length - 1U] == '\n' ||
+                line[length - 1U] == '\r'
+            )
+        )
+        {
+            line[
+                length - 1U
+            ] =
+                '\0';
+
+            length--;
+        }
+
+
+        if (
+            line[0] == '\0' ||
+            line[0] == '#'
+        )
+        {
+            continue;
+        }
+
+
+        separator =
+            strchr(
+                line,
+                '='
+            );
+
+
+        if (
+            separator == NULL
+        )
+        {
+            fclose(
+                file
+            );
+
+            return 0;
+        }
+
+
+        *separator =
+            '\0';
+
+
+        key =
+            line;
+
+        value =
+            separator + 1;
+
+
+        if (
+            strcmp(
+                key,
+                "id"
+            ) != 0
+        )
+        {
+            fclose(
+                file
+            );
+
+            return 0;
+        }
+
+
+        if (
+            id_seen
+        )
+        {
+            fclose(
+                file
+            );
+
+            return 0;
+        }
+
+
+        length =
+            strlen(
+                value
+            );
+
+
+        if (
+            length == 0U ||
+            length >=
+                module_id_size
+        )
+        {
+            fclose(
+                file
+            );
+
+            return 0;
+        }
+
+
+        memcpy(
+            module_id,
+            value,
+            length + 1U
+        );
+
+
+        id_seen =
+            1;
+    }
+
+
+    fclose(
+        file
+    );
+
+
+    return
+        id_seen;
+}
+
+
+/*
+ * ------------------------------------------------
+ * INITIALIZE ABI
+ * ------------------------------------------------
+ */
+
+static int digit_modules_initialize_abi(void)
+{
     char message[
         DIGIT_MODULE_AUDIT_MESSAGE_MAX
     ];
@@ -258,18 +563,13 @@ static int digit_modules_initialize_core(void)
     int written;
 
 
-    digit_module_registry_init(
+    stnlabz_module_registry_init(
         &g_module_registry
     );
 
 
-    digit_module_loader_init(
+    stnlabz_module_loader_init(
         &g_module_loader
-    );
-
-
-    digit_module_inventory_init(
-        &g_module_inventory
     );
 
 
@@ -280,30 +580,16 @@ static int digit_modules_initialize_core(void)
     );
 
 
-    /*
-     * Resolve:
-     *
-     *     <digit.exe directory>\modules
-     */
-
-    module_result =
-        digit_module_discovery_get_path(
+    if (
+        !digit_modules_resolve_path(
             g_modules_path,
             sizeof(g_modules_path)
-        );
-
-
-    if (
-        module_result !=
-        DIGIT_MODULE_OK
+        )
     )
     {
-        fprintf(
-            stderr,
-            "[CORE] Module path resolution FAILED: %s\n",
-            digit_module_result_string(
-                module_result
-            )
+        fputs(
+            "[CORE] Module path resolution FAILED\n",
+            stderr
         );
 
 
@@ -315,11 +601,6 @@ static int digit_modules_initialize_core(void)
         return 0;
     }
 
-
-    /*
-     * Module root is executable-relative and may
-     * be created when absent.
-     */
 
     if (
         !digit_modules_ensure_directory(
@@ -370,225 +651,382 @@ static int digit_modules_initialize_core(void)
     }
 
 
-    /*
-     * Persistent qualification inventory remains
-     * under Digit's operational state directory.
-     */
-
-    if (
-        !digit_modules_ensure_directory(
-            DIGIT_MODULE_STATE_DIRECTORY
-        )
-    )
-    {
-        fprintf(
-            stderr,
-            "[CORE] Module state directory FAILED: %s\n",
-            DIGIT_MODULE_STATE_DIRECTORY
-        );
-
-
-        digit_modules_audit(
-            "Module state directory initialization failed."
-        );
-
-
-        return 0;
-    }
-
-
-    inventory_result =
-        digit_module_inventory_configure(
-            &g_module_inventory,
-            DIGIT_MODULE_STATE_DIRECTORY
-        );
-
-
-    if (
-        inventory_result !=
-        DIGIT_MODULE_INVENTORY_OK
-    )
-    {
-        fprintf(
-            stderr,
-            "[CORE] Module inventory configuration FAILED: %s\n",
-            digit_module_inventory_result_string(
-                inventory_result
-            )
-        );
-
-
-        digit_modules_audit(
-            "Module inventory configuration failed."
-        );
-
-
-        return 0;
-    }
-
-
-    inventory_result =
-        digit_module_inventory_load(
-            &g_module_inventory
-        );
-
-
-    if (
-        inventory_result !=
-        DIGIT_MODULE_INVENTORY_OK
-    )
-    {
-        /*
-         * Invalid persisted evidence is not reused.
-         *
-         * Reset the in-memory inventory so modules
-         * must qualify again.
-         */
-
-        printf(
-            "[CORE] Module inventory invalid: %s\n",
-            digit_module_inventory_result_string(
-                inventory_result
-            )
-        );
-
-
-        digit_modules_audit(
-            "Module inventory invalid; live qualification required."
-        );
-
-
-        digit_module_inventory_init(
-            &g_module_inventory
-        );
-
-
-        inventory_result =
-            digit_module_inventory_configure(
-                &g_module_inventory,
-                DIGIT_MODULE_STATE_DIRECTORY
-            );
-
-
-        if (
-            inventory_result !=
-            DIGIT_MODULE_INVENTORY_OK
-        )
-        {
-            return 0;
-        }
-    }
-
-
-    printf(
-        "[CORE] Module inventory: %u record(s)\n",
-        (unsigned int)
-        g_module_inventory.count
-    );
-
-
-    written =
-        snprintf(
-            message,
-            sizeof(message),
-            "Module inventory loaded: records=%u",
-            (unsigned int)
-            g_module_inventory.count
-        );
-
-
-    if (
-        written >= 0 &&
-        (size_t)written <
-            sizeof(message)
-    )
-    {
-        digit_modules_audit(
-            message
-        );
-    }
-
-
     return 1;
 }
 
 
 /*
  * ------------------------------------------------
- * DISCOVER MODULES
+ * DISCOVERY
  * ------------------------------------------------
+ *
+ * Digit retains only its host-specific deployment
+ * convention:
+ *
+ *     modules\<module-id>\
+ *         module.conf
+ *         digit_<module-id>.dll
+ *
+ * Loader and descriptor validation are ABI-owned.
  */
 
 static int digit_modules_discover(void)
 {
-    digit_module_discovery_report_t
-        report;
-
-    digit_module_result_t
-        result;
-
-    char message[
-        DIGIT_MODULE_AUDIT_MESSAGE_MAX
+    char search_path[
+        DIGIT_MODULE_PATH_MAX
     ];
+
+    char directory_path[
+        DIGIT_MODULE_PATH_MAX
+    ];
+
+    char config_path[
+        DIGIT_MODULE_PATH_MAX
+    ];
+
+    char dll_name[
+        STNLABZ_MODULE_ID_MAX + 16U
+    ];
+
+    char dll_path[
+        DIGIT_MODULE_PATH_MAX
+    ];
+
+    char module_id[
+        STNLABZ_MODULE_ID_MAX
+    ];
+
+    WIN32_FIND_DATAA find_data;
+
+    HANDLE search;
+
+    size_t directories_examined =
+        0U;
+
+    size_t modules_loaded =
+        0U;
+
+    size_t modules_discovered =
+        0U;
+
+    size_t modules_rejected =
+        0U;
 
     int written;
 
 
-    memset(
-        &report,
-        0,
-        sizeof(report)
-    );
-
-
-    result =
-        digit_module_discovery_scan(
-            &g_module_registry,
-            &g_module_loader,
-            g_modules_path,
-            &report
+    written =
+        snprintf(
+            search_path,
+            sizeof(search_path),
+            "%s\\*",
+            g_modules_path
         );
 
 
     if (
-        result !=
-        DIGIT_MODULE_OK
+        written < 0 ||
+        (size_t)written >=
+            sizeof(search_path)
     )
     {
-        fprintf(
-            stderr,
-            "[MODULE] Discovery FAILED: %s\n",
-            digit_module_result_string(
-                result
-            )
+        return 0;
+    }
+
+
+    search =
+        FindFirstFileA(
+            search_path,
+            &find_data
         );
 
 
+    if (
+        search ==
+        INVALID_HANDLE_VALUE
+    )
+    {
+        /*
+         * Empty module root is valid.
+         */
+
+        printf(
+            "[MODULE] Discovery: 0 directories, 0 loaded, 0 discovered, 0 rejected\n"
+        );
+
+
+        return 1;
+    }
+
+
+    do
+    {
+        const stnlabz_module_descriptor_t
+            *descriptor =
+                NULL;
+
+        stnlabz_module_loader_result_t
+            loader_result;
+
+        stnlabz_module_result_t
+            registry_result;
+
+
+        if (
+            (
+                find_data.dwFileAttributes &
+                FILE_ATTRIBUTE_DIRECTORY
+            ) == 0
+        )
+        {
+            continue;
+        }
+
+
+        if (
+            strcmp(
+                find_data.cFileName,
+                "."
+            ) == 0 ||
+            strcmp(
+                find_data.cFileName,
+                ".."
+            ) == 0
+        )
+        {
+            continue;
+        }
+
+
+        directories_examined++;
+
+
+        printf(
+            "[MODULE] Examining directory: %s\n",
+            find_data.cFileName
+        );
+
+
+        if (
+            !digit_modules_join_path(
+                directory_path,
+                sizeof(directory_path),
+                g_modules_path,
+                find_data.cFileName
+            )
+        )
+        {
+            modules_rejected++;
+
+            printf(
+                "[MODULE] REJECTED: %s (DIRECTORY_PATH_INVALID)\n",
+                find_data.cFileName
+            );
+
+            continue;
+        }
+
+
+        if (
+            !digit_modules_join_path(
+                config_path,
+                sizeof(config_path),
+                directory_path,
+                DIGIT_MODULE_CONF_NAME
+            )
+        )
+        {
+            modules_rejected++;
+
+            printf(
+                "[MODULE] REJECTED: %s (MODULE_CONF_PATH_INVALID)\n",
+                find_data.cFileName
+            );
+
+            continue;
+        }
+
+
+        if (
+            !digit_modules_read_id(
+                config_path,
+                module_id,
+                sizeof(module_id)
+            )
+        )
+        {
+            modules_rejected++;
+
+            printf(
+                "[MODULE] REJECTED: %s (MODULE_CONF_INVALID_OR_MISSING)\n",
+                find_data.cFileName
+            );
+
+
+            printf(
+                "[MODULE] Expected config: %s\n",
+                config_path
+            );
+
+            continue;
+        }
+
+
+        printf(
+            "[MODULE] Declared ID: %s\n",
+            module_id
+        );
+
+
+        /*
+         * Digit's artifact naming remains host-owned.
+         */
+
         written =
             snprintf(
-                message,
-                sizeof(message),
-                "Module discovery failed: result=%s",
-                digit_module_result_string(
-                    result
-                )
+                dll_name,
+                sizeof(dll_name),
+                "digit_%s.dll",
+                module_id
             );
 
 
         if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
+            written < 0 ||
+            (size_t)written >=
+                sizeof(dll_name)
         )
         {
-            digit_modules_audit(
-                message
+            modules_rejected++;
+
+            printf(
+                "[MODULE] REJECTED: %s (DLL_NAME_INVALID)\n",
+                module_id
             );
+
+            continue;
         }
 
 
-        return 0;
-    }
+        if (
+            !digit_modules_join_path(
+                dll_path,
+                sizeof(dll_path),
+                directory_path,
+                dll_name
+            )
+        )
+        {
+            modules_rejected++;
+
+            printf(
+                "[MODULE] REJECTED: %s (DLL_PATH_INVALID)\n",
+                module_id
+            );
+
+            continue;
+        }
+
+
+        printf(
+            "[MODULE] DLL path: %s\n",
+            dll_path
+        );
+
+
+        loader_result =
+            stnlabz_module_loader_load(
+                &g_module_loader,
+                module_id,
+                dll_path,
+                &descriptor
+            );
+
+
+        if (
+            loader_result !=
+            STNLABZ_MODULE_LOADER_OK
+        )
+        {
+            modules_rejected++;
+
+
+            printf(
+                "[MODULE] REJECTED: %s (LOADER_%s)\n",
+                module_id,
+                stnlabz_module_loader_result_string(
+                    loader_result
+                )
+            );
+
+
+            continue;
+        }
+
+
+        modules_loaded++;
+
+
+        printf(
+            "[MODULE] DLL loaded: %s\n",
+            module_id
+        );
+
+
+        registry_result =
+            stnlabz_module_registry_discover(
+                &g_module_registry,
+                descriptor
+            );
+
+
+        if (
+            registry_result !=
+            STNLABZ_MODULE_OK
+        )
+        {
+            modules_rejected++;
+
+
+            printf(
+                "[MODULE] REJECTED: %s (REGISTRY_%s)\n",
+                module_id,
+                stnlabz_module_result_string(
+                    registry_result
+                )
+            );
+
+
+            (void)
+            stnlabz_module_loader_unload(
+                &g_module_loader,
+                module_id
+            );
+
+
+            continue;
+        }
+
+
+        modules_discovered++;
+
+
+        printf(
+            "[MODULE] Discovery accepted: %s\n",
+            module_id
+        );
+
+    } while (
+        FindNextFileA(
+            search,
+            &find_data
+        )
+    );
+
+
+    FindClose(
+        search
+    );
 
 
     printf(
@@ -599,52 +1037,17 @@ static int digit_modules_discover(void)
         "%u rejected\n",
 
         (unsigned int)
-        report.directories_examined,
+        directories_examined,
 
         (unsigned int)
-        report.modules_loaded,
+        modules_loaded,
 
         (unsigned int)
-        report.modules_discovered,
+        modules_discovered,
 
         (unsigned int)
-        report.modules_rejected
+        modules_rejected
     );
-
-
-    written =
-        snprintf(
-            message,
-            sizeof(message),
-
-            "Module discovery complete: "
-            "directories=%u loaded=%u "
-            "discovered=%u rejected=%u",
-
-            (unsigned int)
-            report.directories_examined,
-
-            (unsigned int)
-            report.modules_loaded,
-
-            (unsigned int)
-            report.modules_discovered,
-
-            (unsigned int)
-            report.modules_rejected
-        );
-
-
-    if (
-        written >= 0 &&
-        (size_t)written <
-            sizeof(message)
-    )
-    {
-        digit_modules_audit(
-            message
-        );
-    }
 
 
     return 1;
@@ -653,8 +1056,16 @@ static int digit_modules_discover(void)
 
 /*
  * ------------------------------------------------
- * PROCESS DISCOVERED MODULES
+ * PROCESS MODULES
  * ------------------------------------------------
+ *
+ * Qualification is intentionally live on startup.
+ *
+ * Digit no longer carries a second persistent
+ * qualification-inventory implementation.
+ *
+ * Every loaded revision demonstrates qualification
+ * before activation.
  */
 
 static int digit_modules_process(void)
@@ -663,42 +1074,21 @@ static int digit_modules_process(void)
 
 
     for (
-        index = 0;
+        index = 0U;
         index < g_module_registry.count;
         ++index
     )
     {
-        digit_module_record_t
+        stnlabz_module_record_t
             *record;
 
-        const digit_module_inventory_record_t
-            *inventory_record;
-
-        digit_module_result_t
-            module_result;
-
-        digit_module_inventory_result_t
-            inventory_result;
-
-        char message[
-            DIGIT_MODULE_AUDIT_MESSAGE_MAX
-        ];
-
-        int written;
-
-        int qualified =
-            0;
+        stnlabz_module_result_t
+            result;
 
 
         record =
             &g_module_registry.modules[index];
 
-
-        /*
-         * ------------------------------------------------
-         * DISCOVERED
-         * ------------------------------------------------
-         */
 
         printf(
             "[MODULE] Discovered: %s (%s)\n",
@@ -707,64 +1097,28 @@ static int digit_modules_process(void)
         );
 
 
-        digit_modules_audit_module(
-            "Module discovered",
-            record
-        );
-
-
-        /*
-         * ------------------------------------------------
-         * VERIFY
-         * ------------------------------------------------
-         */
-
-        module_result =
-            digit_module_registry_verify(
+        result =
+            stnlabz_module_registry_verify(
                 &g_module_registry,
                 record->descriptor.id
             );
 
 
         if (
-            module_result !=
-            DIGIT_MODULE_OK
+            result !=
+            STNLABZ_MODULE_OK
         )
         {
             printf(
                 "[MODULE] Verification FAILED: %s (%s)\n",
                 record->descriptor.id,
-                digit_module_result_string(
-                    module_result
+                stnlabz_module_result_string(
+                    result
                 )
             );
 
 
-            written =
-                snprintf(
-                    message,
-                    sizeof(message),
-                    "Module verification failed: id=%s result=%s",
-                    record->descriptor.id,
-                    digit_module_result_string(
-                        module_result
-                    )
-                );
-
-
-            if (
-                written >= 0 &&
-                (size_t)written <
-                    sizeof(message)
-            )
-            {
-                digit_modules_audit(
-                    message
-                );
-            }
-
-
-            continue;
+            return 0;
         }
 
 
@@ -774,518 +1128,96 @@ static int digit_modules_process(void)
         );
 
 
-        /*
-         * ------------------------------------------------
-         * RESTORE QUALIFICATION
-         * ------------------------------------------------
-         */
-
-        inventory_record =
-            digit_module_inventory_find(
-                &g_module_inventory,
-                &record->descriptor
-            );
+        printf(
+            "[MODULE] Qualification starting: %s\n",
+            record->descriptor.id
+        );
 
 
-        if (
-            inventory_record != NULL
-        )
-        {
-            module_result =
-                digit_module_registry_restore_qualification(
-                    &g_module_registry,
-                    record->descriptor.id,
-                    &inventory_record->qualification
-                );
-
-
-            if (
-                module_result ==
-                DIGIT_MODULE_OK
-            )
-            {
-                printf(
-                    "[MODULE] QUALIFIED: %s "
-                    "(restored %u/%u, negative PASS)\n",
-
-                    record->descriptor.id,
-
-                    inventory_record
-                        ->qualification
-                        .tests_passed,
-
-                    inventory_record
-                        ->qualification
-                        .tests_executed
-                );
-
-
-                written =
-                    snprintf(
-                        message,
-                        sizeof(message),
-
-                        "Module qualification restored: "
-                        "id=%s tests=%u/%u negative=PASS",
-
-                        record->descriptor.id,
-
-                        inventory_record
-                            ->qualification
-                            .tests_passed,
-
-                        inventory_record
-                            ->qualification
-                            .tests_executed
-                    );
-
-
-                if (
-                    written >= 0 &&
-                    (size_t)written <
-                        sizeof(message)
-                )
-                {
-                    digit_modules_audit(
-                        message
-                    );
-                }
-
-
-                qualified =
-                    1;
-            }
-        }
-
-
-        /*
-         * ------------------------------------------------
-         * LIVE QUALIFICATION
-         * ------------------------------------------------
-         */
-
-        if (
-            !qualified
-        )
-        {
-            printf(
-                "[MODULE] Qualification starting: %s\n",
+        result =
+            stnlabz_module_registry_qualify(
+                &g_module_registry,
                 record->descriptor.id
             );
 
 
-            written =
-                snprintf(
-                    message,
-                    sizeof(message),
-                    "Module qualification starting: id=%s",
-                    record->descriptor.id
-                );
-
-
-            if (
-                written >= 0 &&
-                (size_t)written <
-                    sizeof(message)
-            )
-            {
-                digit_modules_audit(
-                    message
-                );
-            }
-
-
-            module_result =
-                digit_module_registry_qualify(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-            if (
-                module_result !=
-                DIGIT_MODULE_OK
-            )
-            {
-                printf(
-                    "[MODULE] Qualification FAILED: %s (%s)\n",
-                    record->descriptor.id,
-                    digit_module_result_string(
-                        module_result
-                    )
-                );
-
-
-                written =
-                    snprintf(
-                        message,
-                        sizeof(message),
-
-                        "Module qualification failed: "
-                        "id=%s result=%s",
-
-                        record->descriptor.id,
-
-                        digit_module_result_string(
-                            module_result
-                        )
-                    );
-
-
-                if (
-                    written >= 0 &&
-                    (size_t)written <
-                        sizeof(message)
-                )
-                {
-                    digit_modules_audit(
-                        message
-                    );
-                }
-
-
-                continue;
-            }
-
-
+        if (
+            result !=
+            STNLABZ_MODULE_OK
+        )
+        {
             printf(
-                "[MODULE] Qualification PASS: %s (%u/%u)\n",
-
+                "[MODULE] Qualification FAILED: %s (%s)\n",
                 record->descriptor.id,
-
-                record
-                    ->qualification
-                    .tests_passed,
-
-                record
-                    ->qualification
-                    .tests_executed
+                stnlabz_module_result_string(
+                    result
+                )
             );
 
 
-            printf(
-                "[MODULE] Negative validation: %s\n",
+            return 0;
+        }
 
+
+        printf(
+            "[MODULE] Qualification PASS: %s (%u/%u)\n",
+            record->descriptor.id,
+            record->qualification.tests_passed,
+            record->qualification.tests_executed
+        );
+
+
+        printf(
+            "[MODULE] Negative validation: %s\n",
+            (
+                record
+                    ->qualification
+                    .negative_test_executed &&
                 record
                     ->qualification
                     .negative_test_passed
-                    ? "PASS"
-                    : "FAIL"
+            )
+            ? "PASS"
+            : "FAILED"
+        );
+
+
+        printf(
+            "[MODULE] Activation starting: %s\n",
+            record->descriptor.id
+        );
+
+
+        result =
+            stnlabz_module_abi_authorize_and_activate(
+                &g_module_registry,
+                record->descriptor.id,
+                &g_module_host
             );
 
-
-            inventory_result =
-                digit_module_inventory_store(
-                    &g_module_inventory,
-                    &record->descriptor,
-                    &record->qualification
-                );
-
-
-            if (
-                inventory_result !=
-                DIGIT_MODULE_INVENTORY_OK
-            )
-            {
-                fprintf(
-                    stderr,
-                    "[MODULE] Inventory write FAILED: %s (%s)\n",
-
-                    record->descriptor.id,
-
-                    digit_module_inventory_result_string(
-                        inventory_result
-                    )
-                );
-
-
-                (void)
-                digit_module_registry_fail(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-                written =
-                    snprintf(
-                        message,
-                        sizeof(message),
-
-                        "Module inventory write failed: "
-                        "id=%s result=%s",
-
-                        record->descriptor.id,
-
-                        digit_module_inventory_result_string(
-                            inventory_result
-                        )
-                    );
-
-
-                if (
-                    written >= 0 &&
-                    (size_t)written <
-                        sizeof(message)
-                )
-                {
-                    digit_modules_audit(
-                        message
-                    );
-                }
-
-
-                continue;
-            }
-
-
-            written =
-                snprintf(
-                    message,
-                    sizeof(message),
-
-                    "Module qualified: "
-                    "id=%s tests=%u/%u "
-                    "negative=PASS inventory=STORED",
-
-                    record->descriptor.id,
-
-                    record
-                        ->qualification
-                        .tests_passed,
-
-                    record
-                        ->qualification
-                        .tests_executed
-                );
-
-
-            if (
-                written >= 0 &&
-                (size_t)written <
-                    sizeof(message)
-            )
-            {
-                digit_modules_audit(
-                    message
-                );
-            }
-
-
-            qualified =
-                1;
-        }
-
-
-        /*
-         * ------------------------------------------------
-         * AUTHORIZE ACTIVATION
-         * ------------------------------------------------
-         */
 
         if (
-            qualified
+            result !=
+            STNLABZ_MODULE_OK
         )
         {
-            module_result =
-                digit_module_registry_authorize_activation(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-            if (
-                module_result !=
-                DIGIT_MODULE_OK
-            )
-            {
-                printf(
-                    "[MODULE] Activation authorization FAILED: %s (%s)\n",
-
-                    record->descriptor.id,
-
-                    digit_module_result_string(
-                        module_result
-                    )
-                );
-
-
-                continue;
-            }
-
-
-            /*
-             * ------------------------------------------------
-             * START
-             * ------------------------------------------------
-             */
-
-            if (
-                record->descriptor.start ==
-                NULL
-            )
-            {
-                printf(
-                    "[MODULE] Activation FAILED: %s (START_MISSING)\n",
-                    record->descriptor.id
-                );
-
-
-                (void)
-                digit_module_registry_fail(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-                digit_modules_audit(
-                    "Module activation failed: start callback missing."
-                );
-
-
-                continue;
-            }
-
-
             printf(
-                "[MODULE] Activation starting: %s\n",
-                record->descriptor.id
-            );
-
-
-            written =
-                snprintf(
-                    message,
-                    sizeof(message),
-                    "Module activation starting: id=%s",
-                    record->descriptor.id
-                );
-
-
-            if (
-                written >= 0 &&
-                (size_t)written <
-                    sizeof(message)
-            )
-            {
-                digit_modules_audit(
-                    message
-                );
-            }
-
-
-            module_result =
-                record
-                    ->descriptor
-                    .start(
-                        &g_module_host
-                    );
-
-
-            if (
-                module_result !=
-                DIGIT_MODULE_OK
-            )
-            {
-                printf(
-                    "[MODULE] Activation FAILED: %s (%s)\n",
-
-                    record->descriptor.id,
-
-                    digit_module_result_string(
-                        module_result
-                    )
-                );
-
-
-                (void)
-                digit_module_registry_fail(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-                written =
-                    snprintf(
-                        message,
-                        sizeof(message),
-
-                        "Module activation failed: "
-                        "id=%s result=%s",
-
-                        record->descriptor.id,
-
-                        digit_module_result_string(
-                            module_result
-                        )
-                    );
-
-
-                if (
-                    written >= 0 &&
-                    (size_t)written <
-                        sizeof(message)
+                "[MODULE] Activation FAILED: %s (%s)\n",
+                record->descriptor.id,
+                stnlabz_module_result_string(
+                    result
                 )
-                {
-                    digit_modules_audit(
-                        message
-                    );
-                }
-
-
-                continue;
-            }
-
-
-            /*
-             * Module callback succeeded.
-             *
-             * Record ACTIVE through the Core registry.
-             */
-
-            module_result =
-                digit_module_registry_activate(
-                    &g_module_registry,
-                    record->descriptor.id
-                );
-
-
-            if (
-                module_result !=
-                DIGIT_MODULE_OK
-            )
-            {
-                (void)
-                record
-                    ->descriptor
-                    .stop();
-
-
-                printf(
-                    "[MODULE] Activation state FAILED: %s (%s)\n",
-
-                    record->descriptor.id,
-
-                    digit_module_result_string(
-                        module_result
-                    )
-                );
-
-
-                continue;
-            }
-
-
-            printf(
-                "[MODULE] ACTIVE: %s\n",
-                record->descriptor.id
             );
 
 
-            digit_modules_audit_module(
-                "Module active",
-                record
-            );
+            return 0;
         }
+
+
+        printf(
+            "[MODULE] ACTIVE: %s\n",
+            record->descriptor.id
+        );
     }
 
 
@@ -1310,7 +1242,7 @@ int digit_modules_init(void)
 
 
     if (
-        !digit_modules_initialize_core()
+        !digit_modules_initialize_abi()
     )
     {
         return -1;
@@ -1321,10 +1253,6 @@ int digit_modules_init(void)
         !digit_modules_discover()
     )
     {
-        digit_module_loader_unload_all(
-            &g_module_loader
-        );
-
         return -1;
     }
 
@@ -1333,9 +1261,7 @@ int digit_modules_init(void)
         !digit_modules_process()
     )
     {
-        digit_module_loader_unload_all(
-            &g_module_loader
-        );
+        digit_modules_shutdown();
 
         return -1;
     }
@@ -1346,7 +1272,7 @@ int digit_modules_init(void)
 
 
     digit_modules_audit(
-        "Core module subsystem initialized."
+        "Core module subsystem initialized through STN-LABZ ABI 1.4."
     );
 
 
@@ -1356,7 +1282,7 @@ int digit_modules_init(void)
 
 /*
  * ------------------------------------------------
- * READY STATE
+ * READY
  * ------------------------------------------------
  */
 
@@ -1369,21 +1295,14 @@ int digit_modules_is_ready(void)
 
 /*
  * ------------------------------------------------
- * PUBLIC MODULE EXPORT LOOKUP
+ * MODULE EXPORT ACCESS
  * ------------------------------------------------
  *
- * Resolve a module-specific export only from a DLL
- * already owned by the Core module loader.
+ * Capability-specific exports remain module-owned.
  *
- * Capability access is denied unless:
- *
- * - the module subsystem is initialized;
- * - the module is registered;
- * - the module is ACTIVE;
- * - the loader still owns the module HMODULE; and
- * - the requested export exists.
- *
- * This function never loads or reloads a DLL.
+ * Core first proves the module is ACTIVE through the
+ * ABI registry, then resolves the requested symbol
+ * from the ABI-owned loader handle.
  */
 
 FARPROC digit_modules_get_export(
@@ -1391,22 +1310,11 @@ FARPROC digit_modules_get_export(
     const char *export_name
 )
 {
-    const digit_loaded_module_t
+    const stnlabz_module_record_t
+        *record;
+
+    const stnlabz_loaded_module_t
         *loaded;
-
-    const digit_module_record_t
-        *record =
-            NULL;
-
-    FARPROC export_address;
-
-    size_t index;
-
-    char message[
-        DIGIT_MODULE_AUDIT_MESSAGE_MAX
-    ];
-
-    int written;
 
 
     if (
@@ -1421,76 +1329,25 @@ FARPROC digit_modules_get_export(
     }
 
 
-    /*
-     * Require the module to be ACTIVE in the Core
-     * registry before exposing any module-specific
-     * capability.
-     */
-
-    for (
-        index = 0;
-        index < g_module_registry.count;
-        ++index
-    )
-    {
-        if (
-            strcmp(
-                g_module_registry
-                    .modules[index]
-                    .descriptor
-                    .id,
-                module_id
-            ) == 0
-        )
-        {
-            record =
-                &g_module_registry
-                    .modules[index];
-
-            break;
-        }
-    }
+    record =
+        stnlabz_module_registry_find(
+            &g_module_registry,
+            module_id
+        );
 
 
     if (
         record == NULL ||
         record->state !=
-            DIGIT_MODULE_STATE_ACTIVE
+            STNLABZ_MODULE_STATE_ACTIVE
     )
     {
-        written =
-            snprintf(
-                message,
-                sizeof(message),
-                "Module export denied: id=%s export=%s reason=NOT_ACTIVE",
-                module_id,
-                export_name
-            );
-
-
-        if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
-        )
-        {
-            digit_modules_audit(
-                message
-            );
-        }
-
-
         return NULL;
     }
 
 
-    /*
-     * Use the HMODULE already retained by the
-     * established Core loader.
-     */
-
     loaded =
-        digit_module_loader_find(
+        stnlabz_module_loader_find(
             &g_module_loader,
             module_id
         );
@@ -1501,321 +1358,160 @@ FARPROC digit_modules_get_export(
         loaded->handle == NULL
     )
     {
-        written =
-            snprintf(
-                message,
-                sizeof(message),
-                "Module export failed: id=%s export=%s reason=LOADER_RECORD_MISSING",
-                module_id,
-                export_name
-            );
-
-
-        if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
-        )
-        {
-            digit_modules_audit(
-                message
-            );
-        }
-
-
         return NULL;
-    }
-
-
-    export_address =
-        GetProcAddress(
-            loaded->handle,
-            export_name
-        );
-
-
-    if (
-        export_address == NULL
-    )
-    {
-        written =
-            snprintf(
-                message,
-                sizeof(message),
-                "Module export failed: id=%s export=%s reason=EXPORT_MISSING",
-                module_id,
-                export_name
-            );
-
-
-        if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
-        )
-        {
-            digit_modules_audit(
-                message
-            );
-        }
-
-
-        return NULL;
-    }
-
-
-    written =
-        snprintf(
-            message,
-            sizeof(message),
-            "Module export resolved: id=%s export=%s",
-            module_id,
-            export_name
-        );
-
-
-    if (
-        written >= 0 &&
-        (size_t)written <
-            sizeof(message)
-    )
-    {
-        digit_modules_audit(
-            message
-        );
     }
 
 
     return
-        export_address;
+        GetProcAddress(
+            loaded->handle,
+            export_name
+        );
 }
 
 
 /*
  * ------------------------------------------------
- * PUBLIC SHUTDOWN
+ * SHUTDOWN
  * ------------------------------------------------
+ *
+ * ABI 1.4 controlled shutdown:
+ *
+ *     ACTIVE
+ *       -> STOPPED
+ *       -> UNREGISTERED
+ *       -> DLL unload
+ *
+ * Core never unloads a DLL while the ABI registry
+ * still represents that module as ACTIVE.
  */
 
 void digit_modules_shutdown(void)
 {
-    size_t index;
-
-
-    if (
-        !g_modules_initialized
-    )
-    {
-        return;
-    }
-
-
-    /*
-     * Stop modules in reverse registration order.
-     */
-
-    index =
-        g_module_registry.count;
-
-
     while (
-        index > 0
+        g_module_loader.count > 0U
     )
     {
-        digit_module_record_t
+        const stnlabz_loaded_module_t
+            *loaded;
+
+        const stnlabz_module_record_t
             *record;
 
-        digit_module_result_t
-            result;
-
-        char message[
-            DIGIT_MODULE_AUDIT_MESSAGE_MAX
+        char module_id[
+            STNLABZ_MODULE_ID_MAX
         ];
 
-        int written;
+        stnlabz_module_result_t
+            result;
+
+        stnlabz_module_loader_result_t
+            loader_result;
 
 
-        --index;
+        loaded =
+            &g_module_loader.modules[
+                g_module_loader.count - 1U
+            ];
+
+
+        if (
+            strcpy_s(
+                module_id,
+                sizeof(module_id),
+                loaded->module_id
+            ) != 0
+        )
+        {
+            break;
+        }
 
 
         record =
-            &g_module_registry.modules[index];
-
-
-        if (
-            record->state !=
-            DIGIT_MODULE_STATE_ACTIVE
-        )
-        {
-            continue;
-        }
-
-
-        printf(
-            "[MODULE] Stop starting: %s\n",
-            record->descriptor.id
-        );
-
-
-        written =
-            snprintf(
-                message,
-                sizeof(message),
-                "Module stop starting: id=%s",
-                record->descriptor.id
+            stnlabz_module_registry_find(
+                &g_module_registry,
+                module_id
             );
 
 
         if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
+            record != NULL &&
+            record->state ==
+                STNLABZ_MODULE_STATE_ACTIVE
         )
         {
-            digit_modules_audit(
-                message
-            );
-        }
-
-
-        if (
-            record->descriptor.stop ==
-            NULL
-        )
-        {
-            printf(
-                "[MODULE] Stop FAILED: %s (STOP_MISSING)\n",
-                record->descriptor.id
-            );
-
-
-            continue;
-        }
-
-
-        result =
-            record
-                ->descriptor
-                .stop();
-
-
-        if (
-            result !=
-            DIGIT_MODULE_OK
-        )
-        {
-            printf(
-                "[MODULE] Stop FAILED: %s (%s)\n",
-
-                record->descriptor.id,
-
-                digit_module_result_string(
-                    result
-                )
-            );
-
-
-            written =
-                snprintf(
-                    message,
-                    sizeof(message),
-
-                    "Module stop failed: "
-                    "id=%s result=%s",
-
-                    record->descriptor.id,
-
-                    digit_module_result_string(
-                        result
-                    )
+            result =
+                stnlabz_module_abi_stop(
+                    &g_module_registry,
+                    module_id
                 );
 
 
             if (
-                written >= 0 &&
-                (size_t)written <
-                    sizeof(message)
+                result !=
+                STNLABZ_MODULE_OK
             )
             {
                 digit_modules_audit(
-                    message
+                    "Module stop failed during shutdown."
                 );
+
+                break;
             }
-
-
-            continue;
         }
 
 
-        printf(
-            "[MODULE] Stopped: %s\n",
-            record->descriptor.id
-        );
-
-
-        written =
-            snprintf(
-                message,
-                sizeof(message),
-                "Module stopped: id=%s",
-                record->descriptor.id
+        record =
+            stnlabz_module_registry_find(
+                &g_module_registry,
+                module_id
             );
 
 
         if (
-            written >= 0 &&
-            (size_t)written <
-                sizeof(message)
+            record != NULL
+        )
+        {
+            result =
+                stnlabz_module_abi_unregister(
+                    &g_module_registry,
+                    module_id
+                );
+
+
+            if (
+                result !=
+                STNLABZ_MODULE_OK
+            )
+            {
+                digit_modules_audit(
+                    "Module unregister failed during shutdown."
+                );
+
+                break;
+            }
+        }
+
+
+        loader_result =
+            stnlabz_module_loader_unload(
+                &g_module_loader,
+                module_id
+            );
+
+
+        if (
+            loader_result !=
+                STNLABZ_MODULE_LOADER_OK
         )
         {
             digit_modules_audit(
-                message
+                "Module DLL unload failed during shutdown."
             );
+
+            break;
         }
     }
-
-
-    /*
-     * Function pointers into module DLLs are no
-     * longer used beyond this point.
-     */
-
-    digit_module_loader_unload_all(
-        &g_module_loader
-    );
-
-
-    digit_modules_audit(
-        "Core module subsystem shut down."
-    );
-
-
-    memset(
-        &g_module_registry,
-        0,
-        sizeof(g_module_registry)
-    );
-
-
-    memset(
-        &g_module_loader,
-        0,
-        sizeof(g_module_loader)
-    );
-
-
-    memset(
-        &g_module_inventory,
-        0,
-        sizeof(g_module_inventory)
-    );
-
-
-    memset(
-        g_modules_path,
-        0,
-        sizeof(g_modules_path)
-    );
 
 
     g_modules_initialized =

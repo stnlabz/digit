@@ -2,13 +2,16 @@
  * @file digit_core.c
  * @brief Lifecycle implementation for the STN-LABZ Digit Core.
  *
- * Digit Core owns the system safety nucleus and controls initialization
+ * Digit Core owns the system runtime nucleus and controls initialization
  * and shutdown of Core components.
+ *
+ * Controlled knowledge is supplied through Digit's qualified module
+ * subsystem and persistent knowledge store. Core does not maintain a
+ * duplicate compiled policy corpus.
  *
  * Current initialized Core components:
  *
  * - Core identity;
- * - General Orders;
  * - human-authority boundary;
  * - runtime mission state;
  * - result / epistemic states;
@@ -27,7 +30,6 @@
 #include "digit_authority.h"
 #include "digit_company_preservation.h"
 #include "digit_config.h"
-#include "digit_general_orders.h"
 #include "digit_identity.h"
 #include "digit_mission.h"
 #include "digit_mission_control.h"
@@ -36,38 +38,34 @@
 #include "digit_result.h"
 #include "digit_safe_mode.h"
 
-/**
- * @brief Current Core lifecycle state.
- */
+
 static digit_core_state_t g_digit_core_state =
     DIGIT_CORE_UNINITIALIZED;
 
-/**
- * @brief Core configuration instance.
- */
+
 static digit_config_t g_core_config;
+
 
 int digit_core_init(void)
 {
-    /*
-     * Core may initialize only from an uninitialized or previously
-     * stopped state.
-     */
-    if (g_digit_core_state !=
+    if (
+        g_digit_core_state !=
             DIGIT_CORE_UNINITIALIZED &&
         g_digit_core_state !=
-            DIGIT_CORE_STOPPED)
+            DIGIT_CORE_STOPPED
+    )
     {
         return -1;
     }
+
 
     g_digit_core_state =
         DIGIT_CORE_INITIALIZING;
 
-    /*
-     * Establish immutable Digit identity.
-     */
-    if (digit_identity_init() != 0)
+
+    if (
+        digit_identity_init() != 0
+    )
     {
         g_digit_core_state =
             DIGIT_CORE_STOPPED;
@@ -75,10 +73,10 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Activate standing General Orders.
-     */
-    if (digit_general_orders_init() != 0)
+
+    if (
+        digit_authority_init() != 0
+    )
     {
         digit_identity_shutdown();
 
@@ -88,27 +86,12 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish the human-authority boundary.
-     */
-    if (digit_authority_init() != 0)
-    {
-        digit_general_orders_shutdown();
-        digit_identity_shutdown();
 
-        g_digit_core_state =
-            DIGIT_CORE_STOPPED;
-
-        return -1;
-    }
-
-    /*
-     * Establish deterministic runtime mission state.
-     */
-    if (digit_mission_init() != 0)
+    if (
+        digit_mission_init() != 0
+    )
     {
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -117,14 +100,13 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish deterministic result and epistemic states.
-     */
-    if (digit_result_init() != 0)
+
+    if (
+        digit_result_init() != 0
+    )
     {
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -133,15 +115,14 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish persistent Core audit and evidence logging.
-     */
-    if (digit_audit_init() != 0)
+
+    if (
+        digit_audit_init() != 0
+    )
     {
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -150,15 +131,18 @@ int digit_core_init(void)
         return -1;
     }
 
-    if (digit_audit_append(
+
+    if (
+        digit_audit_append(
             "CORE",
-            "Runtime audit boundary initialized.") != 0)
+            "Runtime audit boundary initialized."
+        ) != 0
+    )
     {
         digit_audit_shutdown();
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -167,16 +151,15 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish Safe Mode.
-     */
-    if (digit_safe_mode_init() != 0)
+
+    if (
+        digit_safe_mode_init() != 0
+    )
     {
         digit_audit_shutdown();
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -185,17 +168,16 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish Company Preservation.
-     */
-    if (digit_company_preservation_init() != 0)
+
+    if (
+        digit_company_preservation_init() != 0
+    )
     {
         digit_safe_mode_shutdown();
         digit_audit_shutdown();
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -204,10 +186,10 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish structured operator reporting.
-     */
-    if (digit_operator_report_init() != 0)
+
+    if (
+        digit_operator_report_init() != 0
+    )
     {
         digit_company_preservation_shutdown();
         digit_safe_mode_shutdown();
@@ -215,7 +197,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -224,10 +205,10 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Establish Core mission-control integration.
-     */
-    if (digit_mission_control_init() != 0)
+
+    if (
+        digit_mission_control_init() != 0
+    )
     {
         digit_operator_report_shutdown();
         digit_company_preservation_shutdown();
@@ -236,7 +217,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -245,11 +225,12 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Initialize deterministic Core configuration.
-     */
-    if (digit_config_init(
-            &g_core_config) != 0)
+
+    if (
+        digit_config_init(
+            &g_core_config
+        ) != 0
+    )
     {
         digit_mission_control_shutdown();
         digit_operator_report_shutdown();
@@ -259,7 +240,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -268,12 +248,10 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Initialize the Core-controlled module subsystem.
-     *
-     * Module discovery is resolved relative to digit.exe.
-     */
-    if (digit_modules_init() != 0)
+
+    if (
+        digit_modules_init() != 0
+    )
     {
         (void)digit_audit_append(
             "MODULE",
@@ -289,7 +267,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -298,12 +275,13 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * All current Core initialization boundaries have succeeded.
-     */
-    if (digit_audit_append(
+
+    if (
+        digit_audit_append(
             "CORE",
-            "Core initialization boundaries satisfied.") != 0)
+            "Core initialization boundaries satisfied."
+        ) != 0
+    )
     {
         digit_modules_shutdown();
         digit_config_shutdown();
@@ -315,7 +293,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -324,14 +301,14 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Produce operator-visible readiness evidence before Core declares
-     * itself READY.
-     */
-    if (digit_operator_report_emit(
+
+    if (
+        digit_operator_report_emit(
             DIGIT_OPERATOR_REPORT_INFO,
             "CORE",
-            "Digit Core initialization complete.") != 0)
+            "Digit Core initialization complete."
+        ) != 0
+    )
     {
         digit_modules_shutdown();
         digit_config_shutdown();
@@ -343,7 +320,6 @@ int digit_core_init(void)
         digit_result_shutdown();
         digit_mission_shutdown();
         digit_authority_shutdown();
-        digit_general_orders_shutdown();
         digit_identity_shutdown();
 
         g_digit_core_state =
@@ -352,52 +328,52 @@ int digit_core_init(void)
         return -1;
     }
 
-    /*
-     * Core reaches READY only after all required boundaries
-     * have initialized successfully.
-     */
+
     g_digit_core_state =
         DIGIT_CORE_READY;
+
 
     return 0;
 }
 
+
 digit_core_state_t digit_core_get_state(void)
 {
-    return g_digit_core_state;
+    return
+        g_digit_core_state;
 }
+
 
 void digit_core_shutdown(void)
 {
-    if (g_digit_core_state ==
+    if (
+        g_digit_core_state ==
             DIGIT_CORE_UNINITIALIZED ||
         g_digit_core_state ==
-            DIGIT_CORE_STOPPED)
+            DIGIT_CORE_STOPPED
+    )
     {
         return;
     }
 
+
     g_digit_core_state =
         DIGIT_CORE_SHUTTING_DOWN;
 
-    /*
-     * Produce operator and audit evidence before those boundaries
-     * are withdrawn.
-     */
+
     (void)digit_operator_report_emit(
         DIGIT_OPERATOR_REPORT_NOTICE,
         "CORE",
         "Controlled Core shutdown initiated."
     );
 
+
     (void)digit_audit_append(
         "CORE",
         "Controlled Core shutdown initiated."
     );
 
-    /*
-     * Shutdown occurs in reverse dependency order.
-     */
+
     digit_modules_shutdown();
     digit_config_shutdown();
     digit_mission_control_shutdown();
@@ -408,8 +384,8 @@ void digit_core_shutdown(void)
     digit_result_shutdown();
     digit_mission_shutdown();
     digit_authority_shutdown();
-    digit_general_orders_shutdown();
     digit_identity_shutdown();
+
 
     g_digit_core_state =
         DIGIT_CORE_STOPPED;

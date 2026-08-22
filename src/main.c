@@ -2,41 +2,28 @@
  * @file main.c
  * @brief Entry point for the STN-LABZ Digit Core.
  *
- * Digit initializes Core, establishes the internal policy-index
- * dependency required by the current policy worker, accepts a local
- * operator mission, dispatches implemented mission work, and remains
- * operational until controlled shutdown is requested.
+ * Digit initializes Core, accepts a local operator mission,
+ * provides access to the persistent knowledge base through
+ * qualified modules, and remains operational until controlled
+ * shutdown is requested.
  *
- * Policy-index processing remains an internal runtime dependency and is
- * not emitted verbosely to the operator console.
- *
- * The operational console also provides read-only access to the active
- * SQLite knowledge-store module through the Core-owned module loader.
+ * Digit does not independently traverse, parse, validate, or
+ * ingest the controlled-document repository.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "module.h"
+
 #include "digit_audit.h"
 #include "digit_core.h"
 #include "digit_mission.h"
 #include "digit_mission_control.h"
 #include "digit_modules.h"
-#include "digit_policy_index.h"
-#include "digit_policy_worker.h"
 #include "platform_console.h"
 
-
- /*
-  * ------------------------------------------------
-  * SQLITE MODULE RETRIEVAL ABI
-  * ------------------------------------------------
-  *
-  * Core resolves these symbols dynamically from the
-  * ACTIVE sqlite module. Core does not include or link
-  * against the module's private header.
-  */
 
 #define DIGIT_SQLITE_SEARCH_EXPORT \
     "digit_sqlite_search"
@@ -126,17 +113,17 @@ typedef struct
 } digit_sqlite_search_result_t;
 
 
+typedef digit_sqlite_retrieval_result_t
+(*digit_sqlite_search_fn)(
+    const char *query,
+    digit_sqlite_search_result_t *results,
+    size_t result_capacity,
+    size_t *result_count
+);
+
+
 #define DIGIT_OPERATOR_COMMAND_MAX \
     512U
-
-#define DIGIT_POLICY_MISSION \
-    "Learn company policies"
-
-#define DIGIT_POLICY_DIRECTORY \
-    "C:\\stn-labz\\policies"
-
-#define DIGIT_POLICY_INDEX_FILENAME \
-    "policy.index.json"
 
 #define DIGIT_KB_COMMAND_PREFIX \
     "kb "
@@ -145,23 +132,8 @@ typedef struct
     5U
 
 
-typedef digit_sqlite_retrieval_result_t
-(*digit_sqlite_search_fn)(
-    const char* query,
-    digit_sqlite_search_result_t* results,
-    size_t result_capacity,
-    size_t* result_count
-    );
-
-
-/*
- * ------------------------------------------------
- * CONSOLE INPUT
- * ------------------------------------------------
- */
-
 static size_t digit_console_trim_newline(
-    char* text
+    char *text
 )
 {
     size_t length;
@@ -169,7 +141,7 @@ static size_t digit_console_trim_newline(
 
     if (
         text == NULL
-        )
+    )
     {
         return 0U;
     }
@@ -186,112 +158,66 @@ static size_t digit_console_trim_newline(
         (
             text[length - 1U] == '\n' ||
             text[length - 1U] == '\r'
-            )
         )
+    )
     {
         text[
             length - 1U
         ] =
             '\0';
 
-            length--;
+        length--;
     }
 
 
-    return length;
+    return
+        length;
 }
 
 
-/*
- * ------------------------------------------------
- * KB RESULT STRING
- * ------------------------------------------------
- */
-
-static const char*
+static const char *
 digit_kb_result_string(
     digit_sqlite_retrieval_result_t result
 )
 {
     switch (
         result
-        )
+    )
     {
-    case DIGIT_SQLITE_RETRIEVAL_OK:
+        case DIGIT_SQLITE_RETRIEVAL_OK:
+            return "OK";
 
-        return "OK";
+        case DIGIT_SQLITE_RETRIEVAL_ERR_INVALID_ARGUMENT:
+            return "INVALID_ARGUMENT";
 
+        case DIGIT_SQLITE_RETRIEVAL_ERR_OPEN_FAILED:
+            return "OPEN_FAILED";
 
-    case DIGIT_SQLITE_RETRIEVAL_ERR_INVALID_ARGUMENT:
+        case DIGIT_SQLITE_RETRIEVAL_ERR_QUERY_FAILED:
+            return "QUERY_FAILED";
 
-        return "INVALID_ARGUMENT";
+        case DIGIT_SQLITE_RETRIEVAL_ERR_RESULT_TOO_LARGE:
+            return "RESULT_TOO_LARGE";
 
+        case DIGIT_SQLITE_RETRIEVAL_ERR_NOT_FOUND:
+            return "NOT_FOUND";
 
-    case DIGIT_SQLITE_RETRIEVAL_ERR_OPEN_FAILED:
-
-        return "OPEN_FAILED";
-
-
-    case DIGIT_SQLITE_RETRIEVAL_ERR_QUERY_FAILED:
-
-        return "QUERY_FAILED";
-
-
-    case DIGIT_SQLITE_RETRIEVAL_ERR_RESULT_TOO_LARGE:
-
-        return "RESULT_TOO_LARGE";
-
-
-    case DIGIT_SQLITE_RETRIEVAL_ERR_NOT_FOUND:
-
-        return "NOT_FOUND";
-
-
-    default:
-
-        return "UNKNOWN";
+        default:
+            return "UNKNOWN";
     }
 }
 
 
-/*
- * ------------------------------------------------
- * KB DIRECTIVE OUTPUT
- * ------------------------------------------------
- *
- * The operator console does not dump retrieval
- * metadata, provenance, reference matches, or the
- * complete controlled document.
- *
- * For the selected retrieval result, only complete
- * Markdown-bold directive lines are emitted.
- *
- * Example:
- *
- *     **Remain at your assigned mission.**
- *
- * becomes:
- *
- *     Remain at your assigned mission.
- *
- * Metadata such as:
- *
- *     **Status:** Approved
- *
- * is not emitted because the entire line is not
- * enclosed in Markdown bold markers.
- */
-
 static void digit_console_emit_directives(
-    const char* text
+    const char *text
 )
 {
-    const char* cursor;
+    const char *cursor;
 
 
     if (
         text == NULL
-        )
+    )
     {
         return;
     }
@@ -303,9 +229,9 @@ static void digit_console_emit_directives(
 
     while (
         *cursor != '\0'
-        )
+    )
     {
-        const char* line_end;
+        const char *line_end;
 
         size_t line_length;
 
@@ -319,13 +245,13 @@ static void digit_console_emit_directives(
 
         if (
             line_end != NULL
-            )
+        )
         {
             line_length =
                 (size_t)(
                     line_end -
                     cursor
-                    );
+                );
         }
         else
         {
@@ -336,27 +262,16 @@ static void digit_console_emit_directives(
         }
 
 
-        /*
-         * Ignore trailing carriage return if the
-         * stored corpus contains CRLF line endings.
-         */
-
         if (
             line_length > 0U &&
             cursor[
                 line_length - 1U
             ] == '\r'
-            )
+        )
         {
             line_length--;
         }
 
-
-        /*
-         * Entire line must be enclosed by:
-         *
-         *     ** ... **
-         */
 
         if (
             line_length >= 4U &&
@@ -368,7 +283,7 @@ static void digit_console_emit_directives(
             cursor[
                 line_length - 1U
             ] == '*'
-                    )
+        )
         {
             fwrite(
                 cursor + 2,
@@ -387,7 +302,7 @@ static void digit_console_emit_directives(
 
         if (
             line_end == NULL
-            )
+        )
         {
             break;
         }
@@ -399,14 +314,8 @@ static void digit_console_emit_directives(
 }
 
 
-/*
- * ------------------------------------------------
- * KB QUERY
- * ------------------------------------------------
- */
-
 static int digit_console_kb_query(
-    const char* query
+    const char *query
 )
 {
     digit_sqlite_search_fn
@@ -435,7 +344,7 @@ static int digit_console_kb_query(
     if (
         query == NULL ||
         query[0] == '\0'
-        )
+    )
     {
         puts(
             "Usage: kb <query>"
@@ -444,11 +353,6 @@ static int digit_console_kb_query(
         return 0;
     }
 
-
-    /*
-     * Resolve retrieval only through the existing
-     * ACTIVE sqlite module owned by Digit Core.
-     */
 
     export_address =
         digit_modules_get_export(
@@ -459,7 +363,7 @@ static int digit_console_kb_query(
 
     if (
         export_address == NULL
-        )
+    )
     {
         fputs(
             "KB retrieval unavailable.\n",
@@ -501,7 +405,7 @@ static int digit_console_kb_query(
     if (
         result !=
         DIGIT_SQLITE_RETRIEVAL_OK
-        )
+    )
     {
         fprintf(
             stderr,
@@ -526,8 +430,8 @@ static int digit_console_kb_query(
         if (
             written >= 0 &&
             (size_t)written <
-            sizeof(audit_message)
-            )
+                sizeof(audit_message)
+        )
         {
             (void)digit_audit_append(
                 "KB",
@@ -553,8 +457,8 @@ static int digit_console_kb_query(
     if (
         written >= 0 &&
         (size_t)written <
-        sizeof(audit_message)
-        )
+            sizeof(audit_message)
+    )
     {
         (void)digit_audit_append(
             "KB",
@@ -565,25 +469,15 @@ static int digit_console_kb_query(
 
     if (
         result_count == 0U
-        )
+    )
     {
         puts(
             "UNKNOWN"
         );
 
-
         return 0;
     }
 
-
-    /*
-     * SQLite retrieval currently returns the strongest
-     * deterministic match first.
-     *
-     * The operator receives only directive statements
-     * from that result. Lower-ranked reference matches
-     * are not emitted.
-     */
 
     digit_console_emit_directives(
         results[0].text
@@ -593,107 +487,6 @@ static int digit_console_kb_query(
     return 0;
 }
 
-
-/*
- * ------------------------------------------------
- * MISSION DISPATCH
- * ------------------------------------------------
- */
-
-static int digit_dispatch_mission_work(
-    const char* mission_text,
-    const digit_policy_index_t* policy_index
-)
-{
-    if (
-        mission_text == NULL
-        )
-    {
-        return -1;
-    }
-
-
-    /*
-     * Only the currently established policy mission
-     * activates the policy worker.
-     */
-
-    if (
-        strcmp(
-            mission_text,
-            DIGIT_POLICY_MISSION
-        ) != 0
-        )
-    {
-        return 0;
-    }
-
-
-    if (
-        policy_index == NULL
-        )
-    {
-        (void)digit_audit_append(
-            "POLICY_WORKER",
-            "Policy worker dispatch rejected: policy index unavailable."
-        );
-
-
-        return -1;
-    }
-
-
-    if (
-        digit_policy_worker_get_state() !=
-        DIGIT_POLICY_WORKER_IDLE
-        )
-    {
-        (void)digit_audit_append(
-            "POLICY_WORKER",
-            "Policy worker unavailable for mission dispatch."
-        );
-
-
-        return -1;
-    }
-
-
-    if (
-        digit_audit_append(
-            "MISSION",
-            "Policy mission dispatched to policy worker."
-        ) != 0
-        )
-    {
-        return -1;
-    }
-
-
-    if (
-        digit_policy_worker_start(
-            policy_index
-        ) != 0
-        )
-    {
-        (void)digit_audit_append(
-            "POLICY_WORKER",
-            "Policy worker start failed."
-        );
-
-
-        return -1;
-    }
-
-
-    return 0;
-}
-
-
-/*
- * ------------------------------------------------
- * OPERATIONAL RUNTIME
- * ------------------------------------------------
- */
 
 static int digit_operational_runtime(void)
 {
@@ -727,7 +520,7 @@ static int digit_operational_runtime(void)
                 sizeof(command),
                 stdin
             ) == NULL
-            )
+        )
         {
             return -1;
         }
@@ -737,7 +530,7 @@ static int digit_operational_runtime(void)
             digit_console_trim_newline(
                 command
             ) == 0U
-            )
+        )
         {
             continue;
         }
@@ -748,14 +541,14 @@ static int digit_operational_runtime(void)
                 command,
                 "shutdown"
             ) == 0
-            )
+        )
         {
             if (
                 digit_audit_append(
                     "OPERATOR",
                     "Controlled shutdown requested."
                 ) != 0
-                )
+            )
             {
                 return -1;
             }
@@ -776,9 +569,9 @@ static int digit_operational_runtime(void)
                 DIGIT_KB_COMMAND_PREFIX,
                 prefix_length
             ) == 0
-            )
+        )
         {
-            const char* query;
+            const char *query;
 
 
             query =
@@ -790,7 +583,7 @@ static int digit_operational_runtime(void)
                 digit_console_kb_query(
                     query
                 ) != 0
-                )
+            )
             {
                 puts(
                     "KB command failed."
@@ -807,7 +600,7 @@ static int digit_operational_runtime(void)
                 command,
                 "kb"
             ) == 0
-            )
+        )
         {
             puts(
                 "Usage: kb <query>"
@@ -825,20 +618,11 @@ static int digit_operational_runtime(void)
 }
 
 
-/*
- * ------------------------------------------------
- * APPLICATION ENTRY
- * ------------------------------------------------
- */
-
 int main(
     int argc,
-    char* argv[]
+    char *argv[]
 )
 {
-    const digit_policy_index_t* policy_index =
-        NULL;
-
     char mission_text[
         DIGIT_MISSION_TEXT_MAX + 2U
     ];
@@ -848,19 +632,14 @@ int main(
     (void)argv;
 
 
-    /*
-     * Platform presentation.
-     */
-
     if (
         digit_platform_console_init() != 0
-        )
+    )
     {
         fputs(
             "Platform console initialization: FAILED\n",
             stderr
         );
-
 
         return EXIT_FAILURE;
     }
@@ -871,19 +650,21 @@ int main(
     );
 
 
-    /*
-     * Digit Core.
-     */
+    printf(
+        "Digit is using the STN-LABZ ABI version %u.%u\n",
+        STNLABZ_MODULE_API_MAJOR,
+        STNLABZ_MODULE_API_MINOR
+    );
+
 
     if (
         digit_core_init() != 0
-        )
+    )
     {
         fputs(
             "Core initialization: FAILED\n",
             stderr
         );
-
 
         return EXIT_FAILURE;
     }
@@ -892,105 +673,18 @@ int main(
     if (
         digit_core_get_state() !=
         DIGIT_CORE_READY
-        )
+    )
     {
         fputs(
             "Core initialization: FAILED\n",
             stderr
         );
 
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
 
-
-    /*
-     * ------------------------------------------------
-     * POLICY INDEX
-     * ------------------------------------------------
-     *
-     * The current policy worker requires the recognized
-     * policy index as immutable job input.
-     *
-     * This remains an internal runtime dependency.
-     * The index is intentionally not dumped to the
-     * operator console.
-     */
-
-    if (
-        digit_policy_index_init() != 0
-        )
-    {
-        fputs(
-            "Policy index initialization: FAILED\n",
-            stderr
-        );
-
-
-        digit_core_shutdown();
-
-
-        return EXIT_FAILURE;
-    }
-
-
-    if (
-        digit_policy_index_load(
-            DIGIT_POLICY_DIRECTORY,
-            DIGIT_POLICY_INDEX_FILENAME
-        ) != 0
-        )
-    {
-        fputs(
-            "Policy index recognition: FAILED\n",
-            stderr
-        );
-
-
-        digit_policy_index_shutdown();
-
-        digit_core_shutdown();
-
-
-        return EXIT_FAILURE;
-    }
-
-
-    policy_index =
-        digit_policy_index_get();
-
-
-    if (
-        policy_index == NULL
-        )
-    {
-        fputs(
-            "Policy index access: FAILED\n",
-            stderr
-        );
-
-
-        digit_policy_index_shutdown();
-
-        digit_core_shutdown();
-
-
-        return EXIT_FAILURE;
-    }
-
-
-    (void)digit_audit_append(
-        "POLICY_INDEX",
-        "Policy index recognized for internal runtime use."
-    );
-
-
-    /*
-     * Operator interface.
-     */
 
     puts(
         "Core initialization: READY"
@@ -1019,18 +713,14 @@ int main(
             sizeof(mission_text),
             stdin
         ) == NULL
-        )
+    )
     {
         fputs(
             "Mission input: FAILED\n",
             stderr
         );
 
-
-        digit_policy_index_shutdown();
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
@@ -1040,18 +730,14 @@ int main(
         digit_console_trim_newline(
             mission_text
         ) == 0U
-        )
+    )
     {
         fputs(
             "Mission assignment: REJECTED\n",
             stderr
         );
 
-
-        digit_policy_index_shutdown();
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
@@ -1062,18 +748,14 @@ int main(
             mission_text,
             1
         ) != 0
-        )
+    )
     {
         fputs(
             "Mission assignment: REJECTED\n",
             stderr
         );
 
-
-        digit_policy_index_shutdown();
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
@@ -1092,53 +774,19 @@ int main(
     );
 
 
-    /*
-     * Mission work.
-     */
-
-    if (
-        digit_dispatch_mission_work(
-            mission_text,
-            policy_index
-        ) != 0
-        )
-    {
-        fputs(
-            "Mission work dispatch: FAILED\n",
-            stderr
-        );
-
-
-        digit_policy_index_shutdown();
-
-        digit_core_shutdown();
-
-
-        return EXIT_FAILURE;
-    }
-
-
-    /*
-     * Operational runtime.
-     */
-
     if (
         digit_audit_append(
             "CORE",
             "Operational runtime entered."
         ) != 0
-        )
+    )
     {
         fputs(
             "Operational runtime audit: FAILED\n",
             stderr
         );
 
-
-        digit_policy_index_shutdown();
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
@@ -1146,34 +794,20 @@ int main(
 
     if (
         digit_operational_runtime() != 0
-        )
+    )
     {
         fputs(
             "Operational runtime: FAILED\n",
             stderr
         );
 
-
-        digit_policy_index_shutdown();
-
         digit_core_shutdown();
-
 
         return EXIT_FAILURE;
     }
 
 
-    /*
-     * Controlled shutdown.
-     *
-     * Core shutdown waits for the worker before the
-     * policy-index storage is withdrawn.
-     */
-
     digit_core_shutdown();
-
-
-    digit_policy_index_shutdown();
 
 
     return EXIT_SUCCESS;

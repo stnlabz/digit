@@ -18,6 +18,7 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -25,13 +26,16 @@
     <RootNamespace>digit</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -39,12 +43,14 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -52,24 +58,41 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
+
   <ImportGroup Label="Shared">
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props"
+            Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')"
+            Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props"
+            Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')"
+            Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props"
+            Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')"
+            Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props"
+            Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')"
+            Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <PropertyGroup Label="UserMacros" />
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -77,15 +100,19 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\ABI\includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -95,15 +122,19 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\ABI\includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -111,16 +142,19 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\Users\Poe\Documents\GitHub\digit\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\ABI\includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -130,81 +164,66 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\ABI\includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
+
   <ItemGroup>
+    <ClCompile Include="..\ABI\src\abi.c" />
+    <ClCompile Include="..\ABI\src\loader_win.c" />
+    <ClCompile Include="..\ABI\src\module.c" />
+    <ClCompile Include="..\ABI\src\module_registry.c" />
+
     <ClCompile Include="core\digit_audit.c" />
     <ClCompile Include="core\digit_authority.c" />
     <ClCompile Include="core\digit_company_preservation.c" />
     <ClCompile Include="core\digit_config.c" />
     <ClCompile Include="core\digit_core.c" />
-    <ClCompile Include="core\digit_general_orders.c" />
     <ClCompile Include="core\digit_identity.c" />
-    <ClCompile Include="core\digit_loader.c" />
-    <ClCompile Include="core\digit_markdown.c" />
     <ClCompile Include="core\digit_mission.c" />
     <ClCompile Include="core\digit_mission_control.c" />
-    <ClCompile Include="core\digit_module.c" />
     <ClCompile Include="core\digit_modules.c" />
-    <ClCompile Include="core\digit_module_catalog.c" />
-    <ClCompile Include="core\digit_module_discovery_win.c" />
-    <ClCompile Include="core\digit_module_inventory.c" />
-    <ClCompile Include="core\digit_module_registry.c" />
     <ClCompile Include="core\digit_operator_report.c" />
-    <ClCompile Include="core\digit_policy.c" />
-    <ClCompile Include="core\digit_policy_corpus.c" />
-    <ClCompile Include="core\digit_policy_eligibility.c" />
-    <ClCompile Include="core\digit_policy_index.c" />
-    <ClCompile Include="core\digit_policy_index_validate.c" />
-    <ClCompile Include="core\digit_policy_structure.c" />
-    <ClCompile Include="core\digit_policy_worker.c" />
     <ClCompile Include="core\digit_result.c" />
     <ClCompile Include="core\digit_safe_mode.c" />
+
     <ClCompile Include="platform\windows\platform_console.c" />
-    <ClCompile Include="platform\windows\platform_fs.c" />
-    <ClCompile Include="platform\windows\platform_thread.c" />
+
     <ClCompile Include="src\main.c" />
   </ItemGroup>
+
   <ItemGroup>
+    <ClInclude Include="..\ABI\includes\abi.h" />
+    <ClInclude Include="..\ABI\includes\module.h" />
+    <ClInclude Include="..\ABI\includes\module_loader.h" />
+    <ClInclude Include="..\ABI\includes\module_registry.h" />
+
     <ClInclude Include="include\digit_audit.h" />
     <ClInclude Include="include\digit_authority.h" />
     <ClInclude Include="include\digit_company_preservation.h" />
     <ClInclude Include="include\digit_config.h" />
     <ClInclude Include="include\digit_core.h" />
-    <ClInclude Include="include\digit_general_orders.h" />
     <ClInclude Include="include\digit_identity.h" />
-    <ClInclude Include="include\digit_markdown.h" />
     <ClInclude Include="include\digit_mission.h" />
     <ClInclude Include="include\digit_mission_control.h" />
-    <ClInclude Include="include\digit_module.h" />
     <ClInclude Include="include\digit_modules.h" />
-    <ClInclude Include="include\digit_module_catalog.h" />
-    <ClInclude Include="include\digit_module_discovery.h" />
-    <ClInclude Include="include\digit_module_inventory.h" />
-    <ClInclude Include="include\digit_module_loader.h" />
-    <ClInclude Include="include\digit_module_registry.h" />
     <ClInclude Include="include\digit_operator_report.h" />
-    <ClInclude Include="include\digit_policy.h" />
-    <ClInclude Include="include\digit_policy_corpus.h" />
-    <ClInclude Include="include\digit_policy_eligibility.h" />
-    <ClInclude Include="include\digit_policy_index.h" />
-    <ClInclude Include="include\digit_policy_index_validate.h" />
-    <ClInclude Include="include\digit_policy_structure.h" />
-    <ClInclude Include="include\digit_policy_worker.h" />
     <ClInclude Include="include\digit_result.h" />
     <ClInclude Include="include\digit_safe_mode.h" />
     <ClInclude Include="include\platform_console.h" />
-    <ClInclude Include="include\platform_fs.h" />
-    <ClInclude Include="include\platform_thread.h" />
   </ItemGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
