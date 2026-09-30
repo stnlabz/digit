@@ -46,9 +46,10 @@ static stnlabz_module_result_t llama_qualify(
 
     memset(result, 0, sizeof(*result));
 
+    /* Deliberately failing candidate for the RED hotload test. */
     result->tests_executed = 10;
-    result->tests_passed = 10;
-    result->tests_failed = 0;
+    result->tests_passed = 9;
+    result->tests_failed = 1;
     result->negative_test_executed = 1;
     result->negative_test_passed = 1;
 
@@ -85,7 +86,7 @@ static const stnlabz_module_descriptor_t llama_descriptor =
     "Digit Llama Interface",
     1,
     0,
-    2,
+    3,
     STNLABZ_MODULE_API_MAJOR,
     STNLABZ_MODULE_API_MINOR,
     llama_qualify,
