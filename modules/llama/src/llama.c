@@ -86,6 +86,22 @@ static int json_content(const char *json, char *output, size_t output_size)
     return o > 0;
 }
 
+static void audit_context(const char *context)
+{
+    char message[DIGIT_LLAMA_CONTEXT_MAX + 64];
+    size_t i, o;
+    if (llama_host == NULL || llama_host->send_message == NULL || context == NULL) return;
+    o = (size_t)snprintf(message, sizeof(message), "[LLAMA] context generated: ");
+    if (o >= sizeof(message)) return;
+    for (i = 0; context[i] != '\0' && o + 1 < sizeof(message); ++i)
+    {
+        unsigned char ch = (unsigned char)context[i];
+        message[o++] = (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : (char)ch;
+    }
+    message[o] = '\0';
+    (void)llama_host->send_message(message);
+}
+
 static int llama_generate_context(const char *text, char *context, size_t context_size)
 {
     struct sockaddr_in address;
@@ -138,7 +154,11 @@ static stnlabz_module_result_t llama_context_service(const void *request, size_t
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || input->text[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 
     memset(&output, 0, sizeof(output));
-    if (llama_generate_context(input->text, output.context, sizeof(output.context))) output.available = 1;
+    if (llama_generate_context(input->text, output.context, sizeof(output.context)))
+    {
+        output.available = 1;
+        audit_context(output.context);
+    }
     else
     {
         output.available = 0;
@@ -170,7 +190,7 @@ static stnlabz_module_result_t llama_start(const stnlabz_module_host_t *host)
     llama_host = host;
     if (host->send_message != NULL)
     {
-        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: llama.context registered; native llama.cpp /completion enabled at 127.0.0.1:8080");
+        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: llama.context registered; native llama.cpp /completion enabled with context auditing");
         else (void)host->send_message("[LLAMA] module active: llama.context registered; endpoint unavailable at 127.0.0.1:8080");
     }
     return STNLABZ_MODULE_OK;
@@ -186,7 +206,7 @@ static stnlabz_module_result_t llama_stop(void)
 
 static const stnlabz_module_descriptor_t llama_descriptor =
 {
-    "llama", "Digit Llama Interface", 1, 0, 6,
+    "llama", "Digit Llama Interface", 1, 0, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     llama_qualify, llama_start, llama_stop
 };
