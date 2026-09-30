@@ -173,7 +173,13 @@ static stnlabz_module_result_t response_answer_service(const void *request, size
     memset(&evidence, 0, sizeof(evidence));
     memset(ranked, 0, sizeof(ranked));
     memset(selected, 0, sizeof(selected));
-    if (!response_collect_evidence(input->question, &evidence)) return STNLABZ_MODULE_ERR_START_FAILED;
+    if (!response_collect_evidence(input->question, &evidence))
+    {
+        snprintf(output.answer, sizeof(output.answer), "I can't access retained information right now.");
+        memcpy(response, &output, sizeof(output));
+        *response_used = sizeof(output);
+        return STNLABZ_MODULE_OK;
+    }
 
     ranked_count = response_rank_evidence(input->question, &evidence, ranked);
     selected_count = response_select_evidence(ranked, ranked_count, selected);
@@ -237,5 +243,5 @@ static stnlabz_module_result_t response_stop(void)
     response_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 3, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
+static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 4, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &response_descriptor; }
