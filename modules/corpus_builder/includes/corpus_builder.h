@@ -8,6 +8,7 @@
 #define DIGIT_CORPUS_BUILDER_TEXT_MAX 4096
 #define DIGIT_CORPUS_BUILDER_CATEGORY_MAX 64
 #define DIGIT_CORPUS_BUILDER_REASON_MAX 256
+#define DIGIT_CORPUS_BUILDER_RECORD_ID_MAX 65
 
 typedef struct
 {
@@ -18,8 +19,10 @@ typedef struct
 typedef struct
 {
     int candidate;
+    int stored;
     unsigned int confidence;
     char category[DIGIT_CORPUS_BUILDER_CATEGORY_MAX];
+    char record_id[DIGIT_CORPUS_BUILDER_RECORD_ID_MAX];
     char reason[DIGIT_CORPUS_BUILDER_REASON_MAX];
 } digit_corpus_builder_result_t;
 
