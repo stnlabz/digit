@@ -23,7 +23,7 @@ int main(void)
     check(descriptor != NULL && strcmp(descriptor->id, "llama") == 0, "module identity is llama");
     check(descriptor != NULL && descriptor->version_major == 1, "major version is 1");
     check(descriptor != NULL && descriptor->version_minor == 0, "minor version is 0");
-    check(descriptor != NULL && descriptor->version_patch == 7, "patch version is 7");
+    check(descriptor != NULL && descriptor->version_patch == 8, "patch version is 8");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&result) == STNLABZ_MODULE_OK, "qualification executes");
     check(result.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is met");
