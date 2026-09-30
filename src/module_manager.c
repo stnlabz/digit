@@ -6,6 +6,8 @@
 #include "module_manager.h"
 #include "qualification_store.h"
 
+#define DIGIT_RUNTIME_MODULE_PATH "/opt/digit/modules"
+
 static int digit_module_manager_set_qualification_path(
     digit_module_manager_t *manager
 )
@@ -47,18 +49,17 @@ stnlabz_module_result_t digit_module_manager_discover(
     stnlabz_module_discovery_report_t *report
 )
 {
-    stnlabz_module_result_t result;
-
     if (manager == NULL || report == NULL)
     {
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     }
 
-    result = stnlabz_module_discovery_get_path(manager->modules_path,
-                                               sizeof(manager->modules_path));
-    if (result != STNLABZ_MODULE_OK)
+    if (snprintf(manager->modules_path,
+                 sizeof(manager->modules_path),
+                 "%s",
+                 DIGIT_RUNTIME_MODULE_PATH) >= (int)sizeof(manager->modules_path))
     {
-        return result;
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     }
 
     if (!digit_module_manager_set_qualification_path(manager))
