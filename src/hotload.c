@@ -211,6 +211,8 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     stnlabz_module_result_t module_result;
     char staged[DIGIT_HOTLOAD_PATH_MAX];
     int already_qualified;
+    int has_incumbent;
+
     memset(&result, 0, sizeof(result));
     if (!digit_copy_candidate(candidate->path, staged, sizeof(staged))) { printf("[MODULE] Candidate staging failed: %s\n", candidate->module_id); digit_hotload_audit("STAGING_FAILED", candidate->module_id, NULL); return 0; }
     if (!digit_qualify_candidate_isolated(candidate->module_id, staged, &result))
@@ -226,50 +228,116 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
         unlink(staged);
         return 0;
     }
+
     memset(&identity, 0, sizeof(identity));
     snprintf(identity.id, sizeof(identity.id), "%s", result.module_id);
     identity.version_major = result.version_major;
     identity.version_minor = result.version_minor;
     identity.version_patch = result.version_patch;
     already_qualified = digit_qualification_contains(&manager->qualifications, &identity);
+
     active = stnlabz_module_registry_find(&manager->registry, candidate->module_id);
-    if (active != NULL && active->descriptor.version_major == result.version_major && active->descriptor.version_minor == result.version_minor && active->descriptor.version_patch == result.version_patch)
+    has_incumbent = active != NULL;
+
+    if (has_incumbent && active->descriptor.version_major == result.version_major && active->descriptor.version_minor == result.version_minor && active->descriptor.version_patch == result.version_patch)
     {
         printf("[MODULE] Candidate version unchanged: %s %u.%u.%u -- no requalification required\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
         unlink(staged);
         return 1;
     }
+
     printf("[MODULE] Internal version changed: %s -> %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
     digit_hotload_audit("VERSION_CHANGED", candidate->module_id, &result);
+
     if (!already_qualified)
     {
         printf("[MODULE] Qualification PASS: %s (%u/%u)\n", candidate->module_id, result.qualification.tests_passed, result.qualification.tests_executed);
         printf("[MODULE] Negative validation: PASS\n");
         digit_hotload_audit("QUALIFICATION_GREEN", candidate->module_id, &result);
     }
-    else printf("[MODULE] Qualification restored: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
-    printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
-    active = stnlabz_module_registry_find(&manager->registry, candidate->module_id);
-    if (active != NULL && active->state == STNLABZ_MODULE_STATE_ACTIVE)
+    else
     {
-        if (active->descriptor.stop != NULL && active->descriptor.stop() != STNLABZ_MODULE_OK) { printf("[MODULE] Incumbent stop failed: %s\n", candidate->module_id); digit_hotload_audit("INCUMBENT_STOP_FAILED", candidate->module_id, NULL); unlink(staged); return 0; }
-        module_result = stnlabz_module_registry_stop(&manager->registry, candidate->module_id);
-        if (module_result != STNLABZ_MODULE_OK) { digit_hotload_audit("REGISTRY_STOP_FAILED", candidate->module_id, NULL); unlink(staged); return 0; }
+        printf("[MODULE] Qualification restored: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
     }
-    (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
-    module_result = stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
-    if (module_result != STNLABZ_MODULE_OK) { digit_hotload_audit("UNREGISTER_FAILED", candidate->module_id, NULL); unlink(staged); return 0; }
+    printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
+
+    if (has_incumbent)
+    {
+        if (active->state == STNLABZ_MODULE_STATE_ACTIVE)
+        {
+            if (active->descriptor.stop != NULL && active->descriptor.stop() != STNLABZ_MODULE_OK)
+            {
+                printf("[MODULE] Incumbent stop failed: %s\n", candidate->module_id);
+                digit_hotload_audit("INCUMBENT_STOP_FAILED", candidate->module_id, NULL);
+                unlink(staged);
+                return 0;
+            }
+            module_result = stnlabz_module_registry_stop(&manager->registry, candidate->module_id);
+            if (module_result != STNLABZ_MODULE_OK)
+            {
+                digit_hotload_audit("REGISTRY_STOP_FAILED", candidate->module_id, NULL);
+                unlink(staged);
+                return 0;
+            }
+        }
+
+        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
+        module_result = stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
+        if (module_result != STNLABZ_MODULE_OK)
+        {
+            digit_hotload_audit("UNREGISTER_FAILED", candidate->module_id, NULL);
+            unlink(staged);
+            return 0;
+        }
+    }
+
     loader_result = stnlabz_module_loader_load(&manager->loader, candidate->module_id, staged, &loaded_descriptor);
-    if (loader_result != STNLABZ_MODULE_LOADER_OK || loaded_descriptor == NULL) { printf("[MODULE] GREEN candidate load failed: %s\n", candidate->module_id); digit_hotload_audit("LOAD_FAILED", candidate->module_id, &result); unlink(staged); return 0; }
+    if (loader_result != STNLABZ_MODULE_LOADER_OK || loaded_descriptor == NULL)
+    {
+        printf("[MODULE] GREEN candidate load failed: %s\n", candidate->module_id);
+        digit_hotload_audit("LOAD_FAILED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
+    }
+
     module_result = stnlabz_module_registry_discover(&manager->registry, loaded_descriptor);
     if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_verify(&manager->registry, candidate->module_id);
     if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_restore_qualification(&manager->registry, candidate->module_id, &result.qualification);
-    if (module_result != STNLABZ_MODULE_OK) { printf("[MODULE] GREEN candidate registry admission failed: %s\n", candidate->module_id); digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result); unlink(staged); return 0; }
-    if (!already_qualified && (!digit_qualification_record(&manager->qualifications, loaded_descriptor) || !digit_qualification_store_save(manager->qualification_path, &manager->qualifications))) { printf("[MODULE] Qualification persistence failed: %s\n", candidate->module_id); digit_hotload_audit("QUALIFICATION_PERSIST_FAILED", candidate->module_id, &result); unlink(staged); return 0; }
+    if (module_result != STNLABZ_MODULE_OK)
+    {
+        printf("[MODULE] GREEN candidate registry admission failed: %s\n", candidate->module_id);
+        digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
+    }
+
+    if (!already_qualified && (!digit_qualification_record(&manager->qualifications, loaded_descriptor) || !digit_qualification_store_save(manager->qualification_path, &manager->qualifications)))
+    {
+        printf("[MODULE] Qualification persistence failed: %s\n", candidate->module_id);
+        digit_hotload_audit("QUALIFICATION_PERSIST_FAILED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
+    }
+
     module_result = stnlabz_module_registry_authorize_activation(&manager->registry, candidate->module_id);
     if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_activate(&manager->registry, candidate->module_id);
-    if (module_result != STNLABZ_MODULE_OK) { printf("[MODULE] GREEN candidate activation denied: %s\n", candidate->module_id); digit_hotload_audit("ACTIVATION_DENIED", candidate->module_id, &result); unlink(staged); return 0; }
-    if (loaded_descriptor->start != NULL && loaded_descriptor->start(&manager->host) != STNLABZ_MODULE_OK) { (void)stnlabz_module_registry_fail(&manager->registry, candidate->module_id); printf("[MODULE] GREEN candidate start failed: %s\n", candidate->module_id); digit_hotload_audit("START_FAILED", candidate->module_id, &result); unlink(staged); return 0; }
+    if (module_result != STNLABZ_MODULE_OK)
+    {
+        printf("[MODULE] GREEN candidate activation denied: %s\n", candidate->module_id);
+        digit_hotload_audit("ACTIVATION_DENIED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
+    }
+
+    if (loaded_descriptor->start != NULL && loaded_descriptor->start(&manager->host) != STNLABZ_MODULE_OK)
+    {
+        (void)stnlabz_module_registry_fail(&manager->registry, candidate->module_id);
+        printf("[MODULE] GREEN candidate start failed: %s\n", candidate->module_id);
+        digit_hotload_audit("START_FAILED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
+    }
+
     unlink(staged);
     printf("[MODULE] HOTLOAD ACTIVE: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
     digit_hotload_audit("HOTLOAD_ACTIVE", candidate->module_id, &result);
