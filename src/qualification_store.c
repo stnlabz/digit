@@ -31,8 +31,14 @@ int digit_qualification_store_load(
         unsigned int minor;
         unsigned int patch;
         char extra;
+        size_t length = strlen(line);
 
-        if (line[0] == '\n' || line[0] == '#')
+        while (length > 0 && (line[length - 1] == '\n' || line[length - 1] == '\r'))
+        {
+            line[--length] = '\0';
+        }
+
+        if (line[0] == '\0' || line[0] == '#')
         {
             continue;
         }
