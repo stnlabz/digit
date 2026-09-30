@@ -7,8 +7,11 @@
 #define LLAMA_DEFAULT_HOST "127.0.0.1"
 #define LLAMA_DEFAULT_PORT 8080
 #define DIGIT_LLAMA_CONTEXT_SERVICE "llama.context"
+#define DIGIT_LLAMA_GENERATE_SERVICE "llama.generate"
 #define DIGIT_LLAMA_TEXT_MAX 4096
 #define DIGIT_LLAMA_CONTEXT_MAX 4096
+#define DIGIT_LLAMA_PROMPT_MAX 8192
+#define DIGIT_LLAMA_GENERATED_MAX 4096
 
 typedef struct
 {
@@ -20,6 +23,17 @@ typedef struct
     int available;
     char context[DIGIT_LLAMA_CONTEXT_MAX];
 } digit_llama_context_result_t;
+
+typedef struct
+{
+    char prompt[DIGIT_LLAMA_PROMPT_MAX];
+} digit_llama_generate_request_t;
+
+typedef struct
+{
+    int available;
+    char text[DIGIT_LLAMA_GENERATED_MAX];
+} digit_llama_generate_result_t;
 
 int llama_endpoint_reachable(void);
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
