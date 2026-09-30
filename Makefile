@@ -9,10 +9,6 @@ CPPFLAGS ?= -Iinclude -I$(ABI_INCLUDE)
 LDLIBS ?= -ldl
 
 TARGET := build/digit
-MODULE_DIR := build/modules
-LLAMA_DIR := $(MODULE_DIR)/llama
-LLAMA_SO := $(LLAMA_DIR)/llama.so
-LLAMA_CONF := $(LLAMA_DIR)/module.conf
 TEST_MODULE_DIR := build/tests/modules
 SACRIFICIAL_DIR := $(TEST_MODULE_DIR)/sacrificial
 SACRIFICIAL_SO := $(SACRIFICIAL_DIR)/sacrificial.so
@@ -24,6 +20,12 @@ TEST_QUALIFICATION_STORE := build/test_qualification_store
 TEST_AUTHORITY := build/test_authority
 TEST_SACRIFICIAL := build/test_sacrificial
 TEST_RUNTIME := build/test_runtime
+
+PREFIX ?= /opt/digit
+BINDIR := $(PREFIX)/bin
+MODULEDIR := $(PREFIX)/modules
+STATEDIR := $(PREFIX)/state
+SYSTEMD_UNIT := /etc/systemd/system/digit.service
 
 DIGIT_SOURCES := \
 	src/main.c \
@@ -52,9 +54,9 @@ DIGIT_OBJECTS := $(DIGIT_SOURCES:src/%.c=build/digit_%.o)
 ABI_OBJECTS := $(ABI_SOURCES:$(ABI_SRC)/%.c=build/abi_%.o)
 OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
 
-.PHONY: all clean check-abi test
+.PHONY: all clean check-abi test install
 
-all: check-abi $(TARGET) $(LLAMA_SO) $(LLAMA_CONF)
+all: check-abi $(TARGET)
 
 check-abi:
 	@test -f "$(ABI_INCLUDE)/abi.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/abi.h"; exit 1; }
@@ -69,12 +71,6 @@ build/digit_%.o: src/%.c | build
 
 build/abi_%.o: $(ABI_SRC)/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-
-$(LLAMA_SO): modules/llama/llama.c | $(LLAMA_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@
-
-$(LLAMA_CONF): modules/llama/module.conf | $(LLAMA_DIR)
-	cp $< $@
 
 $(SACRIFICIAL_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@
@@ -112,14 +108,24 @@ test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(T
 	./$(TEST_SACRIFICIAL)
 	./$(TEST_RUNTIME)
 
+install: all
+	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
+	@id digit >/dev/null 2>&1 || useradd --system --home-dir $(PREFIX) --shell /usr/sbin/nologin digit
+	install -d -o digit -g digit $(PREFIX) $(BINDIR) $(MODULEDIR) $(STATEDIR)
+	install -m 0755 $(TARGET) $(BINDIR)/digit
+	chown digit:digit $(BINDIR)/digit
+	@if test -e "$(SYSTEMD_UNIT)"; then \
+		echo "Digit systemd service already exists; leaving it unchanged."; \
+	else \
+		install -m 0644 digit.service $(SYSTEMD_UNIT); \
+		systemctl daemon-reload; \
+		systemctl enable digit.service; \
+	fi
+	@systemctl restart digit.service
+	@echo "Digit installed to $(PREFIX) and service is running."
+
 build:
 	mkdir -p build
-
-$(MODULE_DIR): | build
-	mkdir -p $(MODULE_DIR)
-
-$(LLAMA_DIR): | $(MODULE_DIR)
-	mkdir -p $(LLAMA_DIR)
 
 $(TEST_MODULE_DIR): | build
 	mkdir -p $(TEST_MODULE_DIR)
