@@ -10,10 +10,12 @@ LDLIBS ?= -ldl
 
 TARGET := build/digit
 MODULE_DIR := build/modules
+TEST_MODULE_MANAGER := build/test_module_manager
 
 DIGIT_SOURCES := \
 	src/main.c \
-	src/digit.c
+	src/digit.c \
+	src/module_manager.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -26,7 +28,7 @@ DIGIT_OBJECTS := $(DIGIT_SOURCES:src/%.c=build/digit_%.o)
 ABI_OBJECTS := $(ABI_SOURCES:$(ABI_SRC)/%.c=build/abi_%.o)
 OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
 
-.PHONY: all clean check-abi
+.PHONY: all clean check-abi test
 
 all: check-abi $(TARGET) $(MODULE_DIR)
 
@@ -38,11 +40,17 @@ check-abi:
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $@ $(LDLIBS)
 
-build/digit_%.o: src/%.c include/digit.h | build
+build/digit_%.o: src/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 build/abi_%.o: $(ABI_SRC)/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(TEST_MODULE_MANAGER): tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
+
+test: check-abi $(TEST_MODULE_MANAGER)
+	./$(TEST_MODULE_MANAGER)
 
 build:
 	mkdir -p build
