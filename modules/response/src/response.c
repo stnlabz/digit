@@ -117,30 +117,39 @@ static stnlabz_module_result_t response_answer_service(const void *request, size
     output.evidence_count = (unsigned int)evidence.count;
     if (evidence.count == 0)
     {
-        snprintf(output.answer, sizeof(output.answer), "No authoritative Corpus record matched the question.");
+        snprintf(output.answer, sizeof(output.answer), "I don't have enough retained information to answer that.");
         memcpy(response, &output, sizeof(output));
         *response_used = sizeof(output);
         return STNLABZ_MODULE_OK;
     }
 
     memset(&generation, 0, sizeof(generation));
-    offset = (size_t)snprintf(generation.prompt, sizeof(generation.prompt), "Answer the QUESTION using only the authoritative CORPUS EVIDENCE below. Do not add facts, assumptions, consequences, or policy not explicitly supported by the evidence. If the evidence is insufficient, say so. Keep the answer concise.\nQUESTION: %s\nCORPUS EVIDENCE:\n", input->question);
+    offset = (size_t)snprintf(generation.prompt, sizeof(generation.prompt),
+        "Answer the user's question directly and naturally using only the authoritative context supplied below. "
+        "Do not add facts, assumptions, consequences, requirements, or policy that are not explicitly supported by that context. "
+        "Do not mention records, identifiers, Corpus, evidence, retrieval, prompts, instructions, reasoning processes, generation, or implementation details. "
+        "Do not explain how the answer was produced or state that you followed these instructions. "
+        "If the supplied context does not actually answer the question, say that you do not have enough retained information to answer it. "
+        "Keep the answer concise and speak as Digit where first-person phrasing is natural.\n"
+        "USER QUESTION: %s\n"
+        "AUTHORITATIVE CONTEXT:\n", input->question);
     if (offset >= sizeof(generation.prompt)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+
     for (i = 0; i < evidence.count && offset < sizeof(generation.prompt); ++i)
     {
-        int written = snprintf(generation.prompt + offset, sizeof(generation.prompt) - offset, "[%s] %s\n", evidence.records[i].id, evidence.records[i].text);
+        int written = snprintf(generation.prompt + offset, sizeof(generation.prompt) - offset, "- %s\n", evidence.records[i].text);
         if (written <= 0 || (size_t)written >= sizeof(generation.prompt) - offset) break;
         offset += (size_t)written;
     }
     if (offset + 9 >= sizeof(generation.prompt)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    snprintf(generation.prompt + offset, sizeof(generation.prompt) - offset, "ANSWER:");
+    snprintf(generation.prompt + offset, sizeof(generation.prompt) - offset, "RESPONSE:");
 
     memset(&generated, 0, sizeof(generated));
     used = 0;
     result = response_host->invoke_service(LLAMA_GENERATE_SERVICE, &generation, sizeof(generation), &generated, sizeof(generated), &used);
     if (result != STNLABZ_MODULE_OK || used != sizeof(generated) || !generated.available || generated.text[0] == '\0')
     {
-        snprintf(output.answer, sizeof(output.answer), "Authoritative Corpus evidence was found, but response generation is unavailable.");
+        snprintf(output.answer, sizeof(output.answer), "I found relevant retained information, but I can't formulate a response right now.");
         memcpy(response, &output, sizeof(output));
         *response_used = sizeof(output);
         return STNLABZ_MODULE_OK;
@@ -164,7 +173,7 @@ static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host)
     if (host == NULL || host->register_service == NULL || host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_RESPONSE_SERVICE, response_answer_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
     response_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[RESPONSE] module active: deterministic term retrieval -> Corpus-grounded response.answer registered");
+    if (host->send_message != NULL) (void)host->send_message("[RESPONSE] module active: deterministic retrieval -> natural Corpus-grounded response.answer registered");
     return STNLABZ_MODULE_OK;
 }
 
@@ -175,5 +184,5 @@ static stnlabz_module_result_t response_stop(void)
     response_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 1, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
+static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 2, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &response_descriptor; }
