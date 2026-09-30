@@ -13,13 +13,15 @@ MODULE_DIR := build/modules
 TEST_MODULE_MANAGER := build/test_module_manager
 TEST_HOTLOAD := build/test_hotload
 TEST_QUALIFICATION := build/test_qualification
+TEST_QUALIFICATION_STORE := build/test_qualification_store
 
 DIGIT_SOURCES := \
 	src/main.c \
 	src/digit.c \
 	src/module_manager.c \
 	src/hotload.c \
-	src/qualification.c
+	src/qualification.c \
+	src/qualification_store.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -59,10 +61,14 @@ $(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_S
 $(TEST_QUALIFICATION): tests/test_qualification.c src/qualification.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_qualification.c src/qualification.c -o $@
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION)
+$(TEST_QUALIFICATION_STORE): tests/test_qualification_store.c src/qualification.c src/qualification_store.c | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_qualification_store.c src/qualification.c src/qualification_store.c -o $@
+
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
 	./$(TEST_QUALIFICATION)
+	./$(TEST_QUALIFICATION_STORE)
 
 build:
 	mkdir -p build
