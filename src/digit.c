@@ -3,8 +3,10 @@
 #include "digit.h"
 #include "module.h"
 #include "module_manager.h"
+#include "runtime.h"
 
 static digit_module_manager_t digit_modules;
+static digit_runtime_t digit_runtime;
 
 static int digit_send_message(const char *message)
 {
@@ -63,9 +65,22 @@ int digit_initialize(void)
         return 1;
     }
 
+    digit_runtime_init(&digit_runtime, &digit_modules);
+
     printf("Core initialization: READY\n\n");
     printf("Greetings.\n\n");
     printf("What is today's mission?\n");
+    printf("[CORE] Runtime: ACTIVE\n");
 
+    if (!digit_runtime_run(&digit_runtime))
+    {
+        fprintf(stderr, "[CORE] Runtime stopped unexpectedly.\n");
+        digit_module_manager_shutdown(&digit_modules);
+        return 1;
+    }
+
+    printf("[CORE] Shutdown requested.\n");
+    digit_module_manager_shutdown(&digit_modules);
+    printf("[CORE] Shutdown complete.\n");
     return 0;
 }
