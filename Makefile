@@ -11,11 +11,13 @@ LDLIBS ?= -ldl
 TARGET := build/digit
 MODULE_DIR := build/modules
 TEST_MODULE_MANAGER := build/test_module_manager
+TEST_HOTLOAD := build/test_hotload
 
 DIGIT_SOURCES := \
 	src/main.c \
 	src/digit.c \
-	src/module_manager.c
+	src/module_manager.c \
+	src/hotload.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -49,8 +51,12 @@ build/abi_%.o: $(ABI_SRC)/%.c | build
 $(TEST_MODULE_MANAGER): tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-test: check-abi $(TEST_MODULE_MANAGER)
+$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
+
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD)
 	./$(TEST_MODULE_MANAGER)
+	./$(TEST_HOTLOAD)
 
 build:
 	mkdir -p build
