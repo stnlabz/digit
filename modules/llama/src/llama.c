@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,7 @@
 
 #define LLAMA_HTTP_MAX 16384
 #define LLAMA_JSON_MAX 12288
+#define LLAMA_MIN_CONTEXT_LENGTH 24
 
 static const stnlabz_module_host_t *llama_host = NULL;
 
@@ -86,17 +88,83 @@ static int json_content(const char *json, char *output, size_t output_size)
     return o > 0;
 }
 
-static void audit_context(const char *context)
+static void normalize_text(const char *input, char *output, size_t output_size)
 {
-    char message[DIGIT_LLAMA_CONTEXT_MAX + 64];
-    size_t i, o;
-    if (llama_host == NULL || llama_host->send_message == NULL || context == NULL) return;
-    o = (size_t)snprintf(message, sizeof(message), "[LLAMA] context generated: ");
-    if (o >= sizeof(message)) return;
-    for (i = 0; context[i] != '\0' && o + 1 < sizeof(message); ++i)
+    size_t i = 0, o = 0;
+    int previous_space = 1;
+    if (output == NULL || output_size == 0) return;
+    if (input == NULL) { output[0] = '\0'; return; }
+    while (input[i] != '\0' && o + 1 < output_size)
     {
-        unsigned char ch = (unsigned char)context[i];
-        message[o++] = (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : (char)ch;
+        unsigned char ch = (unsigned char)input[i++];
+        if (isspace(ch))
+        {
+            if (!previous_space) output[o++] = ' ';
+            previous_space = 1;
+        }
+        else
+        {
+            output[o++] = (char)tolower(ch);
+            previous_space = 0;
+        }
+    }
+    if (o > 0 && output[o - 1] == ' ') --o;
+    output[o] = '\0';
+}
+
+static unsigned int substring_count(const char *haystack, const char *needle)
+{
+    unsigned int count = 0;
+    size_t needle_length;
+    const char *p;
+    if (haystack == NULL || needle == NULL || needle[0] == '\0') return 0;
+    needle_length = strlen(needle);
+    p = haystack;
+    while ((p = strstr(p, needle)) != NULL)
+    {
+        ++count;
+        p += needle_length;
+    }
+    return count;
+}
+
+static int context_is_valid(const char *source, const char *context)
+{
+    char normalized_source[DIGIT_LLAMA_TEXT_MAX];
+    char normalized_context[DIGIT_LLAMA_CONTEXT_MAX];
+    size_t source_length, context_length;
+    unsigned int repeats;
+
+    normalize_text(source, normalized_source, sizeof(normalized_source));
+    normalize_text(context, normalized_context, sizeof(normalized_context));
+    source_length = strlen(normalized_source);
+    context_length = strlen(normalized_context);
+
+    if (context_length < LLAMA_MIN_CONTEXT_LENGTH || source_length == 0) return 0;
+    if (strcmp(normalized_source, normalized_context) == 0) return 0;
+
+    repeats = substring_count(normalized_context, normalized_source);
+    if (repeats >= 2U) return 0;
+    if (repeats == 1U && context_length <= source_length + 32U) return 0;
+
+    return 1;
+}
+
+static void audit_message(const char *prefix, const char *text)
+{
+    char message[DIGIT_LLAMA_CONTEXT_MAX + 96];
+    size_t i, o;
+    if (llama_host == NULL || llama_host->send_message == NULL || prefix == NULL) return;
+    o = (size_t)snprintf(message, sizeof(message), "[LLAMA] %s", prefix);
+    if (o >= sizeof(message)) return;
+    if (text != NULL && text[0] != '\0' && o + 2 < sizeof(message))
+    {
+        message[o++] = ' ';
+        for (i = 0; text[i] != '\0' && o + 1 < sizeof(message); ++i)
+        {
+            unsigned char ch = (unsigned char)text[i];
+            message[o++] = (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : (char)ch;
+        }
     }
     message[o] = '\0';
     (void)llama_host->send_message(message);
@@ -116,7 +184,7 @@ static int llama_generate_context(const char *text, char *context, size_t contex
     const char *json;
 
     if (!json_escape(text, escaped, sizeof(escaped))) return 0;
-    body_length = snprintf(body, sizeof(body), "{\"prompt\":\"Return only a concise contextual interpretation for Digit. Identify what the statement means in relation to Digit without inventing facts or requirements. Statement: %s\",\"n_predict\":128,\"temperature\":0}", escaped);
+    body_length = snprintf(body, sizeof(body), "{\"prompt\":\"Analyze the following statement for Digit. Return exactly one short sentence explaining its meaning or implication for Digit. Do not repeat or quote the statement. Do not add facts, requirements, or speculation. Statement: %s\\nInterpretation:\",\"n_predict\":64,\"temperature\":0,\"repeat_penalty\":1.15,\"repeat_last_n\":64}", escaped);
     if (body_length <= 0 || (size_t)body_length >= sizeof(body)) return 0;
 
     request_length = snprintf(request, sizeof(request), "POST /completion HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", body_length, body);
@@ -148,22 +216,27 @@ static stnlabz_module_result_t llama_context_service(const void *request, size_t
 {
     const digit_llama_context_request_t *input = request;
     digit_llama_context_result_t output;
+    char generated[DIGIT_LLAMA_CONTEXT_MAX];
     (void)handler_context;
 
     if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || input->text[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 
     memset(&output, 0, sizeof(output));
-    if (llama_generate_context(input->text, output.context, sizeof(output.context)))
+    memset(generated, 0, sizeof(generated));
+
+    if (llama_generate_context(input->text, generated, sizeof(generated)) && context_is_valid(input->text, generated))
     {
         output.available = 1;
-        audit_context(output.context);
+        snprintf(output.context, sizeof(output.context), "%s", generated);
+        audit_message("context accepted:", output.context);
     }
     else
     {
         output.available = 0;
         snprintf(output.context, sizeof(output.context), "%s", input->text);
-        if (llama_host != NULL && llama_host->send_message != NULL) (void)llama_host->send_message("[LLAMA] context generation failed; raw input returned as fallback");
+        if (generated[0] != '\0') audit_message("context rejected: degenerate generation; raw input returned as fallback; generated=", generated);
+        else audit_message("context generation failed; raw input returned as fallback", NULL);
     }
 
     memcpy(response, &output, sizeof(output));
@@ -190,7 +263,7 @@ static stnlabz_module_result_t llama_start(const stnlabz_module_host_t *host)
     llama_host = host;
     if (host->send_message != NULL)
     {
-        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: llama.context registered; native llama.cpp /completion enabled with context auditing");
+        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: llama.context registered; native llama.cpp context validation enabled");
         else (void)host->send_message("[LLAMA] module active: llama.context registered; endpoint unavailable at 127.0.0.1:8080");
     }
     return STNLABZ_MODULE_OK;
@@ -206,7 +279,7 @@ static stnlabz_module_result_t llama_stop(void)
 
 static const stnlabz_module_descriptor_t llama_descriptor =
 {
-    "llama", "Digit Llama Interface", 1, 0, 7,
+    "llama", "Digit Llama Interface", 1, 0, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     llama_qualify, llama_start, llama_stop
 };
