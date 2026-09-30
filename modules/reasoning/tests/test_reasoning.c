@@ -31,8 +31,8 @@ int main(void)
     check(descriptor != NULL && strcmp(descriptor->id, "reasoning") == 0,
           "module identity is reasoning");
     check(descriptor != NULL && descriptor->version_major == 1 &&
-          descriptor->version_minor == 0 && descriptor->version_patch == 0,
-          "internal version is 1.0.0");
+          descriptor->version_minor == 0 && descriptor->version_patch == 1,
+          "internal version is 1.0.1");
     check(descriptor != NULL && descriptor->qualify != NULL,
           "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT,
