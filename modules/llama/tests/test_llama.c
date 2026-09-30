@@ -10,15 +10,8 @@ static unsigned int failed = 0;
 static void check(int condition, const char *name)
 {
     ++executed;
-    if (condition)
-    {
-        printf("PASS %02u - %s\n", executed, name);
-    }
-    else
-    {
-        ++failed;
-        printf("FAIL %02u - %s\n", executed, name);
-    }
+    if (condition) printf("PASS %02u - %s\n", executed, name);
+    else { ++failed; printf("FAIL %02u - %s\n", executed, name); }
 }
 
 int main(void)
@@ -30,7 +23,7 @@ int main(void)
     check(descriptor != NULL && strcmp(descriptor->id, "llama") == 0, "module identity is llama");
     check(descriptor != NULL && descriptor->version_major == 1, "major version is 1");
     check(descriptor != NULL && descriptor->version_minor == 0, "minor version is 0");
-    check(descriptor != NULL && descriptor->version_patch == 4, "patch version is 4");
+    check(descriptor != NULL && descriptor->version_patch == 5, "patch version is 5");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&result) == STNLABZ_MODULE_OK, "qualification executes");
     check(result.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is met");
