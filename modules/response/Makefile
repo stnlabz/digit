@@ -1,33 +1,47 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
-CPPFLAGS += -Iincludes -I../../ABI/includes
 
-MODULE = response
-BUILD_DIR = build
-BIN_DIR = bin
-SO = $(BUILD_DIR)/$(MODULE).so
-TEST = $(BIN_DIR)/test_$(MODULE)
+ABI_DIR ?= ../../../ABI
+ABI_INCLUDE := $(ABI_DIR)/includes
+CPPFLAGS ?= -Iincludes -I$(ABI_INCLUDE)
 
-.PHONY: all clean test install
+TARGET := bin/response.so
+TEST_TARGET := bin/test_response
+SOURCE := src/response.c
+TEST_SOURCE := tests/test_response.c
 
-all: $(SO)
+DIGIT_PREFIX ?= /opt/digit
+INSTALL_DIR := $(DIGIT_PREFIX)/modules/response
+INSTALL_BIN := $(INSTALL_DIR)/bin
 
-$(BUILD_DIR) $(BIN_DIR):
-	mkdir -p $@
+.PHONY: all test clean check-abi rebuild install
 
-$(SO): src/response.c includes/response.h | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared src/response.c -o $@
+all: check-abi $(TARGET)
 
-$(TEST): tests/test_response.c src/response.c includes/response.h | $(BIN_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_response.c src/response.c -o $@
+check-abi:
+	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 
-test: $(TEST)
-	./$(TEST)
+$(TARGET): $(SOURCE) includes/response.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
 
-install: $(SO)
-	install -d /opt/digit/modules/response
-	install -m 0755 $(SO) /opt/digit/modules/response/response.so
-	install -m 0644 module.conf /opt/digit/modules/response/module.conf
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/response.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@
+
+test: check-abi $(TEST_TARGET)
+	./$(TEST_TARGET)
+
+install: all
+	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
+	install -d -o digit -g digit $(INSTALL_DIR) $(INSTALL_BIN)
+	install -m 0755 $(TARGET) $(INSTALL_BIN)/response.so
+	install -m 0644 module.conf $(INSTALL_DIR)/module.conf
+	chown -R digit:digit $(INSTALL_DIR)
+	@echo "Response installed to $(INSTALL_DIR). Digit will qualify the candidate."
+
+bin:
+	mkdir -p bin
+
+rebuild: clean all
 
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf bin
