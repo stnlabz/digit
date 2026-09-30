@@ -19,25 +19,34 @@ int main(void)
     const char *path = "/tmp/digit-corpus-test.tsv";
     const stnlabz_module_descriptor_t *descriptor = stnlabz_module_get_descriptor();
     stnlabz_module_qualification_result_t qualification;
-    digit_corpus_record_t record;
+    digit_corpus_record_t record, second, fetched, matches[4];
+    size_t count;
 
     unlink(path);
     memset(&record, 0, sizeof(record));
     snprintf(record.id, sizeof(record.id), "TEST-001");
-    snprintf(record.category, sizeof(record.category), "ENGINEERING");
+    snprintf(record.category, sizeof(record.category), "RULE");
     snprintf(record.source, sizeof(record.source), "test");
-    snprintf(record.text, sizeof(record.text), "Digit corpus test record.");
+    snprintf(record.text, sizeof(record.text), "Digit will enter safe mode on fatal Core error.");
+    memset(&second, 0, sizeof(second));
+    snprintf(second.id, sizeof(second.id), "TEST-002");
+    snprintf(second.category, sizeof(second.category), "ENGINEERING");
+    snprintf(second.source, sizeof(second.source), "test");
+    snprintf(second.text, sizeof(second.text), "Optional telemetry module may be unavailable.");
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "corpus") == 0, "module identity is corpus");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 1, "internal version is 1.0.1");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 1 && descriptor->version_patch == 0, "internal version is 1.1.0");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
-    check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS && qualification.tests_passed == qualification.tests_executed, "required qualification tests pass");
-    check(qualification.negative_test_executed && qualification.negative_test_passed, "negative validation passes");
-    check(digit_corpus_validate(&record), "valid corpus record accepted");
-    check(digit_corpus_append(path, &record), "record appends to corpus");
-    check(digit_corpus_contains(path, record.id), "stored record is discoverable");
-    check(!digit_corpus_append(path, &record) && !digit_corpus_validate(NULL), "duplicate and invalid records are rejected");
+    check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS && qualification.tests_passed == qualification.tests_executed && qualification.negative_test_executed && qualification.negative_test_passed, "qualification requirements pass");
+    check(digit_corpus_validate(&record) && digit_corpus_append(path, &record) && digit_corpus_append(path, &second), "valid records append");
+    memset(&fetched, 0, sizeof(fetched));
+    check(digit_corpus_get(path, "TEST-001", &fetched) && strcmp(fetched.text, record.text) == 0, "exact record retrieval works");
+    memset(matches, 0, sizeof(matches)); count = digit_corpus_search(path, "safe mode", matches, 4);
+    check(count == 1 && strcmp(matches[0].id, "TEST-001") == 0, "case-insensitive text search is deterministic");
+    memset(matches, 0, sizeof(matches)); count = digit_corpus_search(path, "engineering", matches, 4);
+    check(count == 1 && strcmp(matches[0].id, "TEST-002") == 0, "category search works");
+    check(!digit_corpus_append(path, &record) && !digit_corpus_get(path, "MISSING", &fetched) && digit_corpus_search(path, "", matches, 4) == 0, "duplicate and invalid retrieval cases are rejected");
 
     unlink(path);
     printf("\nCorpus module tests: %u executed, %u failed\n", executed, failed);
