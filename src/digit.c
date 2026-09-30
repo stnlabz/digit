@@ -1,6 +1,8 @@
 #include <stdio.h>
 
+#include "alert.h"
 #include "audit.h"
+#include "channel.h"
 #include "digit.h"
 #include "module.h"
 #include "module_manager.h"
@@ -28,6 +30,23 @@ static const stnlabz_module_host_t digit_host =
     digit_service_invoke
 };
 
+static void digit_raise_core_alert(digit_alert_severity_t severity, const char *summary, const char *detail, const char *state)
+{
+    digit_alert_t alert;
+    char audit_detail[512];
+    if (digit_alert_raise(severity, "CORE", summary, detail, state, &alert))
+    {
+        snprintf(audit_detail, sizeof(audit_detail), "id=%s severity=%s source=CORE summary=%s",
+                 alert.id, digit_alert_severity_string(severity), summary);
+        (void)digit_audit_event("ALERT", "RAISED", audit_detail);
+        fprintf(stderr, "[ALERT] %s: %s -- %s\n", digit_alert_severity_string(severity), summary, detail);
+    }
+    else
+    {
+        (void)digit_audit_event("ALERT", "RAISE_FAILED", summary);
+    }
+}
+
 int digit_initialize(void)
 {
     stnlabz_module_discovery_report_t report;
@@ -42,6 +61,9 @@ int digit_initialize(void)
     }
 
     (void)digit_audit_event("CORE", "START", NULL);
+    if (!digit_channel_init()) (void)digit_audit_event("CHANNEL", "INIT_FAILED", "Core continuing without persistent channels");
+    if (!digit_alert_init()) (void)digit_audit_event("ALERT", "INIT_FAILED", "Core continuing without persistent alerts");
+
     printf("%s\n", DIGIT_NAME);
     printf("Digit is using the STN-LABZ ABI version %u.%u\n", STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR);
     snprintf(detail, sizeof(detail), "abi=%u.%u", STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR);
@@ -54,6 +76,7 @@ int digit_initialize(void)
         fprintf(stderr, "[MODULE] Discovery subsystem failed: %s\n", stnlabz_module_result_string(result));
         snprintf(detail, sizeof(detail), "result=%s core_continuing=false", stnlabz_module_result_string(result));
         (void)digit_audit_event("MODULE", "DISCOVERY_FAILED", detail);
+        digit_raise_core_alert(DIGIT_ALERT_CRITICAL, "Module discovery subsystem failure", detail, "FAULT");
         digit_module_manager_shutdown(&digit_modules);
         (void)digit_audit_event("CORE", "STOP", "reason=module_discovery_subsystem_failure");
         digit_audit_close();
@@ -68,15 +91,14 @@ int digit_initialize(void)
     if (report.modules_rejected > 0)
     {
         degraded = 1;
-        snprintf(detail, sizeof(detail),
-                 "directory=%s module=%s stage=%s reason=%s core_continuing=true",
+        snprintf(detail, sizeof(detail), "directory=%s module=%s stage=%s reason=%s core_continuing=true",
                  report.rejected_directory[0] != '\0' ? report.rejected_directory : "unknown",
                  report.rejected_module[0] != '\0' ? report.rejected_module : "unknown",
                  report.rejection_stage[0] != '\0' ? report.rejection_stage : "unknown",
                  report.rejection_reason[0] != '\0' ? report.rejection_reason : "unknown");
         fprintf(stderr, "[CORE] DEGRADED: module rejection: %s\n", detail);
         (void)digit_audit_event("MODULE", "REJECTED", detail);
-
+        digit_raise_core_alert(DIGIT_ALERT_ERROR, "Module rejected during discovery", detail, "DEGRADED");
         snprintf(detail, sizeof(detail), "rejected=%zu core_continuing=true", report.modules_rejected);
         (void)digit_audit_event("CORE", "DEGRADED", detail);
     }
@@ -88,13 +110,14 @@ int digit_initialize(void)
         snprintf(detail, sizeof(detail), "result=%s core_continuing=true", stnlabz_module_result_string(result));
         fprintf(stderr, "[CORE] DEGRADED: module initialization reported %s; Digit Core is continuing.\n", stnlabz_module_result_string(result));
         (void)digit_audit_event("CORE", "DEGRADED", detail);
+        digit_raise_core_alert(DIGIT_ALERT_ERROR, "Module activation degraded Digit capability", detail, "DEGRADED");
     }
 
     digit_runtime_init(&digit_runtime, &digit_modules);
 
     if (degraded)
     {
-        printf("Core initialization: READY (DEGRADED)\n\nGreetings.\n\nDigit is operational with reduced module capability. Check the audit log for rejected or unavailable modules.\n[CORE] Runtime: ACTIVE\n");
+        printf("Core initialization: READY (DEGRADED)\n\nGreetings.\n\nDigit is operational with reduced module capability. Operator alerts contain fault details.\n[CORE] Runtime: ACTIVE\n");
         (void)digit_audit_event("CORE", "READY", "state=DEGRADED");
     }
     else
@@ -109,6 +132,7 @@ int digit_initialize(void)
     {
         fprintf(stderr, "[CORE] Runtime stopped unexpectedly.\n");
         (void)digit_audit_event("CORE", "RUNTIME_FAILED", NULL);
+        digit_raise_core_alert(DIGIT_ALERT_CRITICAL, "Digit runtime stopped unexpectedly", "runtime_run returned failure", "FAULT");
         digit_module_manager_shutdown(&digit_modules);
         (void)digit_audit_event("CORE", "STOP", "reason=runtime_failure");
         digit_audit_close();
