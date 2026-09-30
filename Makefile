@@ -9,6 +9,7 @@ CPPFLAGS ?= -Iinclude -I$(ABI_INCLUDE)
 LDLIBS ?= -ldl
 
 TARGET := build/digit
+MODULE_DIR := build/modules
 
 DIGIT_SOURCES := \
 	src/main.c \
@@ -27,7 +28,7 @@ OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
 
 .PHONY: all clean check-abi
 
-all: check-abi $(TARGET)
+all: check-abi $(TARGET) $(MODULE_DIR)
 
 check-abi:
 	@test -f "$(ABI_INCLUDE)/abi.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/abi.h"; exit 1; }
@@ -45,6 +46,9 @@ build/abi_%.o: $(ABI_SRC)/%.c | build
 
 build:
 	mkdir -p build
+
+$(MODULE_DIR): | build
+	mkdir -p $(MODULE_DIR)
 
 clean:
 	rm -rf build
