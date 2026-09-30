@@ -3,7 +3,8 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 
 ABI_DIR ?= ../../../ABI
 ABI_INCLUDE := $(ABI_DIR)/includes
-CPPFLAGS ?= -Iincludes -I$(ABI_INCLUDE)
+DIGIT_INCLUDE := ../../include
+CPPFLAGS ?= -Iincludes -I$(DIGIT_INCLUDE) -I$(ABI_INCLUDE)
 LDLIBS ?= -pthread
 
 TARGET := bin/interface.so
@@ -21,11 +22,12 @@ all: check-abi $(TARGET)
 
 check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
+	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/interface.h | bin
+$(TARGET): $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h | bin
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@ $(LDLIBS)
 
 test: check-abi $(TEST_TARGET)
