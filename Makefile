@@ -20,11 +20,13 @@ TEST_QUALIFICATION_STORE := build/test_qualification_store
 TEST_AUTHORITY := build/test_authority
 TEST_SACRIFICIAL := build/test_sacrificial
 TEST_RUNTIME := build/test_runtime
+TEST_AUDIT := build/test_audit
 
 PREFIX ?= /opt/digit
 BINDIR := $(PREFIX)/bin
 MODULEDIR := $(PREFIX)/modules
 STATEDIR := $(PREFIX)/state
+LOGDIR := $(PREFIX)/logs
 SYSTEMD_UNIT := /etc/systemd/system/digit.service
 
 DIGIT_SOURCES := \
@@ -35,7 +37,8 @@ DIGIT_SOURCES := \
 	src/runtime.c \
 	src/qualification.c \
 	src/qualification_store.c \
-	src/authority.c
+	src/authority.c \
+	src/audit.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -99,7 +102,10 @@ $(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIF
 $(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_runtime.c src/runtime.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME)
+$(TEST_AUDIT): tests/test_audit.c src/audit.c | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_audit.c src/audit.c -o $@
+
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME) $(TEST_AUDIT)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
 	./$(TEST_QUALIFICATION)
@@ -107,11 +113,13 @@ test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(T
 	./$(TEST_AUTHORITY)
 	./$(TEST_SACRIFICIAL)
 	./$(TEST_RUNTIME)
+	@mkdir -p /opt/digit/logs 2>/dev/null || true
+	./$(TEST_AUDIT)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
 	@id digit >/dev/null 2>&1 || useradd --system --home-dir $(PREFIX) --shell /usr/sbin/nologin digit
-	install -d -o digit -g digit $(PREFIX) $(BINDIR) $(MODULEDIR) $(STATEDIR)
+	install -d -o digit -g digit $(PREFIX) $(BINDIR) $(MODULEDIR) $(STATEDIR) $(LOGDIR)
 	install -m 0755 $(TARGET) $(BINDIR)/digit
 	chown digit:digit $(BINDIR)/digit
 	@if test -e "$(SYSTEMD_UNIT)"; then \
