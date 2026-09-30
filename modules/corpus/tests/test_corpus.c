@@ -19,7 +19,7 @@ int main(void)
     const char *path = "/tmp/digit-corpus-test.tsv";
     const stnlabz_module_descriptor_t *descriptor = stnlabz_module_get_descriptor();
     stnlabz_module_qualification_result_t qualification;
-    digit_corpus_record_t record, second, fetched, matches[4];
+    digit_corpus_record_t record, second, fetched, matches[4], listed[4];
     size_t count;
 
     unlink(path);
@@ -36,7 +36,7 @@ int main(void)
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "corpus") == 0, "module identity is corpus");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 1 && descriptor->version_patch == 0, "internal version is 1.1.0");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 2 && descriptor->version_patch == 0, "internal version is 1.2.0");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS && qualification.tests_passed == qualification.tests_executed && qualification.negative_test_executed && qualification.negative_test_passed, "qualification requirements pass");
     check(digit_corpus_validate(&record) && digit_corpus_append(path, &record) && digit_corpus_append(path, &second), "valid records append");
@@ -46,6 +46,8 @@ int main(void)
     check(count == 1 && strcmp(matches[0].id, "TEST-001") == 0, "case-insensitive text search is deterministic");
     memset(matches, 0, sizeof(matches)); count = digit_corpus_search(path, "engineering", matches, 4);
     check(count == 1 && strcmp(matches[0].id, "TEST-002") == 0, "category search works");
+    memset(listed, 0, sizeof(listed)); count = digit_corpus_list(path, listed, 4);
+    check(count == 2 && strcmp(listed[0].id, "TEST-001") == 0 && strcmp(listed[1].id, "TEST-002") == 0, "deterministic corpus list returns complete ordered candidates");
     check(!digit_corpus_append(path, &record) && !digit_corpus_get(path, "MISSING", &fetched) && digit_corpus_search(path, "", matches, 4) == 0, "duplicate and invalid retrieval cases are rejected");
 
     unlink(path);
