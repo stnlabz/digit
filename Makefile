@@ -12,12 +12,14 @@ TARGET := build/digit
 MODULE_DIR := build/modules
 TEST_MODULE_MANAGER := build/test_module_manager
 TEST_HOTLOAD := build/test_hotload
+TEST_QUALIFICATION := build/test_qualification
 
 DIGIT_SOURCES := \
 	src/main.c \
 	src/digit.c \
 	src/module_manager.c \
-	src/hotload.c
+	src/hotload.c \
+	src/qualification.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -54,9 +56,13 @@ $(TEST_MODULE_MANAGER): tests/test_module_manager.c src/module_manager.c $(ABI_S
 $(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD)
+$(TEST_QUALIFICATION): tests/test_qualification.c src/qualification.c | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_qualification.c src/qualification.c -o $@
+
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
+	./$(TEST_QUALIFICATION)
 
 build:
 	mkdir -p build
