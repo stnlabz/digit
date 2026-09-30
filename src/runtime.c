@@ -51,8 +51,10 @@ int digit_runtime_report_fault(
     }
 
     /*
-     * Safe Mode is mandatory for a qualifying fault.  The transition into
-     * Company Preservation is Core-owned and cannot be bypassed by a module.
+     * This function is the explicit Core fault boundary.  Callers must use it
+     * only for a qualifying authority, integrity, system, mission,
+     * truthfulness, or unauthorized-condition fault.  Ordinary module or
+     * service failures are not Core faults and do not enter Safe Mode.
      */
     runtime->operational_state = DIGIT_OPERATIONAL_SAFE_MODE;
     runtime->preservation_cause = fault;
@@ -153,6 +155,7 @@ int digit_runtime_run(
                 continue;
             }
 
+            /* Runtime timing failure is a Core system fault. */
             (void)digit_runtime_report_fault(runtime, DIGIT_FAULT_SYSTEM);
             runtime->running = 0;
             return 0;
@@ -173,11 +176,13 @@ int digit_runtime_run(
             continue;
         }
 
-        if (digit_hotload_poll(&runtime->hotload) < 0)
-        {
-            (void)digit_runtime_report_fault(runtime, DIGIT_FAULT_SYSTEM);
-            continue;
-        }
+        /*
+         * A module hotload failure is contained at the module boundary.  It is
+         * not, by itself, evidence that Digit Core, company doctrine, authority,
+         * or state integrity has failed.  The hotload layer owns its rejection,
+         * qualification, and audit behavior; Core remains operational.
+         */
+        (void)digit_hotload_poll(&runtime->hotload);
     }
 
     runtime->running = 0;
