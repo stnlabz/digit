@@ -32,7 +32,7 @@ int digit_initialize(void)
 {
     stnlabz_module_discovery_report_t report;
     stnlabz_module_result_t result;
-    char detail[256];
+    char detail[512];
     int degraded = 0;
 
     if (!digit_audit_open())
@@ -68,20 +68,22 @@ int digit_initialize(void)
     if (report.modules_rejected > 0)
     {
         degraded = 1;
+        snprintf(detail, sizeof(detail),
+                 "directory=%s module=%s stage=%s reason=%s core_continuing=true",
+                 report.rejected_directory[0] != '\0' ? report.rejected_directory : "unknown",
+                 report.rejected_module[0] != '\0' ? report.rejected_module : "unknown",
+                 report.rejection_stage[0] != '\0' ? report.rejection_stage : "unknown",
+                 report.rejection_reason[0] != '\0' ? report.rejection_reason : "unknown");
+        fprintf(stderr, "[CORE] DEGRADED: module rejection: %s\n", detail);
+        (void)digit_audit_event("MODULE", "REJECTED", detail);
+
         snprintf(detail, sizeof(detail), "rejected=%zu core_continuing=true", report.modules_rejected);
-        fprintf(stderr, "[CORE] DEGRADED: %zu module(s) rejected during discovery; Digit Core is continuing.\n", report.modules_rejected);
         (void)digit_audit_event("CORE", "DEGRADED", detail);
     }
 
     result = digit_module_manager_qualify_and_activate(&digit_modules);
     if (result != STNLABZ_MODULE_OK)
     {
-        /*
-         * Module-manager activation is intentionally non-fatal to Core.
-         * Individual module failures are contained by the manager.  A manager
-         * error degrades available capability but does not grant a module the
-         * ability to terminate Digit.
-         */
         degraded = 1;
         snprintf(detail, sizeof(detail), "result=%s core_continuing=true", stnlabz_module_result_string(result));
         fprintf(stderr, "[CORE] DEGRADED: module initialization reported %s; Digit Core is continuing.\n", stnlabz_module_result_string(result));
