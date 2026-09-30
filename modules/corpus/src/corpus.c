@@ -111,6 +111,23 @@ size_t digit_corpus_search(const char *path, const char *query, digit_corpus_rec
     fclose(file); return count;
 }
 
+size_t digit_corpus_list(const char *path, digit_corpus_record_t *records, size_t capacity)
+{
+    FILE *file;
+    char line[DIGIT_CORPUS_TEXT_MAX + DIGIT_CORPUS_SOURCE_MAX + DIGIT_CORPUS_CATEGORY_MAX + DIGIT_CORPUS_RECORD_ID_MAX + 16];
+    digit_corpus_record_t current;
+    size_t count = 0;
+    if (path == NULL || records == NULL || capacity == 0) return 0;
+    file = fopen(path, "r");
+    if (file == NULL) return 0;
+    while (count < capacity && fgets(line, sizeof(line), file) != NULL)
+    {
+        if (corpus_parse_line(line, &current)) records[count++] = current;
+    }
+    fclose(file);
+    return count;
+}
+
 static stnlabz_module_result_t corpus_contains_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
 {
     digit_corpus_contains_result_t result; const char *record_id = request; (void)handler_context;
@@ -147,6 +164,15 @@ static stnlabz_module_result_t corpus_search_service(const void *request, size_t
     memcpy(response, &result, sizeof(result)); *response_used = sizeof(result); return STNLABZ_MODULE_OK;
 }
 
+static stnlabz_module_result_t corpus_list_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
+{
+    digit_corpus_list_result_t result; (void)request; (void)handler_context;
+    if (request_size != 0 || response == NULL || response_used == NULL || response_size < sizeof(result)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(&result, 0, sizeof(result));
+    result.count = digit_corpus_list(DIGIT_CORPUS_PATH, result.records, DIGIT_CORPUS_LIST_MAX);
+    memcpy(response, &result, sizeof(result)); *response_used = sizeof(result); return STNLABZ_MODULE_OK;
+}
+
 static stnlabz_module_result_t corpus_qualify(stnlabz_module_qualification_result_t *result)
 {
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -160,9 +186,12 @@ static stnlabz_module_result_t corpus_start(const stnlabz_module_host_t *host)
     if (!host->register_service(DIGIT_CORPUS_APPEND_SERVICE, corpus_append_service, NULL)) goto fail_contains;
     if (!host->register_service(DIGIT_CORPUS_GET_SERVICE, corpus_get_service, NULL)) goto fail_append;
     if (!host->register_service(DIGIT_CORPUS_SEARCH_SERVICE, corpus_search_service, NULL)) goto fail_get;
+    if (!host->register_service(DIGIT_CORPUS_LIST_SERVICE, corpus_list_service, NULL)) goto fail_search;
     corpus_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[CORPUS] module active: contains, append, get, search registered");
+    if (host->send_message != NULL) (void)host->send_message("[CORPUS] module active: contains, append, get, search, list registered");
     return STNLABZ_MODULE_OK;
+fail_search:
+    if (host->unregister_service != NULL) (void)host->unregister_service(DIGIT_CORPUS_SEARCH_SERVICE, NULL);
 fail_get:
     if (host->unregister_service != NULL) (void)host->unregister_service(DIGIT_CORPUS_GET_SERVICE, NULL);
 fail_append:
@@ -177,6 +206,7 @@ static stnlabz_module_result_t corpus_stop(void)
     int ok = 1;
     if (corpus_host != NULL && corpus_host->unregister_service != NULL)
     {
+        if (!corpus_host->unregister_service(DIGIT_CORPUS_LIST_SERVICE, NULL)) ok = 0;
         if (!corpus_host->unregister_service(DIGIT_CORPUS_SEARCH_SERVICE, NULL)) ok = 0;
         if (!corpus_host->unregister_service(DIGIT_CORPUS_GET_SERVICE, NULL)) ok = 0;
         if (!corpus_host->unregister_service(DIGIT_CORPUS_APPEND_SERVICE, NULL)) ok = 0;
@@ -185,5 +215,5 @@ static stnlabz_module_result_t corpus_stop(void)
     corpus_host = NULL; return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
-static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 1, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
+static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 2, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &corpus_descriptor; }
