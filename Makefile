@@ -40,7 +40,8 @@ DIGIT_SOURCES := \
 	src/authority.c \
 	src/audit.c \
 	src/service_registry.c \
-	src/channel.c
+	src/channel.c \
+	src/alert.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -122,7 +123,7 @@ install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
 	@id digit >/dev/null 2>&1 || useradd --system --home-dir $(PREFIX) --shell /usr/sbin/nologin digit
 	install -d -o digit -g digit $(PREFIX) $(BINDIR) $(MODULEDIR) $(STATEDIR) $(LOGDIR)
-	install -d -o digit -g digit $(STATEDIR)/channels
+	install -d -o digit -g digit $(STATEDIR)/channels $(STATEDIR)/alerts
 	install -m 0755 $(TARGET) $(BINDIR)/digit
 	chown digit:digit $(BINDIR)/digit
 	@if test -e "$(SYSTEMD_UNIT)"; then \
