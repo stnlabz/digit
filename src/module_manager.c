@@ -2,7 +2,26 @@
 #include <string.h>
 
 #include "abi.h"
+#include "authority.h"
 #include "module_manager.h"
+#include "qualification_store.h"
+
+static int digit_module_manager_set_qualification_path(
+    digit_module_manager_t *manager
+)
+{
+    int written;
+
+    written = snprintf(
+        manager->qualification_path,
+        sizeof(manager->qualification_path),
+        "%s/%s",
+        manager->modules_path,
+        DIGIT_QUALIFICATION_STATE_FILE
+    );
+
+    return written >= 0 && (size_t)written < sizeof(manager->qualification_path);
+}
 
 void digit_module_manager_init(
     digit_module_manager_t *manager,
@@ -17,6 +36,7 @@ void digit_module_manager_init(
     memset(manager, 0, sizeof(*manager));
     stnlabz_module_registry_init(&manager->registry);
     stnlabz_module_loader_init(&manager->loader);
+    digit_qualification_init(&manager->qualifications);
 
     if (host != NULL)
     {
@@ -46,6 +66,20 @@ stnlabz_module_result_t digit_module_manager_discover(
         return result;
     }
 
+    if (!digit_module_manager_set_qualification_path(manager))
+    {
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    }
+
+    if (!digit_qualification_store_load(
+            manager->qualification_path,
+            &manager->qualifications))
+    {
+        fprintf(stderr, "[MODULE] Qualification state rejected: %s\n",
+                manager->qualification_path);
+        return STNLABZ_MODULE_ERR_QUALIFICATION;
+    }
+
     return stnlabz_module_discovery_scan(
         &manager->registry,
         &manager->loader,
@@ -70,52 +104,127 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         stnlabz_module_record_t *record = &manager->registry.modules[index];
         stnlabz_module_result_t result;
 
-        result = stnlabz_module_abi_prepare(
-            &manager->registry,
-            &record->descriptor
-        );
+        if (digit_authority_requires_qualification(
+                &manager->qualifications,
+                &record->descriptor))
+        {
+            result = stnlabz_module_abi_prepare(
+                &manager->registry,
+                &record->descriptor
+            );
 
+            if (result != STNLABZ_MODULE_OK)
+            {
+                fprintf(stderr, "[MODULE] Qualification failed: %s (%s)\n",
+                        record->descriptor.id,
+                        stnlabz_module_result_string(result));
+                return result;
+            }
+
+            record = &manager->registry.modules[index];
+
+            if (record->state != STNLABZ_MODULE_STATE_QUALIFIED ||
+                record->qualification.tests_executed < STNLABZ_MODULE_MIN_TESTS ||
+                record->qualification.tests_passed != record->qualification.tests_executed ||
+                record->qualification.tests_failed != 0 ||
+                !record->qualification.negative_test_executed ||
+                !record->qualification.negative_test_passed)
+            {
+                fprintf(stderr, "[MODULE] Qualification gate rejected: %s\n",
+                        record->descriptor.id);
+                return STNLABZ_MODULE_ERR_QUALIFICATION;
+            }
+
+            if (!digit_qualification_record(
+                    &manager->qualifications,
+                    &record->descriptor) ||
+                !digit_qualification_store_save(
+                    manager->qualification_path,
+                    &manager->qualifications))
+            {
+                fprintf(stderr, "[MODULE] Qualification persistence failed: %s\n",
+                        record->descriptor.id);
+                return STNLABZ_MODULE_ERR_QUALIFICATION;
+            }
+
+            printf("[MODULE] Verification PASS: %s\n", record->descriptor.id);
+            printf("[MODULE] Qualification PASS: %s (%u/%u)\n",
+                   record->descriptor.id,
+                   record->qualification.tests_passed,
+                   record->qualification.tests_executed);
+            printf("[MODULE] Negative validation: PASS\n");
+        }
+        else
+        {
+            stnlabz_module_qualification_result_t restored;
+
+            memset(&restored, 0, sizeof(restored));
+            restored.tests_executed = STNLABZ_MODULE_MIN_TESTS;
+            restored.tests_passed = STNLABZ_MODULE_MIN_TESTS;
+            restored.negative_test_executed = 1;
+            restored.negative_test_passed = 1;
+
+            result = stnlabz_module_registry_verify(
+                &manager->registry,
+                record->descriptor.id
+            );
+            if (result != STNLABZ_MODULE_OK)
+            {
+                return result;
+            }
+
+            result = stnlabz_module_registry_restore_qualification(
+                &manager->registry,
+                record->descriptor.id,
+                &restored
+            );
+            if (result != STNLABZ_MODULE_OK)
+            {
+                return result;
+            }
+
+            printf("[MODULE] Qualification restored: %s %u.%u.%u\n",
+                   record->descriptor.id,
+                   record->descriptor.version_major,
+                   record->descriptor.version_minor,
+                   record->descriptor.version_patch);
+        }
+
+        record = &manager->registry.modules[index];
+        result = stnlabz_module_registry_authorize_activation(
+            &manager->registry,
+            record->descriptor.id
+        );
         if (result != STNLABZ_MODULE_OK)
         {
-            fprintf(stderr, "[MODULE] Qualification failed: %s (%s)\n",
-                    record->descriptor.id,
-                    stnlabz_module_result_string(result));
             return result;
         }
 
         record = &manager->registry.modules[index];
-
-        if (record->state != STNLABZ_MODULE_STATE_QUALIFIED ||
-            record->qualification.tests_executed < STNLABZ_MODULE_MIN_TESTS ||
-            record->qualification.tests_passed != record->qualification.tests_executed ||
-            record->qualification.tests_failed != 0 ||
-            !record->qualification.negative_test_executed ||
-            !record->qualification.negative_test_passed)
+        if (digit_authority_may_activate(record) != DIGIT_AUTHORITY_ALLOW)
         {
-            fprintf(stderr, "[MODULE] Qualification gate rejected: %s\n",
+            fprintf(stderr, "[MODULE] Authority denied activation: %s\n",
                     record->descriptor.id);
-            return STNLABZ_MODULE_ERR_QUALIFICATION;
+            return STNLABZ_MODULE_ERR_NOT_AUTHORIZED;
         }
 
-        printf("[MODULE] Verification PASS: %s\n", record->descriptor.id);
-        printf("[MODULE] Qualification PASS: %s (%u/%u)\n",
-               record->descriptor.id,
-               record->qualification.tests_passed,
-               record->qualification.tests_executed);
-        printf("[MODULE] Negative validation: PASS\n");
-
-        result = stnlabz_module_abi_authorize_and_activate(
+        result = stnlabz_module_registry_activate(
             &manager->registry,
-            record->descriptor.id,
-            &manager->host
+            record->descriptor.id
         );
-
         if (result != STNLABZ_MODULE_OK)
         {
-            fprintf(stderr, "[MODULE] Activation failed: %s (%s)\n",
-                    record->descriptor.id,
-                    stnlabz_module_result_string(result));
             return result;
+        }
+
+        if (record->descriptor.start != NULL &&
+            record->descriptor.start(&manager->host) != STNLABZ_MODULE_OK)
+        {
+            (void)stnlabz_module_registry_fail(
+                &manager->registry,
+                record->descriptor.id
+            );
+            return STNLABZ_MODULE_ERR_START_FAILED;
         }
 
         printf("[MODULE] ACTIVE: %s\n", record->descriptor.id);
