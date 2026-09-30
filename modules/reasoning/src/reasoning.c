@@ -7,34 +7,6 @@
 
 static const stnlabz_module_host_t *reasoning_host = NULL;
 
-static int contains_ci(const char *text, const char *word)
-{
-    size_t text_length;
-    size_t word_length;
-    size_t index;
-    size_t offset;
-
-    if (text == NULL || word == NULL) return 0;
-    text_length = strlen(text);
-    word_length = strlen(word);
-    if (word_length == 0 || word_length > text_length) return 0;
-
-    for (index = 0; index + word_length <= text_length; ++index)
-    {
-        int match = 1;
-        for (offset = 0; offset < word_length; ++offset)
-        {
-            if (tolower((unsigned char)text[index + offset]) != tolower((unsigned char)word[offset]))
-            {
-                match = 0;
-                break;
-            }
-        }
-        if (match) return 1;
-    }
-    return 0;
-}
-
 static void source_view(const char *context, const char **source, size_t *source_length)
 {
     const char *start;
