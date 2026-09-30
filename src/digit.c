@@ -33,6 +33,7 @@ int digit_initialize(void)
     stnlabz_module_discovery_report_t report;
     stnlabz_module_result_t result;
     char detail[256];
+    int degraded = 0;
 
     if (!digit_audit_open())
     {
@@ -50,11 +51,11 @@ int digit_initialize(void)
     result = digit_module_manager_discover(&digit_modules, &report);
     if (result != STNLABZ_MODULE_OK)
     {
-        fprintf(stderr, "[MODULE] Discovery failed: %s\n", stnlabz_module_result_string(result));
-        snprintf(detail, sizeof(detail), "result=%s", stnlabz_module_result_string(result));
+        fprintf(stderr, "[MODULE] Discovery subsystem failed: %s\n", stnlabz_module_result_string(result));
+        snprintf(detail, sizeof(detail), "result=%s core_continuing=false", stnlabz_module_result_string(result));
         (void)digit_audit_event("MODULE", "DISCOVERY_FAILED", detail);
         digit_module_manager_shutdown(&digit_modules);
-        (void)digit_audit_event("CORE", "STOP", "reason=module_discovery_failure");
+        (void)digit_audit_event("CORE", "STOP", "reason=module_discovery_subsystem_failure");
         digit_audit_close();
         return 1;
     }
@@ -64,20 +65,42 @@ int digit_initialize(void)
     snprintf(detail, sizeof(detail), "path=%s directories=%zu loaded=%zu discovered=%zu rejected=%zu", digit_module_manager_path(&digit_modules), report.directories_examined, report.modules_loaded, report.modules_discovered, report.modules_rejected);
     (void)digit_audit_event("MODULE", "DISCOVERY", detail);
 
+    if (report.modules_rejected > 0)
+    {
+        degraded = 1;
+        snprintf(detail, sizeof(detail), "rejected=%zu core_continuing=true", report.modules_rejected);
+        fprintf(stderr, "[CORE] DEGRADED: %zu module(s) rejected during discovery; Digit Core is continuing.\n", report.modules_rejected);
+        (void)digit_audit_event("CORE", "DEGRADED", detail);
+    }
+
     result = digit_module_manager_qualify_and_activate(&digit_modules);
     if (result != STNLABZ_MODULE_OK)
     {
-        snprintf(detail, sizeof(detail), "result=%s", stnlabz_module_result_string(result));
-        (void)digit_audit_event("MODULE", "INITIALIZATION_FAILED", detail);
-        digit_module_manager_shutdown(&digit_modules);
-        (void)digit_audit_event("CORE", "STOP", "reason=module_initialization_failure");
-        digit_audit_close();
-        return 1;
+        /*
+         * Module-manager activation is intentionally non-fatal to Core.
+         * Individual module failures are contained by the manager.  A manager
+         * error degrades available capability but does not grant a module the
+         * ability to terminate Digit.
+         */
+        degraded = 1;
+        snprintf(detail, sizeof(detail), "result=%s core_continuing=true", stnlabz_module_result_string(result));
+        fprintf(stderr, "[CORE] DEGRADED: module initialization reported %s; Digit Core is continuing.\n", stnlabz_module_result_string(result));
+        (void)digit_audit_event("CORE", "DEGRADED", detail);
     }
 
     digit_runtime_init(&digit_runtime, &digit_modules);
-    printf("Core initialization: READY\n\nGreetings.\n\nWhat is today's mission?\n[CORE] Runtime: ACTIVE\n");
-    (void)digit_audit_event("CORE", "READY", NULL);
+
+    if (degraded)
+    {
+        printf("Core initialization: READY (DEGRADED)\n\nGreetings.\n\nDigit is operational with reduced module capability. Check the audit log for rejected or unavailable modules.\n[CORE] Runtime: ACTIVE\n");
+        (void)digit_audit_event("CORE", "READY", "state=DEGRADED");
+    }
+    else
+    {
+        printf("Core initialization: READY\n\nGreetings.\n\nWhat is today's mission?\n[CORE] Runtime: ACTIVE\n");
+        (void)digit_audit_event("CORE", "READY", "state=GREEN");
+    }
+
     (void)digit_audit_event("CORE", "RUNTIME_ACTIVE", NULL);
 
     if (!digit_runtime_run(&digit_runtime))
