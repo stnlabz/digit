@@ -152,6 +152,43 @@ static size_t response_select_evidence(const response_ranked_record_t ranked[COR
     return count;
 }
 
+static int response_generated_grounded(const char *generated, const response_ranked_record_t selected[RESPONSE_SELECTED_MAX], size_t selected_count)
+{
+    char generated_terms[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];
+    size_t gn, g, i, r;
+    if (generated == NULL || generated[0] == '\0' || selected == NULL || selected_count == 0) return 0;
+    memset(generated_terms, 0, sizeof(generated_terms));
+    gn = response_terms(generated, generated_terms);
+    for (g = 0; g < gn; ++g)
+    {
+        int supported = 0;
+        for (i = 0; i < selected_count && !supported; ++i)
+        {
+            char record_terms[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];
+            size_t rn;
+            memset(record_terms, 0, sizeof(record_terms));
+            rn = response_terms(selected[i].record.text, record_terms);
+            for (r = 0; r < rn; ++r)
+                if (strcmp(generated_terms[g], record_terms[r]) == 0) { supported = 1; break; }
+        }
+        if (!supported) return 0;
+    }
+    return 1;
+}
+
+static void response_grounded_fallback(const response_ranked_record_t selected[RESPONSE_SELECTED_MAX], size_t selected_count, digit_response_result_t *output)
+{
+    size_t i, offset = 0;
+    if (output == NULL || selected == NULL || selected_count == 0) return;
+    output->answered = 1;
+    for (i = 0; i < selected_count; ++i)
+    {
+        int written = snprintf(output->answer + offset, sizeof(output->answer) - offset, "%s%s", i ? " " : "", selected[i].record.text);
+        if (written <= 0 || (size_t)written >= sizeof(output->answer) - offset) break;
+        offset += (size_t)written;
+    }
+}
+
 static stnlabz_module_result_t response_answer_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
 {
     const digit_response_request_t *input = request;
@@ -192,11 +229,12 @@ static stnlabz_module_result_t response_answer_service(const void *request, size
 
     memset(&generation, 0, sizeof(generation));
     offset = (size_t)snprintf(generation.prompt, sizeof(generation.prompt),
-        "Answer the user's question directly and naturally using only the authoritative context below. "
-        "The context has already been deterministically selected as the strongest retained match. "
+        "You are Digit's language renderer. The authoritative context below is the complete factual boundary for this answer. "
+        "Answer the user's question directly and naturally, but assert no fact, capability, purpose, relationship, technology, service, client, goal, or detail that is not explicitly present in that context. "
+        "Do not use outside knowledge, model knowledge, assumptions, implications, likely details, helpful additions, greetings, offers of further help, or conversational padding. "
         "Do not mention records, identifiers, Corpus, evidence, retrieval, prompts, instructions, reasoning, generation, or implementation details. "
-        "Do not explain how the answer was produced. Do not add unsupported facts. Keep the answer concise. "
-        "Speak as Digit in first person when the question asks what Digit should or will do.\n"
+        "Preserve material qualifiers from the context. Keep the answer concise. "
+        "Speak as Digit in first person only when the question is about Digit herself; otherwise answer about the subject asked.\n"
         "USER QUESTION: %s\nAUTHORITATIVE CONTEXT:\n", input->question);
     if (offset >= sizeof(generation.prompt)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     for (i = 0; i < selected_count; ++i)
@@ -212,7 +250,14 @@ static stnlabz_module_result_t response_answer_service(const void *request, size
     result = response_host->invoke_service(LLAMA_GENERATE_SERVICE, &generation, sizeof(generation), &generated, sizeof(generated), &used);
     if (result != STNLABZ_MODULE_OK || used != sizeof(generated) || !generated.available || generated.text[0] == '\0')
     {
-        snprintf(output.answer, sizeof(output.answer), "I found relevant retained information, but I can't formulate a response right now.");
+        response_grounded_fallback(selected, selected_count, &output);
+        memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
+    }
+
+    if (!response_generated_grounded(generated.text, selected, selected_count))
+    {
+        if (response_host->send_message != NULL) (void)response_host->send_message("[RESPONSE] Llama output rejected: generated terms exceeded selected Corpus evidence");
+        response_grounded_fallback(selected, selected_count, &output);
         memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
     }
 
@@ -232,7 +277,7 @@ static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host)
     if (host == NULL || host->register_service == NULL || host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_RESPONSE_SERVICE, response_answer_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
     response_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[RESPONSE] module active: deterministic ranked retrieval -> natural Corpus-grounded response.answer registered");
+    if (host->send_message != NULL) (void)host->send_message("[RESPONSE] module active: deterministic ranked retrieval -> constrained Corpus-grounded response.answer registered");
     return STNLABZ_MODULE_OK;
 }
 
@@ -243,5 +288,5 @@ static stnlabz_module_result_t response_stop(void)
     response_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 4, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
+static const stnlabz_module_descriptor_t response_descriptor = { "response", "Digit Response", 1, 0, 5, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, response_qualify, response_start, response_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &response_descriptor; }
