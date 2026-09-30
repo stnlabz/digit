@@ -1,0 +1,15 @@
+[Unit]
+Description=STN-LABZ Digit
+After=network.target
+
+[Service]
+Type=simple
+User=digit
+Group=digit
+WorkingDirectory=/opt/digit
+ExecStart=/opt/digit/bin/digit
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
