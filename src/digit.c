@@ -3,6 +3,7 @@
 #include "alert.h"
 #include "audit.h"
 #include "channel.h"
+#include "core_services.h"
 #include "digit.h"
 #include "module.h"
 #include "module_manager.h"
@@ -63,6 +64,16 @@ int digit_initialize(void)
     (void)digit_audit_event("CORE", "START", NULL);
     if (!digit_channel_init()) (void)digit_audit_event("CHANNEL", "INIT_FAILED", "Core continuing without persistent channels");
     if (!digit_alert_init()) (void)digit_audit_event("ALERT", "INIT_FAILED", "Core continuing without persistent alerts");
+    if (!digit_core_services_register())
+    {
+        (void)digit_audit_event("CORE", "SERVICE_INIT_FAILED", "channel/alert Core services unavailable");
+        digit_raise_core_alert(DIGIT_ALERT_ERROR, "Core operator services unavailable", "channel/alert service registration failed", "DEGRADED");
+        degraded = 1;
+    }
+    else
+    {
+        (void)digit_audit_event("CORE", "SERVICES_READY", "channels=true alerts=true");
+    }
 
     printf("%s\n", DIGIT_NAME);
     printf("Digit is using the STN-LABZ ABI version %u.%u\n", STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR);
@@ -78,6 +89,7 @@ int digit_initialize(void)
         (void)digit_audit_event("MODULE", "DISCOVERY_FAILED", detail);
         digit_raise_core_alert(DIGIT_ALERT_CRITICAL, "Module discovery subsystem failure", detail, "FAULT");
         digit_module_manager_shutdown(&digit_modules);
+        digit_core_services_unregister();
         (void)digit_audit_event("CORE", "STOP", "reason=module_discovery_subsystem_failure");
         digit_audit_close();
         return 1;
@@ -134,6 +146,7 @@ int digit_initialize(void)
         (void)digit_audit_event("CORE", "RUNTIME_FAILED", NULL);
         digit_raise_core_alert(DIGIT_ALERT_CRITICAL, "Digit runtime stopped unexpectedly", "runtime_run returned failure", "FAULT");
         digit_module_manager_shutdown(&digit_modules);
+        digit_core_services_unregister();
         (void)digit_audit_event("CORE", "STOP", "reason=runtime_failure");
         digit_audit_close();
         return 1;
@@ -142,6 +155,7 @@ int digit_initialize(void)
     printf("[CORE] Shutdown requested.\n");
     (void)digit_audit_event("CORE", "SHUTDOWN_REQUESTED", NULL);
     digit_module_manager_shutdown(&digit_modules);
+    digit_core_services_unregister();
     printf("[CORE] Shutdown complete.\n");
     (void)digit_audit_event("CORE", "STOP", "reason=clean_shutdown");
     digit_audit_close();
