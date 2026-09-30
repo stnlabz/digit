@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "module.h"
 
+#define DIGIT_REASONING_SERVICE "reasoning.evaluate"
+
 typedef enum
 {
     DIGIT_RELEVANCE_IRRELEVANT = 0,
