@@ -17,10 +17,12 @@ int main(void)
 {
     const stnlabz_module_descriptor_t *descriptor = stnlabz_module_get_descriptor();
     stnlabz_module_qualification_result_t qualification;
+    digit_corpus_builder_result_t result;
 
+    memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "corpus_builder") == 0, "module identity is corpus_builder");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 0, "internal version is 1.0.0");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 1, "internal version is 1.0.1");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
