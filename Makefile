@@ -41,7 +41,8 @@ DIGIT_SOURCES := \
 	src/audit.c \
 	src/service_registry.c \
 	src/channel.c \
-	src/alert.c
+	src/alert.c \
+	src/core_services.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
