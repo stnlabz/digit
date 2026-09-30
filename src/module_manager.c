@@ -99,9 +99,6 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         if (digit_authority_requires_qualification(&manager->qualifications,
                                                    &record->descriptor))
         {
-            /* Discovery already registered the descriptor. Do not call
-             * abi_prepare(), because prepare begins with DISCOVER and the
-             * existing record would correctly be reported as DUPLICATE. */
             result = stnlabz_module_registry_verify(&manager->registry,
                                                     record->descriptor.id);
             if (result != STNLABZ_MODULE_OK)
@@ -109,7 +106,9 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                 fprintf(stderr, "[MODULE] Verification failed: %s (%s)\n",
                         record->descriptor.id,
                         stnlabz_module_result_string(result));
-                return result;
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             result = stnlabz_module_registry_qualify(&manager->registry,
@@ -119,7 +118,9 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                 fprintf(stderr, "[MODULE] Qualification failed: %s (%s)\n",
                         record->descriptor.id,
                         stnlabz_module_result_string(result));
-                return result;
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             record = &manager->registry.modules[index];
@@ -133,7 +134,9 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             {
                 fprintf(stderr, "[MODULE] Qualification gate rejected: %s\n",
                         record->descriptor.id);
-                return STNLABZ_MODULE_ERR_QUALIFICATION;
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             if (!digit_qualification_record(&manager->qualifications,
@@ -143,7 +146,9 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             {
                 fprintf(stderr, "[MODULE] Qualification persistence failed: %s\n",
                         record->descriptor.id);
-                return STNLABZ_MODULE_ERR_QUALIFICATION;
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             printf("[MODULE] Verification PASS: %s\n", record->descriptor.id);
@@ -167,7 +172,12 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                                                     record->descriptor.id);
             if (result != STNLABZ_MODULE_OK)
             {
-                return result;
+                fprintf(stderr, "[MODULE] Verification failed: %s (%s)\n",
+                        record->descriptor.id,
+                        stnlabz_module_result_string(result));
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             result = stnlabz_module_registry_restore_qualification(
@@ -176,7 +186,12 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                 &restored);
             if (result != STNLABZ_MODULE_OK)
             {
-                return result;
+                fprintf(stderr, "[MODULE] Qualification restore failed: %s (%s)\n",
+                        record->descriptor.id,
+                        stnlabz_module_result_string(result));
+                fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                        record->descriptor.id);
+                continue;
             }
 
             printf("[MODULE] Qualification restored: %s %u.%u.%u\n",
@@ -191,7 +206,12 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                                                               record->descriptor.id);
         if (result != STNLABZ_MODULE_OK)
         {
-            return result;
+            fprintf(stderr, "[MODULE] Activation authorization failed: %s (%s)\n",
+                    record->descriptor.id,
+                    stnlabz_module_result_string(result));
+            fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                    record->descriptor.id);
+            continue;
         }
 
         record = &manager->registry.modules[index];
@@ -199,14 +219,21 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         {
             fprintf(stderr, "[MODULE] Authority denied activation: %s\n",
                     record->descriptor.id);
-            return STNLABZ_MODULE_ERR_NOT_AUTHORIZED;
+            fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                    record->descriptor.id);
+            continue;
         }
 
         result = stnlabz_module_registry_activate(&manager->registry,
                                                   record->descriptor.id);
         if (result != STNLABZ_MODULE_OK)
         {
-            return result;
+            fprintf(stderr, "[MODULE] Activation failed: %s (%s)\n",
+                    record->descriptor.id,
+                    stnlabz_module_result_string(result));
+            fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                    record->descriptor.id);
+            continue;
         }
 
         if (record->descriptor.start != NULL &&
@@ -214,7 +241,11 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         {
             (void)stnlabz_module_registry_fail(&manager->registry,
                                                record->descriptor.id);
-            return STNLABZ_MODULE_ERR_START_FAILED;
+            fprintf(stderr, "[MODULE] Start failed: %s\n",
+                    record->descriptor.id);
+            fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
+                    record->descriptor.id);
+            continue;
         }
 
         printf("[MODULE] ACTIVE: %s\n", record->descriptor.id);
