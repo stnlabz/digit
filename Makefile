@@ -12,6 +12,7 @@ TARGET := build/digit
 MODULE_DIR := build/modules
 SACRIFICIAL_DIR := $(MODULE_DIR)/sacrificial
 SACRIFICIAL_SO := $(SACRIFICIAL_DIR)/sacrificial.so
+SACRIFICIAL_CONF := $(SACRIFICIAL_DIR)/module.conf
 TEST_MODULE_MANAGER := build/test_module_manager
 TEST_HOTLOAD := build/test_hotload
 TEST_QUALIFICATION := build/test_qualification
@@ -66,6 +67,9 @@ build/abi_%.o: $(ABI_SRC)/%.c | build
 $(SACRIFICIAL_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@
 
+$(SACRIFICIAL_CONF): tests/modules/sacrificial/module.conf | $(SACRIFICIAL_DIR)
+	cp $< $@
+
 $(TEST_MODULE_MANAGER): tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
@@ -81,7 +85,7 @@ $(TEST_QUALIFICATION_STORE): tests/test_qualification_store.c src/qualification.
 $(TEST_AUTHORITY): tests/test_authority.c src/authority.c src/qualification.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_authority.c src/authority.c src/qualification.c -o $@
 
-$(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIFICIAL_SO) | build
+$(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIFICIAL_SO) $(SACRIFICIAL_CONF) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c -o $@ $(LDLIBS)
 
 test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL)
