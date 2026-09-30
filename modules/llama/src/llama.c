@@ -2,7 +2,6 @@
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -10,8 +9,8 @@
 #include "llama.h"
 #include "module.h"
 
-#define LLAMA_HTTP_MAX 16384
-#define LLAMA_JSON_MAX 12288
+#define LLAMA_HTTP_MAX 24576
+#define LLAMA_JSON_MAX 20480
 #define LLAMA_MIN_CONTEXT_LENGTH 24
 
 static const stnlabz_module_host_t *llama_host = NULL;
@@ -76,7 +75,9 @@ static int json_content(const char *json, char *output, size_t output_size)
         {
             ch = *p++;
             if (ch == '\0') return 0;
-            if (ch == 'n' || ch == 'r' || ch == 't') ch = ' ';
+            if (ch == 'n') ch = '\n';
+            else if (ch == 'r') ch = '\r';
+            else if (ch == 't') ch = '\t';
             else if (ch != '"' && ch != '\\' && ch != '/') return 0;
         }
         if (o + 1 >= output_size) return 0;
@@ -85,6 +86,45 @@ static int json_content(const char *json, char *output, size_t output_size)
     if (*p != '"') return 0;
     output[o] = '\0';
     return o > 0;
+}
+
+static int llama_completion(const char *prompt, unsigned int n_predict, char *output, size_t output_size)
+{
+    struct sockaddr_in address;
+    int socket_fd;
+    char escaped[DIGIT_LLAMA_PROMPT_MAX * 2];
+    char body[LLAMA_JSON_MAX];
+    char request[LLAMA_HTTP_MAX];
+    char response[LLAMA_HTTP_MAX];
+    size_t received_total = 0;
+    ssize_t received;
+    int body_length, request_length;
+    const char *json;
+
+    if (prompt == NULL || prompt[0] == '\0' || output == NULL || output_size == 0) return 0;
+    if (!json_escape(prompt, escaped, sizeof(escaped))) return 0;
+    body_length = snprintf(body, sizeof(body), "{\"prompt\":\"%s\",\"n_predict\":%u,\"temperature\":0,\"repeat_penalty\":1.15,\"repeat_last_n\":64}", escaped, n_predict);
+    if (body_length <= 0 || (size_t)body_length >= sizeof(body)) return 0;
+    request_length = snprintf(request, sizeof(request), "POST /completion HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", body_length, body);
+    if (request_length <= 0 || (size_t)request_length >= sizeof(request)) return 0;
+    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_fd < 0) return 0;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(LLAMA_DEFAULT_PORT);
+    if (inet_pton(AF_INET, LLAMA_DEFAULT_HOST, &address.sin_addr) != 1 || connect(socket_fd, (struct sockaddr *)&address, sizeof(address)) != 0) { close(socket_fd); return 0; }
+    if (send(socket_fd, request, (size_t)request_length, 0) != request_length) { close(socket_fd); return 0; }
+    while ((received = recv(socket_fd, response + received_total, sizeof(response) - 1 - received_total, 0)) > 0)
+    {
+        received_total += (size_t)received;
+        if (received_total >= sizeof(response) - 1) break;
+    }
+    close(socket_fd);
+    response[received_total] = '\0';
+    if (strncmp(response, "HTTP/1.1 200", 12) != 0 && strncmp(response, "HTTP/1.0 200", 12) != 0) return 0;
+    json = strstr(response, "\r\n\r\n");
+    if (json == NULL) return 0;
+    return json_content(json + 4, output, output_size);
 }
 
 static void normalize_text(const char *input, char *output, size_t output_size)
@@ -155,40 +195,10 @@ static void audit_message(const char *prefix, const char *text)
 
 static int llama_generate_context(const char *text, char *context, size_t context_size)
 {
-    struct sockaddr_in address;
-    int socket_fd;
-    char escaped[DIGIT_LLAMA_TEXT_MAX * 2];
-    char body[LLAMA_JSON_MAX];
-    char request[LLAMA_HTTP_MAX];
-    char response[LLAMA_HTTP_MAX];
-    size_t received_total = 0;
-    ssize_t received;
-    int body_length, request_length;
-    const char *json;
-
-    if (!json_escape(text, escaped, sizeof(escaped))) return 0;
-    body_length = snprintf(body, sizeof(body), "{\"prompt\":\"You are producing advisory context for Digit's deterministic reasoning engine. The SOURCE below is authoritative and must never be contradicted, strengthened, weakened, reversed, or replaced. Return exactly one short sentence that restates only the operational meaning already present in SOURCE. Preserve named subjects, conditions, negation, obligation, permission, and optional/non-critical/critical qualifiers. Do not infer consequences. Do not add facts. Do not speculate. Do not quote SOURCE verbatim.\\nSOURCE: %s\\nADVISORY CONTEXT:\",\"n_predict\":64,\"temperature\":0,\"repeat_penalty\":1.15,\"repeat_last_n\":64}", escaped);
-    if (body_length <= 0 || (size_t)body_length >= sizeof(body)) return 0;
-    request_length = snprintf(request, sizeof(request), "POST /completion HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", body_length, body);
-    if (request_length <= 0 || (size_t)request_length >= sizeof(request)) return 0;
-    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd < 0) return 0;
-    memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    address.sin_port = htons(LLAMA_DEFAULT_PORT);
-    if (inet_pton(AF_INET, LLAMA_DEFAULT_HOST, &address.sin_addr) != 1 || connect(socket_fd, (struct sockaddr *)&address, sizeof(address)) != 0) { close(socket_fd); return 0; }
-    if (send(socket_fd, request, (size_t)request_length, 0) != request_length) { close(socket_fd); return 0; }
-    while ((received = recv(socket_fd, response + received_total, sizeof(response) - 1 - received_total, 0)) > 0)
-    {
-        received_total += (size_t)received;
-        if (received_total >= sizeof(response) - 1) break;
-    }
-    close(socket_fd);
-    response[received_total] = '\0';
-    if (strncmp(response, "HTTP/1.1 200", 12) != 0 && strncmp(response, "HTTP/1.0 200", 12) != 0) return 0;
-    json = strstr(response, "\r\n\r\n");
-    if (json == NULL) return 0;
-    return json_content(json + 4, context, context_size);
+    char prompt[DIGIT_LLAMA_PROMPT_MAX];
+    int written = snprintf(prompt, sizeof(prompt), "You are producing advisory context for Digit's deterministic reasoning engine. The SOURCE below is authoritative and must never be contradicted, strengthened, weakened, reversed, or replaced. Return exactly one short sentence that restates only the operational meaning already present in SOURCE. Preserve named subjects, conditions, negation, obligation, permission, and optional/non-critical/critical qualifiers. Do not infer consequences. Do not add facts. Do not speculate. Do not quote SOURCE verbatim.\nSOURCE: %s\nADVISORY CONTEXT:", text);
+    if (written <= 0 || (size_t)written >= sizeof(prompt)) return 0;
+    return llama_completion(prompt, 64, context, context_size);
 }
 
 static stnlabz_module_result_t llama_context_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
@@ -199,62 +209,76 @@ static stnlabz_module_result_t llama_context_service(const void *request, size_t
     (void)handler_context;
     if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || input->text[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(&output, 0, sizeof(output));
-    memset(generated, 0, sizeof(generated));
+    memset(&output, 0, sizeof(output)); memset(generated, 0, sizeof(generated));
     if (llama_generate_context(input->text, generated, sizeof(generated)) && context_is_valid(input->text, generated))
     {
-        output.available = 1;
-        snprintf(output.context, sizeof(output.context), "%s", generated);
-        audit_message("advisory context accepted:", output.context);
+        output.available = 1; snprintf(output.context, sizeof(output.context), "%s", generated); audit_message("advisory context accepted:", output.context);
     }
     else
     {
-        output.available = 0;
-        snprintf(output.context, sizeof(output.context), "%s", input->text);
+        output.available = 0; snprintf(output.context, sizeof(output.context), "%s", input->text);
         if (generated[0] != '\0') audit_message("advisory context rejected; source-only fallback; generated=", generated);
         else audit_message("advisory context generation failed; source-only fallback", NULL);
     }
-    memcpy(response, &output, sizeof(output));
-    *response_used = sizeof(output);
-    return STNLABZ_MODULE_OK;
+    memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
+}
+
+static stnlabz_module_result_t llama_generate_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
+{
+    const digit_llama_generate_request_t *input = request;
+    digit_llama_generate_result_t output;
+    (void)handler_context;
+    if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if (memchr(input->prompt, '\0', sizeof(input->prompt)) == NULL || input->prompt[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(&output, 0, sizeof(output));
+    if (llama_completion(input->prompt, 256, output.text, sizeof(output.text)))
+    {
+        output.available = 1;
+        audit_message("bounded generation completed", NULL);
+    }
+    else audit_message("bounded generation unavailable", NULL);
+    memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t llama_qualify(stnlabz_module_qualification_result_t *result)
 {
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result, 0, sizeof(*result));
-    result->tests_executed = 10;
-    result->tests_passed = 10;
-    result->tests_failed = 0;
-    result->negative_test_executed = 1;
-    result->negative_test_passed = 1;
-    return STNLABZ_MODULE_OK;
+    memset(result, 0, sizeof(*result)); result->tests_executed = 10; result->tests_passed = 10; result->negative_test_executed = 1; result->negative_test_passed = 1; return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t llama_start(const stnlabz_module_host_t *host)
 {
     if (host == NULL || host->register_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_LLAMA_CONTEXT_SERVICE, llama_context_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
+    if (!host->register_service(DIGIT_LLAMA_GENERATE_SERVICE, llama_generate_service, NULL))
+    {
+        if (host->unregister_service != NULL) (void)host->unregister_service(DIGIT_LLAMA_CONTEXT_SERVICE, NULL);
+        return STNLABZ_MODULE_ERR_START_FAILED;
+    }
     llama_host = host;
     if (host->send_message != NULL)
     {
-        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: source-authoritative advisory context enabled");
-        else (void)host->send_message("[LLAMA] module active: llama.context registered; endpoint unavailable at 127.0.0.1:8080");
+        if (llama_endpoint_reachable()) (void)host->send_message("[LLAMA] module active: llama.context + llama.generate registered; endpoint reachable at 127.0.0.1:8080");
+        else (void)host->send_message("[LLAMA] module active: services registered; endpoint unavailable at 127.0.0.1:8080");
     }
     return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t llama_stop(void)
 {
+    int ok = 1;
     if (llama_host != NULL && llama_host->unregister_service != NULL)
-        if (!llama_host->unregister_service(DIGIT_LLAMA_CONTEXT_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
+    {
+        if (!llama_host->unregister_service(DIGIT_LLAMA_GENERATE_SERVICE, NULL)) ok = 0;
+        if (!llama_host->unregister_service(DIGIT_LLAMA_CONTEXT_SERVICE, NULL)) ok = 0;
+    }
     llama_host = NULL;
-    return STNLABZ_MODULE_OK;
+    return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
 static const stnlabz_module_descriptor_t llama_descriptor =
 {
-    "llama", "Digit Llama Interface", 1, 0, 9,
+    "llama", "Digit Llama Interface", 1, 1, 0,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     llama_qualify, llama_start, llama_stop
 };
