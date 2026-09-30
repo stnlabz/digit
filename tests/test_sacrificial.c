@@ -26,7 +26,7 @@ int main(void)
     load_result = stnlabz_module_loader_load(
         &loader,
         "sacrificial",
-        "build/modules/sacrificial/sacrificial.so",
+        "build/tests/modules/sacrificial/sacrificial.so",
         &descriptor
     );
 
