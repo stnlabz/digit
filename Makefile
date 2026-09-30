@@ -10,6 +10,9 @@ LDLIBS ?= -ldl
 
 TARGET := build/digit
 MODULE_DIR := build/modules
+LLAMA_DIR := $(MODULE_DIR)/llama
+LLAMA_SO := $(LLAMA_DIR)/llama.so
+LLAMA_CONF := $(LLAMA_DIR)/module.conf
 SACRIFICIAL_DIR := $(MODULE_DIR)/sacrificial
 SACRIFICIAL_SO := $(SACRIFICIAL_DIR)/sacrificial.so
 SACRIFICIAL_CONF := $(SACRIFICIAL_DIR)/module.conf
@@ -48,7 +51,7 @@ OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
 
 .PHONY: all clean check-abi test
 
-all: check-abi $(TARGET) $(MODULE_DIR)
+all: check-abi $(TARGET) $(LLAMA_SO) $(LLAMA_CONF)
 
 check-abi:
 	@test -f "$(ABI_INCLUDE)/abi.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/abi.h"; exit 1; }
@@ -63,6 +66,12 @@ build/digit_%.o: src/%.c | build
 
 build/abi_%.o: $(ABI_SRC)/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(LLAMA_SO): modules/llama/llama.c | $(LLAMA_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@
+
+$(LLAMA_CONF): modules/llama/module.conf | $(LLAMA_DIR)
+	cp $< $@
 
 $(SACRIFICIAL_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@
@@ -101,6 +110,9 @@ build:
 
 $(MODULE_DIR): | build
 	mkdir -p $(MODULE_DIR)
+
+$(LLAMA_DIR): | $(MODULE_DIR)
+	mkdir -p $(LLAMA_DIR)
 
 $(SACRIFICIAL_DIR): | $(MODULE_DIR)
 	mkdir -p $(SACRIFICIAL_DIR)
