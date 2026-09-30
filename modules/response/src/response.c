@@ -73,8 +73,46 @@ static size_t response_rank_evidence(const char *question,const response_corpus_
 
 static size_t response_select_evidence(const char *question,const response_ranked_record_t ranked[CORPUS_SEARCH_MAX],size_t ranked_count,response_ranked_record_t selected[RESPONSE_SELECTED_MAX])
 {
-    char qt[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];int covered[RESPONSE_TERM_COUNT];size_t qn,i,q,count=0;memset(qt,0,sizeof(qt));memset(covered,0,sizeof(covered));qn=response_terms(question,qt);if(!ranked||!selected||ranked_count==0||qn==0||ranked[0].matches==0)return 0;
-    for(i=0;i<ranked_count&&count<RESPONSE_SELECTED_MAX;++i){char rt[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];size_t rn;int adds=0;memset(rt,0,sizeof(rt));rn=response_terms(ranked[i].record.text,rt);for(q=0;q<qn;++q)if(!covered[q]&&response_has_term(rt,rn,qt[q])){adds=1;break;}if(!adds)continue;selected[count++]=ranked[i];for(q=0;q<qn;++q)if(response_has_term(rt,rn,qt[q]))covered[q]=1;}
+    char qt[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX],anchor_terms[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];
+    int covered[RESPONSE_TERM_COUNT];
+    size_t qn,an,i,q,count=0;
+    unsigned int primary_matches,minimum_matches;
+
+    memset(qt,0,sizeof(qt));
+    memset(anchor_terms,0,sizeof(anchor_terms));
+    memset(covered,0,sizeof(covered));
+    qn=response_terms(question,qt);
+    if(!ranked||!selected||ranked_count==0||qn==0||ranked[0].matches==0)return 0;
+
+    selected[count++]=ranked[0];
+    primary_matches=ranked[0].matches;
+    minimum_matches=primary_matches>1?primary_matches-1:1;
+    an=response_terms(ranked[0].record.text,anchor_terms);
+    for(q=0;q<qn;++q)if(response_has_term(anchor_terms,an,qt[q]))covered[q]=1;
+
+    for(i=1;i<ranked_count&&count<RESPONSE_SELECTED_MAX;++i)
+    {
+        char rt[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];
+        size_t rn;
+        unsigned int shared_anchor=0;
+        int adds=0;
+
+        if(ranked[i].matches<minimum_matches)continue;
+        memset(rt,0,sizeof(rt));
+        rn=response_terms(ranked[i].record.text,rt);
+
+        for(q=0;q<an;++q)
+            if(response_has_term(rt,rn,anchor_terms[q]))++shared_anchor;
+        if(shared_anchor<2)continue;
+
+        for(q=0;q<qn;++q)
+            if(!covered[q]&&response_has_term(rt,rn,qt[q])){adds=1;break;}
+        if(!adds)continue;
+
+        selected[count++]=ranked[i];
+        for(q=0;q<qn;++q)
+            if(response_has_term(rt,rn,qt[q]))covered[q]=1;
+    }
     return count;
 }
 
@@ -102,7 +140,7 @@ static stnlabz_module_result_t response_answer_service(const void *request,size_
 }
 
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(!result)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(!host||!host->register_service||!host->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,response_answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: complete Corpus candidate ranking -> constrained Corpus-grounded response.answer registered");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(!host||!host->register_service||!host->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,response_answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: subject-anchored Corpus evidence selection -> constrained Corpus-grounded response.answer registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host&&response_host->unregister_service)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,0,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,0,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
