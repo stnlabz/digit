@@ -85,7 +85,7 @@ static const stnlabz_module_descriptor_t llama_descriptor =
     "Digit Llama Interface",
     1,
     0,
-    0,
+    1,
     STNLABZ_MODULE_API_MAJOR,
     STNLABZ_MODULE_API_MINOR,
     llama_qualify,
