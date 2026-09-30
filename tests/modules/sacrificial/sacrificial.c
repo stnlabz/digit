@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 #include "module.h"
 
 static stnlabz_module_result_t sacrificial_qualify(
