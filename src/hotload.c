@@ -116,6 +116,24 @@ static const digit_hotload_file_t *digit_hotload_find(
     return NULL;
 }
 
+static int digit_write_all(int fd, const void *data, size_t size)
+{
+    const unsigned char *bytes = data;
+    size_t offset = 0;
+
+    while (offset < size)
+    {
+        ssize_t sent = write(fd, bytes + offset, size - offset);
+        if (sent <= 0)
+        {
+            return 0;
+        }
+        offset += (size_t)sent;
+    }
+
+    return 1;
+}
+
 static int digit_copy_candidate(const char *source, char *staged, size_t staged_size)
 {
     int source_fd;
@@ -146,18 +164,12 @@ static int digit_copy_candidate(const char *source, char *staged, size_t staged_
 
     while ((received = read(source_fd, buffer, sizeof(buffer))) > 0)
     {
-        ssize_t offset = 0;
-        while (offset < received)
+        if (!digit_write_all(staged_fd, buffer, (size_t)received))
         {
-            ssize_t sent = write(staged_fd, buffer + offset, (size_t)(received - offset));
-            if (sent <= 0)
-            {
-                close(source_fd);
-                close(staged_fd);
-                unlink(staged);
-                return 0;
-            }
-            offset += sent;
+            close(source_fd);
+            close(staged_fd);
+            unlink(staged);
+            return 0;
         }
     }
 
@@ -251,12 +263,13 @@ static int digit_qualify_candidate_isolated(
     {
         digit_candidate_result_t child_result;
         int ok;
+        int sent;
 
         close(pipe_fd[0]);
         ok = digit_qualify_candidate_child(module_id, path, &child_result);
-        (void)write(pipe_fd[1], &child_result, sizeof(child_result));
+        sent = digit_write_all(pipe_fd[1], &child_result, sizeof(child_result));
         close(pipe_fd[1]);
-        _exit(ok ? 0 : 1);
+        _exit(ok && sent ? 0 : 1);
     }
 
     close(pipe_fd[1]);
