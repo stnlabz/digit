@@ -12,13 +12,11 @@ static int digit_module_manager_set_qualification_path(
 {
     int written;
 
-    written = snprintf(
-        manager->qualification_path,
-        sizeof(manager->qualification_path),
-        "%s/%s",
-        manager->modules_path,
-        DIGIT_QUALIFICATION_STATE_FILE
-    );
+    written = snprintf(manager->qualification_path,
+                       sizeof(manager->qualification_path),
+                       "%s/%s",
+                       manager->modules_path,
+                       DIGIT_QUALIFICATION_STATE_FILE);
 
     return written >= 0 && (size_t)written < sizeof(manager->qualification_path);
 }
@@ -56,11 +54,8 @@ stnlabz_module_result_t digit_module_manager_discover(
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     }
 
-    result = stnlabz_module_discovery_get_path(
-        manager->modules_path,
-        sizeof(manager->modules_path)
-    );
-
+    result = stnlabz_module_discovery_get_path(manager->modules_path,
+                                               sizeof(manager->modules_path));
     if (result != STNLABZ_MODULE_OK)
     {
         return result;
@@ -71,21 +66,18 @@ stnlabz_module_result_t digit_module_manager_discover(
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     }
 
-    if (!digit_qualification_store_load(
-            manager->qualification_path,
-            &manager->qualifications))
+    if (!digit_qualification_store_load(manager->qualification_path,
+                                        &manager->qualifications))
     {
         fprintf(stderr, "[MODULE] Qualification state rejected: %s\n",
                 manager->qualification_path);
         return STNLABZ_MODULE_ERR_QUALIFICATION;
     }
 
-    return stnlabz_module_discovery_scan(
-        &manager->registry,
-        &manager->loader,
-        manager->modules_path,
-        report
-    );
+    return stnlabz_module_discovery_scan(&manager->registry,
+                                         &manager->loader,
+                                         manager->modules_path,
+                                         report);
 }
 
 stnlabz_module_result_t digit_module_manager_qualify_and_activate(
@@ -104,15 +96,24 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         stnlabz_module_record_t *record = &manager->registry.modules[index];
         stnlabz_module_result_t result;
 
-        if (digit_authority_requires_qualification(
-                &manager->qualifications,
-                &record->descriptor))
+        if (digit_authority_requires_qualification(&manager->qualifications,
+                                                   &record->descriptor))
         {
-            result = stnlabz_module_abi_prepare(
-                &manager->registry,
-                &record->descriptor
-            );
+            /* Discovery already registered the descriptor. Do not call
+             * abi_prepare(), because prepare begins with DISCOVER and the
+             * existing record would correctly be reported as DUPLICATE. */
+            result = stnlabz_module_registry_verify(&manager->registry,
+                                                    record->descriptor.id);
+            if (result != STNLABZ_MODULE_OK)
+            {
+                fprintf(stderr, "[MODULE] Verification failed: %s (%s)\n",
+                        record->descriptor.id,
+                        stnlabz_module_result_string(result));
+                return result;
+            }
 
+            result = stnlabz_module_registry_qualify(&manager->registry,
+                                                     record->descriptor.id);
             if (result != STNLABZ_MODULE_OK)
             {
                 fprintf(stderr, "[MODULE] Qualification failed: %s (%s)\n",
@@ -135,12 +136,10 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                 return STNLABZ_MODULE_ERR_QUALIFICATION;
             }
 
-            if (!digit_qualification_record(
-                    &manager->qualifications,
-                    &record->descriptor) ||
-                !digit_qualification_store_save(
-                    manager->qualification_path,
-                    &manager->qualifications))
+            if (!digit_qualification_record(&manager->qualifications,
+                                            &record->descriptor) ||
+                !digit_qualification_store_save(manager->qualification_path,
+                                                &manager->qualifications))
             {
                 fprintf(stderr, "[MODULE] Qualification persistence failed: %s\n",
                         record->descriptor.id);
@@ -164,10 +163,8 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             restored.negative_test_executed = 1;
             restored.negative_test_passed = 1;
 
-            result = stnlabz_module_registry_verify(
-                &manager->registry,
-                record->descriptor.id
-            );
+            result = stnlabz_module_registry_verify(&manager->registry,
+                                                    record->descriptor.id);
             if (result != STNLABZ_MODULE_OK)
             {
                 return result;
@@ -176,8 +173,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             result = stnlabz_module_registry_restore_qualification(
                 &manager->registry,
                 record->descriptor.id,
-                &restored
-            );
+                &restored);
             if (result != STNLABZ_MODULE_OK)
             {
                 return result;
@@ -191,10 +187,8 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         }
 
         record = &manager->registry.modules[index];
-        result = stnlabz_module_registry_authorize_activation(
-            &manager->registry,
-            record->descriptor.id
-        );
+        result = stnlabz_module_registry_authorize_activation(&manager->registry,
+                                                              record->descriptor.id);
         if (result != STNLABZ_MODULE_OK)
         {
             return result;
@@ -208,10 +202,8 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             return STNLABZ_MODULE_ERR_NOT_AUTHORIZED;
         }
 
-        result = stnlabz_module_registry_activate(
-            &manager->registry,
-            record->descriptor.id
-        );
+        result = stnlabz_module_registry_activate(&manager->registry,
+                                                  record->descriptor.id);
         if (result != STNLABZ_MODULE_OK)
         {
             return result;
@@ -220,10 +212,8 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         if (record->descriptor.start != NULL &&
             record->descriptor.start(&manager->host) != STNLABZ_MODULE_OK)
         {
-            (void)stnlabz_module_registry_fail(
-                &manager->registry,
-                record->descriptor.id
-            );
+            (void)stnlabz_module_registry_fail(&manager->registry,
+                                               record->descriptor.id);
             return STNLABZ_MODULE_ERR_START_FAILED;
         }
 
@@ -250,23 +240,20 @@ void digit_module_manager_shutdown(
 
         if (record->state == STNLABZ_MODULE_STATE_ACTIVE)
         {
-            (void)stnlabz_module_abi_stop(&manager->registry, record->descriptor.id);
+            (void)stnlabz_module_abi_stop(&manager->registry,
+                                          record->descriptor.id);
         }
     }
 
     stnlabz_module_loader_unload_all(&manager->loader);
 }
 
-size_t digit_module_manager_count(
-    const digit_module_manager_t *manager
-)
+size_t digit_module_manager_count(const digit_module_manager_t *manager)
 {
     return manager == NULL ? 0 : manager->registry.count;
 }
 
-const char *digit_module_manager_path(
-    const digit_module_manager_t *manager
-)
+const char *digit_module_manager_path(const digit_module_manager_t *manager)
 {
     return manager == NULL ? NULL : manager->modules_path;
 }
