@@ -21,7 +21,7 @@ typedef enum { DIGIT_RELEVANCE_IRRELEVANT = 0, DIGIT_RELEVANCE_UNCERTAIN = 1, DI
 typedef enum { DIGIT_CONTEXT_UNKNOWN = 0, DIGIT_CONTEXT_CONVERSATION, DIGIT_CONTEXT_ENGINEERING, DIGIT_CONTEXT_RULE, DIGIT_CONTEXT_DECISION, DIGIT_CONTEXT_OBSERVATION, DIGIT_CONTEXT_HYPOTHESIS } interface_context_category_t;
 typedef struct { interface_relevance_t relevance; interface_context_category_t category; unsigned int confidence; char reason[256]; } interface_reasoning_result_t;
 typedef struct { char text[CORPUS_BUILDER_TEXT_MAX]; char source[256]; } interface_builder_request_t;
-typedef struct { int candidate; unsigned int confidence; char category[64]; char reason[256]; } interface_builder_result_t;
+typedef struct { int candidate; int stored; unsigned int confidence; char category[64]; char record_id[65]; char reason[256]; } interface_builder_result_t;
 
 static int interface_fd = -1;
 static pthread_t interface_thread;
@@ -82,7 +82,8 @@ static void interface_handle(int client)
         stnlabz_module_result_t service_result;
         size_t response_used = 0;
         char escaped_reason[512];
-        char response[1024];
+        char escaped_record_id[160];
+        char response[1200];
 
         if (body == NULL || body[0] == '\0') { interface_reply(client, 400, "{\"error\":\"empty input\"}\n"); return; }
         if (strlen(body) >= sizeof(builder_request.text)) { interface_reply(client, 400, "{\"error\":\"input too large\"}\n"); return; }
@@ -97,11 +98,12 @@ static void interface_handle(int client)
         if (service_result != STNLABZ_MODULE_OK || response_used != sizeof(builder_result)) { interface_reply(client, 503, "{\"error\":\"corpus builder unavailable\"}\n"); return; }
 
         interface_json_escape(builder_result.reason, escaped_reason, sizeof(escaped_reason));
-        snprintf(response, sizeof(response), "{\"accepted\":true,\"corpus_candidate\":%s,\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n", builder_result.candidate ? "true" : "false", builder_result.category, builder_result.confidence, escaped_reason);
+        interface_json_escape(builder_result.record_id, escaped_record_id, sizeof(escaped_record_id));
+        snprintf(response, sizeof(response), "{\"accepted\":true,\"corpus_candidate\":%s,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n", builder_result.candidate ? "true" : "false", builder_result.stored ? "true" : "false", escaped_record_id, builder_result.category, builder_result.confidence, escaped_reason);
         if (interface_host->send_message != NULL)
         {
             char message[1024];
-            snprintf(message, sizeof(message), "[INTERFACE] input evaluated corpus_candidate=%s category=%s confidence=%u", builder_result.candidate ? "true" : "false", builder_result.category, builder_result.confidence);
+            snprintf(message, sizeof(message), "[INTERFACE] input evaluated corpus_candidate=%s stored=%s record_id=%s category=%s confidence=%u", builder_result.candidate ? "true" : "false", builder_result.stored ? "true" : "false", builder_result.record_id[0] ? builder_result.record_id : "none", builder_result.category, builder_result.confidence);
             (void)interface_host->send_message(message);
         }
         interface_reply(client, 200, response);
@@ -163,7 +165,7 @@ static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *host
     if (inet_pton(AF_INET, DIGIT_INTERFACE_DEFAULT_HOST, &address.sin_addr) != 1 || bind(interface_fd, (struct sockaddr *)&address, sizeof(address)) != 0 || listen(interface_fd, 8) != 0) { close(interface_fd); interface_fd = -1; return STNLABZ_MODULE_ERR_START_FAILED; }
     interface_running = 1;
     if (pthread_create(&interface_thread, NULL, interface_server, NULL) != 0) { interface_running = 0; close(interface_fd); interface_fd = -1; return STNLABZ_MODULE_ERR_START_FAILED; }
-    if (host->send_message != NULL) (void)host->send_message("[INTERFACE] local HTTP interface active at 127.0.0.1:8081; reasoning and corpus-builder dispatch enabled");
+    if (host->send_message != NULL) (void)host->send_message("[INTERFACE] local HTTP interface active at 127.0.0.1:8081; reasoning and corpus persistence dispatch enabled");
     return STNLABZ_MODULE_OK;
 }
 
@@ -176,7 +178,7 @@ static stnlabz_module_result_t interface_stop(void)
 
 static const stnlabz_module_descriptor_t interface_descriptor =
 {
-    "interface", "Digit Local Interface", 1, 0, 2,
+    "interface", "Digit Local Interface", 1, 0, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interface_qualify, interface_start, interface_stop
 };
