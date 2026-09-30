@@ -23,12 +23,14 @@ TEST_QUALIFICATION := build/test_qualification
 TEST_QUALIFICATION_STORE := build/test_qualification_store
 TEST_AUTHORITY := build/test_authority
 TEST_SACRIFICIAL := build/test_sacrificial
+TEST_RUNTIME := build/test_runtime
 
 DIGIT_SOURCES := \
 	src/main.c \
 	src/digit.c \
 	src/module_manager.c \
 	src/hotload.c \
+	src/runtime.c \
 	src/qualification.c \
 	src/qualification_store.c \
 	src/authority.c
@@ -98,13 +100,17 @@ $(TEST_AUTHORITY): tests/test_authority.c src/authority.c src/qualification.c | 
 $(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIFICIAL_SO) $(SACRIFICIAL_CONF) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c -o $@ $(LDLIBS)
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL)
+$(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_runtime.c src/runtime.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
+
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
 	./$(TEST_QUALIFICATION)
 	./$(TEST_QUALIFICATION_STORE)
 	./$(TEST_AUTHORITY)
 	./$(TEST_SACRIFICIAL)
+	./$(TEST_RUNTIME)
 
 build:
 	mkdir -p build
