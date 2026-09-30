@@ -32,6 +32,12 @@ ABI_SOURCES := \
 	$(ABI_SRC)/loader_linux.c \
 	$(ABI_SRC)/module_discovery_linux.c
 
+MODULE_MANAGER_POLICY_SOURCES := \
+	src/module_manager.c \
+	src/qualification.c \
+	src/qualification_store.c \
+	src/authority.c
+
 DIGIT_OBJECTS := $(DIGIT_SOURCES:src/%.c=build/digit_%.o)
 ABI_OBJECTS := $(ABI_SOURCES:$(ABI_SRC)/%.c=build/abi_%.o)
 OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
@@ -54,11 +60,11 @@ build/digit_%.o: src/%.c | build
 build/abi_%.o: $(ABI_SRC)/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(TEST_MODULE_MANAGER): tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_MODULE_MANAGER): tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/module_manager.c $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_QUALIFICATION): tests/test_qualification.c src/qualification.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_qualification.c src/qualification.c -o $@
