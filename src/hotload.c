@@ -31,9 +31,16 @@ static int digit_hotload_collect(
         char path[DIGIT_HOTLOAD_PATH_MAX];
         char so_path[DIGIT_HOTLOAD_PATH_MAX];
         struct stat status;
+        size_t module_id_length;
         int written;
 
         if (entry->d_name[0] == '.')
+        {
+            continue;
+        }
+
+        module_id_length = strlen(entry->d_name);
+        if (module_id_length == 0 || module_id_length >= STNLABZ_MODULE_ID_MAX)
         {
             continue;
         }
@@ -59,7 +66,7 @@ static int digit_hotload_collect(
             return 0;
         }
 
-        snprintf(files[*count].module_id, sizeof(files[*count].module_id), "%s", entry->d_name);
+        memcpy(files[*count].module_id, entry->d_name, module_id_length + 1);
         snprintf(files[*count].path, sizeof(files[*count].path), "%s", so_path);
         files[*count].modified_time = status.st_mtime;
         files[*count].size = status.st_size;
