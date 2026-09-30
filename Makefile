@@ -38,7 +38,8 @@ DIGIT_SOURCES := \
 	src/qualification.c \
 	src/qualification_store.c \
 	src/authority.c \
-	src/audit.c
+	src/audit.c \
+	src/service_registry.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
