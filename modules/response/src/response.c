@@ -4,9 +4,9 @@
 
 #include "response.h"
 
-#define CORPUS_SEARCH_SERVICE "corpus.search"
+#define CORPUS_LIST_SERVICE "corpus.list"
 #define LLAMA_GENERATE_SERVICE "llama.generate"
-#define CORPUS_SEARCH_MAX 16
+#define CORPUS_SEARCH_MAX 64
 #define CORPUS_TEXT_MAX 4096
 #define LLAMA_PROMPT_MAX 8192
 #define LLAMA_GENERATED_MAX 4096
@@ -39,13 +39,15 @@ static size_t response_terms(const char *text,char terms[RESPONSE_TERM_COUNT][RE
 }
 
 static int response_has_term(const char terms[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX],size_t count,const char *term){size_t i;for(i=0;i<count;++i)if(strcmp(terms[i],term)==0)return 1;return 0;}
-static int response_record_present(const response_corpus_search_result_t *e,const char *id){size_t i;for(i=0;i<e->count;++i)if(strcmp(e->records[i].id,id)==0)return 1;return 0;}
-
 static int response_collect_evidence(const char *question,response_corpus_search_result_t *evidence)
 {
-    char terms[RESPONSE_TERM_COUNT][RESPONSE_TERM_MAX];size_t term_count,t;if(!question||!evidence||!response_host||!response_host->invoke_service)return 0;memset(evidence,0,sizeof(*evidence));memset(terms,0,sizeof(terms));term_count=response_terms(question,terms);
-    for(t=0;t<term_count&&evidence->count<CORPUS_SEARCH_MAX;++t){response_corpus_search_request_t search;response_corpus_search_result_t matches;stnlabz_module_result_t result;size_t used=0,i;memset(&search,0,sizeof(search));memset(&matches,0,sizeof(matches));snprintf(search.query,sizeof(search.query),"%s",terms[t]);result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&search,sizeof(search),&matches,sizeof(matches),&used);if(result!=STNLABZ_MODULE_OK||used!=sizeof(matches))return 0;for(i=0;i<matches.count&&evidence->count<CORPUS_SEARCH_MAX;++i)if(!response_record_present(evidence,matches.records[i].id))evidence->records[evidence->count++]=matches.records[i];}
-    return 1;
+    stnlabz_module_result_t result;
+    size_t used=0;
+    (void)question;
+    if(!evidence||!response_host||!response_host->invoke_service)return 0;
+    memset(evidence,0,sizeof(*evidence));
+    result=response_host->invoke_service(CORPUS_LIST_SERVICE,NULL,0,evidence,sizeof(*evidence),&used);
+    return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);
 }
 
 static unsigned int response_term_frequency(const response_corpus_search_result_t *evidence,const char *term)
@@ -100,7 +102,7 @@ static stnlabz_module_result_t response_answer_service(const void *request,size_
 }
 
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(!result)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(!host||!host->register_service||!host->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,response_answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: deterministic coverage-ranked retrieval -> constrained Corpus-grounded response.answer registered");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(!host||!host->register_service||!host->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,response_answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: complete Corpus candidate ranking -> constrained Corpus-grounded response.answer registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host&&response_host->unregister_service)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,0,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,0,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
