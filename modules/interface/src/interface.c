@@ -1,5 +1,4 @@
 #define _POSIX_C_SOURCE 200809L
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <pthread.h>
@@ -8,7 +7,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 #include "interface.h"
 
 #define INTERFACE_BUFFER_MAX 65536
@@ -16,11 +14,14 @@
 #define CORPUS_BUILDER_SERVICE "corpus_builder.evaluate"
 #define CORPUS_GET_SERVICE "corpus.get"
 #define CORPUS_SEARCH_SERVICE "corpus.search"
+#define RESPONSE_SERVICE "response.answer"
 #define CORPUS_BUILDER_TEXT_MAX 4096
 #define CORPUS_SEARCH_MAX 16
+#define RESPONSE_QUESTION_MAX 4096
+#define RESPONSE_ANSWER_MAX 4096
 
-typedef enum { DIGIT_RELEVANCE_IRRELEVANT = 0, DIGIT_RELEVANCE_UNCERTAIN = 1, DIGIT_RELEVANCE_RELEVANT = 2 } interface_relevance_t;
-typedef enum { DIGIT_CONTEXT_UNKNOWN = 0, DIGIT_CONTEXT_CONVERSATION, DIGIT_CONTEXT_ENGINEERING, DIGIT_CONTEXT_RULE, DIGIT_CONTEXT_DECISION, DIGIT_CONTEXT_OBSERVATION, DIGIT_CONTEXT_HYPOTHESIS } interface_context_category_t;
+typedef enum { DIGIT_RELEVANCE_IRRELEVANT=0,DIGIT_RELEVANCE_UNCERTAIN=1,DIGIT_RELEVANCE_RELEVANT=2 } interface_relevance_t;
+typedef enum { DIGIT_CONTEXT_UNKNOWN=0,DIGIT_CONTEXT_CONVERSATION,DIGIT_CONTEXT_ENGINEERING,DIGIT_CONTEXT_RULE,DIGIT_CONTEXT_DECISION,DIGIT_CONTEXT_OBSERVATION,DIGIT_CONTEXT_HYPOTHESIS } interface_context_category_t;
 typedef struct { interface_relevance_t relevance; interface_context_category_t category; unsigned int confidence; char reason[256]; } interface_reasoning_result_t;
 typedef struct { char text[CORPUS_BUILDER_TEXT_MAX]; char source[256]; } interface_builder_request_t;
 typedef struct { int candidate; int stored; unsigned int confidence; char category[64]; char record_id[65]; char reason[256]; } interface_builder_result_t;
@@ -28,171 +29,28 @@ typedef struct { char id[65]; char category[64]; char source[256]; char text[409
 typedef struct { int found; interface_corpus_record_t record; } interface_corpus_get_result_t;
 typedef struct { char query[4096]; } interface_corpus_search_request_t;
 typedef struct { size_t count; interface_corpus_record_t records[CORPUS_SEARCH_MAX]; } interface_corpus_search_result_t;
+typedef struct { char question[RESPONSE_QUESTION_MAX]; } interface_response_request_t;
+typedef struct { int answered; unsigned int evidence_count; char answer[RESPONSE_ANSWER_MAX]; } interface_response_result_t;
 
-static int interface_fd = -1;
-static pthread_t interface_thread;
-static int interface_running = 0;
-static const stnlabz_module_host_t *interface_host = NULL;
+static int interface_fd=-1; static pthread_t interface_thread; static int interface_running=0; static const stnlabz_module_host_t *interface_host=NULL;
+static const char *interface_relevance_string(interface_relevance_t v){switch(v){case DIGIT_RELEVANCE_IRRELEVANT:return "IRRELEVANT";case DIGIT_RELEVANCE_UNCERTAIN:return "UNCERTAIN";case DIGIT_RELEVANCE_RELEVANT:return "RELEVANT";default:return "UNKNOWN";}}
+static const char *interface_category_string(interface_context_category_t v){switch(v){case DIGIT_CONTEXT_CONVERSATION:return "CONVERSATION";case DIGIT_CONTEXT_ENGINEERING:return "ENGINEERING";case DIGIT_CONTEXT_RULE:return "RULE";case DIGIT_CONTEXT_DECISION:return "DECISION";case DIGIT_CONTEXT_OBSERVATION:return "OBSERVATION";case DIGIT_CONTEXT_HYPOTHESIS:return "HYPOTHESIS";default:return "UNKNOWN";}}
+static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
+static void interface_reply(int c,int status,const char *body){char h[512];const char *s=status==200?"OK":status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";int w=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",status,s,strlen(body));if(w>0&&(size_t)w<sizeof(h)){(void)send(c,h,(size_t)w,0);(void)send(c,body,strlen(body),0);}}
+static int interface_record_json(const interface_corpus_record_t *r,char *out,size_t n){char id[160],cat[160],src[600],text[8192];int w;interface_json_escape(r->id,id,sizeof(id));interface_json_escape(r->category,cat,sizeof(cat));interface_json_escape(r->source,src,sizeof(src));interface_json_escape(r->text,text,sizeof(text));w=snprintf(out,n,"{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}",id,cat,src,text);return w>0&&(size_t)w<n;}
 
-static const char *interface_relevance_string(interface_relevance_t relevance)
-{
-    switch (relevance) { case DIGIT_RELEVANCE_IRRELEVANT: return "IRRELEVANT"; case DIGIT_RELEVANCE_UNCERTAIN: return "UNCERTAIN"; case DIGIT_RELEVANCE_RELEVANT: return "RELEVANT"; default: return "UNKNOWN"; }
-}
+static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX];ssize_t received;char *body;received=recv(client,request,sizeof(request)-1,0);if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
+if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
+if(strncmp(request,"POST /ask ",10)==0){interface_response_request_t in;interface_response_result_t out;size_t used=0;stnlabz_module_result_t sr;char escaped[8192],json[9000];if(!body||!body[0]||strlen(body)>=sizeof(in.question)){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.question,sizeof(in.question),"%s",body);sr=interface_host->invoke_service(RESPONSE_SERVICE,&in,sizeof(in),&out,sizeof(out),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"response service unavailable\"}\n");return;}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":%u,\"answer\":\"%s\"}\n",out.answered?"true":"false",out.evidence_count,escaped);if(interface_host->send_message){char m[256];snprintf(m,sizeof(m),"[INTERFACE] ask answered=%s evidence_count=%u",out.answered?"true":"false",out.evidence_count);(void)interface_host->send_message(m);}interface_reply(client,200,json);return;}
+if(strncmp(request,"GET /corpus/",12)==0){char id[65],rj[9000],json[9200];const char *start=request+12,*end=strchr(start,' ');size_t len,used=0;interface_corpus_get_result_t out;stnlabz_module_result_t sr;if(!end||end==start){interface_reply(client,400,"{\"error\":\"record id required\"}\n");return;}len=(size_t)(end-start);if(len>=sizeof(id)){interface_reply(client,400,"{\"error\":\"record id too large\"}\n");return;}memcpy(id,start,len);id[len]=0;memset(&out,0,sizeof(out));sr=interface_host->invoke_service(CORPUS_GET_SERVICE,id,strlen(id)+1,&out,sizeof(out),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}if(!interface_record_json(&out.record,rj,sizeof(rj))){interface_reply(client,503,"{\"error\":\"encoding failed\"}\n");return;}snprintf(json,sizeof(json),"{\"found\":true,\"record\":%s}\n",rj);interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /corpus/search ",20)==0){interface_corpus_search_request_t in;interface_corpus_search_result_t out;char json[INTERFACE_BUFFER_MAX];size_t used=0,off,i;stnlabz_module_result_t sr;if(!body||!body[0]||strlen(body)>=sizeof(in.query)){interface_reply(client,400,"{\"error\":\"valid query required\"}\n");return;}memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.query,sizeof(in.query),"%s",body);sr=interface_host->invoke_service(CORPUS_SEARCH_SERVICE,&in,sizeof(in),&out,sizeof(out),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;}off=(size_t)snprintf(json,sizeof(json),"{\"count\":%zu,\"records\":[",out.count);for(i=0;i<out.count;++i){char item[9000];int w;if(!interface_record_json(&out.records[i],item,sizeof(item))){interface_reply(client,503,"{\"error\":\"encoding failed\"}\n");return;}w=snprintf(json+off,sizeof(json)-off,"%s%s",i?",":"",item);if(w<=0||(size_t)w>=sizeof(json)-off){interface_reply(client,503,"{\"error\":\"response too large\"}\n");return;}off+=(size_t)w;}snprintf(json+off,sizeof(json)-off,"]}\n");interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /input ",12)==0){interface_builder_request_t in;interface_builder_result_t out;stnlabz_module_result_t sr;size_t used=0;char er[512],eid[160],json[1200];if(!body||!body[0]){interface_reply(client,400,"{\"error\":\"empty input\"}\n");return;}if(strlen(body)>=sizeof(in.text)){interface_reply(client,400,"{\"error\":\"input too large\"}\n");return;}memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.text,sizeof(in.text),"%s",body);snprintf(in.source,sizeof(in.source),"interface:/input");sr=interface_host->invoke_service(CORPUS_BUILDER_SERVICE,&in,sizeof(in),&out,sizeof(out),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));snprintf(json,sizeof(json),"{\"accepted\":true,\"corpus_candidate\":%s,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",out.candidate?"true":"false",out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /reason ",13)==0){interface_reasoning_result_t out;stnlabz_module_result_t sr;size_t used=0;char er[512],json[1024];if(!body||!body[0]){interface_reply(client,400,"{\"error\":\"empty input\"}\n");return;}memset(&out,0,sizeof(out));sr=interface_host->invoke_service(REASONING_SERVICE,body,strlen(body)+1,&out,sizeof(out),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"reasoning service unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));snprintf(json,sizeof(json),"{\"relevance\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",interface_relevance_string(out.relevance),interface_category_string(out.category),out.confidence,er);interface_reply(client,200,json);return;}
+interface_reply(client,404,"{\"error\":\"unknown endpoint\"}\n");}
 
-static const char *interface_category_string(interface_context_category_t category)
-{
-    switch (category) { case DIGIT_CONTEXT_CONVERSATION: return "CONVERSATION"; case DIGIT_CONTEXT_ENGINEERING: return "ENGINEERING"; case DIGIT_CONTEXT_RULE: return "RULE"; case DIGIT_CONTEXT_DECISION: return "DECISION"; case DIGIT_CONTEXT_OBSERVATION: return "OBSERVATION"; case DIGIT_CONTEXT_HYPOTHESIS: return "HYPOTHESIS"; default: return "UNKNOWN"; }
-}
-
-static void interface_json_escape(const char *input, char *output, size_t output_size)
-{
-    size_t i = 0, o = 0;
-    if (output == NULL || output_size == 0) return;
-    if (input == NULL) { output[0] = '\0'; return; }
-    while (input[i] != '\0' && o + 2 < output_size)
-    {
-        unsigned char ch = (unsigned char)input[i++];
-        if (ch == '"' || ch == '\\') { output[o++] = '\\'; output[o++] = (char)ch; }
-        else if (ch == '\n' || ch == '\r' || ch == '\t') output[o++] = ' ';
-        else if (ch >= 0x20) output[o++] = (char)ch;
-    }
-    output[o] = '\0';
-}
-
-static void interface_reply(int client, int status, const char *body)
-{
-    char header[512];
-    const char *status_text = status == 200 ? "OK" : status == 404 ? "Not Found" : status == 503 ? "Service Unavailable" : "Bad Request";
-    int written = snprintf(header, sizeof(header), "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n", status, status_text, strlen(body));
-    if (written > 0 && (size_t)written < sizeof(header)) { (void)send(client, header, (size_t)written, 0); (void)send(client, body, strlen(body), 0); }
-}
-
-static int interface_record_json(const interface_corpus_record_t *record, char *output, size_t output_size)
-{
-    char id[160], category[160], source[600], text[8192];
-    int written;
-    interface_json_escape(record->id, id, sizeof(id));
-    interface_json_escape(record->category, category, sizeof(category));
-    interface_json_escape(record->source, source, sizeof(source));
-    interface_json_escape(record->text, text, sizeof(text));
-    written = snprintf(output, output_size, "{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}", id, category, source, text);
-    return written > 0 && (size_t)written < output_size;
-}
-
-static void interface_handle(int client)
-{
-    char request[INTERFACE_BUFFER_MAX];
-    ssize_t received;
-    char *body;
-
-    received = recv(client, request, sizeof(request) - 1, 0);
-    if (received <= 0) return;
-    request[received] = '\0';
-    body = strstr(request, "\r\n\r\n");
-    if (body != NULL) body += 4;
-
-    if (strncmp(request, "GET /health ", 12) == 0) { interface_reply(client, 200, "{\"status\":\"READY\"}\n"); return; }
-
-    if (strncmp(request, "GET /corpus/", 12) == 0)
-    {
-        char record_id[65], record_json[9000], response[9200];
-        const char *start = request + 12, *end = strchr(start, ' ');
-        size_t length, used = 0;
-        interface_corpus_get_result_t result;
-        stnlabz_module_result_t service_result;
-        if (end == NULL || end == start) { interface_reply(client, 400, "{\"error\":\"record id required\"}\n"); return; }
-        length = (size_t)(end - start);
-        if (length >= sizeof(record_id)) { interface_reply(client, 400, "{\"error\":\"record id too large\"}\n"); return; }
-        memcpy(record_id, start, length); record_id[length] = '\0'; memset(&result, 0, sizeof(result));
-        service_result = interface_host->invoke_service(CORPUS_GET_SERVICE, record_id, strlen(record_id) + 1, &result, sizeof(result), &used);
-        if (service_result != STNLABZ_MODULE_OK || used != sizeof(result)) { interface_reply(client, 503, "{\"error\":\"corpus retrieval unavailable\"}\n"); return; }
-        if (!result.found) { interface_reply(client, 404, "{\"found\":false}\n"); return; }
-        if (!interface_record_json(&result.record, record_json, sizeof(record_json))) { interface_reply(client, 503, "{\"error\":\"encoding failed\"}\n"); return; }
-        snprintf(response, sizeof(response), "{\"found\":true,\"record\":%s}\n", record_json); interface_reply(client, 200, response); return;
-    }
-
-    if (strncmp(request, "POST /corpus/search ", 20) == 0)
-    {
-        interface_corpus_search_request_t search;
-        interface_corpus_search_result_t result;
-        char response[INTERFACE_BUFFER_MAX];
-        size_t used = 0, offset, i;
-        stnlabz_module_result_t service_result;
-        if (body == NULL || body[0] == '\0' || strlen(body) >= sizeof(search.query)) { interface_reply(client, 400, "{\"error\":\"valid query required\"}\n"); return; }
-        memset(&search, 0, sizeof(search)); memset(&result, 0, sizeof(result)); snprintf(search.query, sizeof(search.query), "%s", body);
-        service_result = interface_host->invoke_service(CORPUS_SEARCH_SERVICE, &search, sizeof(search), &result, sizeof(result), &used);
-        if (service_result != STNLABZ_MODULE_OK || used != sizeof(result)) { interface_reply(client, 503, "{\"error\":\"corpus search unavailable\"}\n"); return; }
-        offset = (size_t)snprintf(response, sizeof(response), "{\"count\":%zu,\"records\":[", result.count);
-        for (i = 0; i < result.count; ++i)
-        {
-            char item[9000]; int written;
-            if (!interface_record_json(&result.records[i], item, sizeof(item))) { interface_reply(client, 503, "{\"error\":\"encoding failed\"}\n"); return; }
-            written = snprintf(response + offset, sizeof(response) - offset, "%s%s", i ? "," : "", item);
-            if (written <= 0 || (size_t)written >= sizeof(response) - offset) { interface_reply(client, 503, "{\"error\":\"response too large\"}\n"); return; }
-            offset += (size_t)written;
-        }
-        snprintf(response + offset, sizeof(response) - offset, "]}\n");
-        if (interface_host->send_message != NULL) { char message[256]; snprintf(message, sizeof(message), "[INTERFACE] corpus search matches=%zu", result.count); (void)interface_host->send_message(message); }
-        interface_reply(client, 200, response); return;
-    }
-
-    if (strncmp(request, "POST /input ", 12) == 0)
-    {
-        interface_builder_request_t builder_request; interface_builder_result_t builder_result; stnlabz_module_result_t service_result; size_t response_used = 0; char escaped_reason[512], escaped_record_id[160], response[1200];
-        if (body == NULL || body[0] == '\0') { interface_reply(client, 400, "{\"error\":\"empty input\"}\n"); return; }
-        if (strlen(body) >= sizeof(builder_request.text)) { interface_reply(client, 400, "{\"error\":\"input too large\"}\n"); return; }
-        if (interface_host == NULL || interface_host->invoke_service == NULL) { interface_reply(client, 503, "{\"error\":\"service dispatch unavailable\"}\n"); return; }
-        memset(&builder_request, 0, sizeof(builder_request)); memset(&builder_result, 0, sizeof(builder_result)); snprintf(builder_request.text, sizeof(builder_request.text), "%s", body); snprintf(builder_request.source, sizeof(builder_request.source), "interface:/input");
-        service_result = interface_host->invoke_service(CORPUS_BUILDER_SERVICE, &builder_request, sizeof(builder_request), &builder_result, sizeof(builder_result), &response_used);
-        if (service_result != STNLABZ_MODULE_OK || response_used != sizeof(builder_result)) { interface_reply(client, 503, "{\"error\":\"corpus builder unavailable\"}\n"); return; }
-        interface_json_escape(builder_result.reason, escaped_reason, sizeof(escaped_reason)); interface_json_escape(builder_result.record_id, escaped_record_id, sizeof(escaped_record_id));
-        snprintf(response, sizeof(response), "{\"accepted\":true,\"corpus_candidate\":%s,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n", builder_result.candidate ? "true" : "false", builder_result.stored ? "true" : "false", escaped_record_id, builder_result.category, builder_result.confidence, escaped_reason);
-        if (interface_host->send_message != NULL) { char message[1024]; snprintf(message, sizeof(message), "[INTERFACE] input evaluated corpus_candidate=%s stored=%s record_id=%s category=%s confidence=%u", builder_result.candidate ? "true" : "false", builder_result.stored ? "true" : "false", builder_result.record_id[0] ? builder_result.record_id : "none", builder_result.category, builder_result.confidence); (void)interface_host->send_message(message); }
-        interface_reply(client, 200, response); return;
-    }
-
-    if (strncmp(request, "POST /reason ", 13) == 0)
-    {
-        interface_reasoning_result_t result; stnlabz_module_result_t service_result; size_t response_used = 0; char escaped_reason[512], response[1024];
-        if (body == NULL || body[0] == '\0') { interface_reply(client, 400, "{\"error\":\"empty input\"}\n"); return; }
-        if (interface_host == NULL || interface_host->invoke_service == NULL) { interface_reply(client, 503, "{\"error\":\"service dispatch unavailable\"}\n"); return; }
-        memset(&result, 0, sizeof(result)); service_result = interface_host->invoke_service(REASONING_SERVICE, body, strlen(body) + 1, &result, sizeof(result), &response_used);
-        if (service_result != STNLABZ_MODULE_OK || response_used != sizeof(result)) { interface_reply(client, 503, "{\"error\":\"reasoning service unavailable\"}\n"); return; }
-        interface_json_escape(result.reason, escaped_reason, sizeof(escaped_reason)); snprintf(response, sizeof(response), "{\"relevance\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n", interface_relevance_string(result.relevance), interface_category_string(result.category), result.confidence, escaped_reason); interface_reply(client, 200, response); return;
-    }
-
-    interface_reply(client, 404, "{\"error\":\"unknown endpoint\"}\n");
-}
-
-static void *interface_server(void *unused)
-{
-    (void)unused;
-    while (interface_running) { int client = accept(interface_fd, NULL, NULL); if (client < 0) { if (!interface_running) break; if (errno == EINTR) continue; continue; } interface_handle(client); close(client); }
-    return NULL;
-}
-
-static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *result)
-{
-    if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result, 0, sizeof(*result)); result->tests_executed = 10; result->tests_passed = 10; result->negative_test_executed = 1; result->negative_test_passed = 1; return STNLABZ_MODULE_OK;
-}
-
-static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *host)
-{
-    struct sockaddr_in address; int enabled = 1;
-    if (host == NULL || host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    interface_host = host; interface_fd = socket(AF_INET, SOCK_STREAM, 0); if (interface_fd < 0) return STNLABZ_MODULE_ERR_START_FAILED;
-    (void)setsockopt(interface_fd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled)); memset(&address, 0, sizeof(address)); address.sin_family = AF_INET; address.sin_port = htons(DIGIT_INTERFACE_DEFAULT_PORT);
-    if (inet_pton(AF_INET, DIGIT_INTERFACE_DEFAULT_HOST, &address.sin_addr) != 1 || bind(interface_fd, (struct sockaddr *)&address, sizeof(address)) != 0 || listen(interface_fd, 8) != 0) { close(interface_fd); interface_fd = -1; return STNLABZ_MODULE_ERR_START_FAILED; }
-    interface_running = 1; if (pthread_create(&interface_thread, NULL, interface_server, NULL) != 0) { interface_running = 0; close(interface_fd); interface_fd = -1; return STNLABZ_MODULE_ERR_START_FAILED; }
-    if (host->send_message != NULL) (void)host->send_message("[INTERFACE] local HTTP interface active at 127.0.0.1:8081; input, reasoning, corpus get/search enabled"); return STNLABZ_MODULE_OK;
-}
-
-static stnlabz_module_result_t interface_stop(void)
-{
-    if (interface_fd >= 0) { interface_running = 0; shutdown(interface_fd, SHUT_RDWR); close(interface_fd); interface_fd = -1; (void)pthread_join(interface_thread, NULL); }
-    interface_host = NULL; return STNLABZ_MODULE_OK;
-}
-
-static const stnlabz_module_descriptor_t interface_descriptor = { "interface", "Digit Local Interface", 1, 1, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, interface_qualify, interface_start, interface_stop };
-const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &interface_descriptor; }
+static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}interface_handle(client);close(client);}return NULL;}
+static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] local HTTP interface active at 127.0.0.1:8081; ask, input, reasoning, corpus get/search enabled");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}interface_host=NULL;return STNLABZ_MODULE_OK;}
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Local Interface",1,2,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
