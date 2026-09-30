@@ -4,6 +4,7 @@
 
 #include "corpus_builder.h"
 
+#define LLAMA_CONTEXT_SERVICE "llama.context"
 #define REASONING_SERVICE "reasoning.evaluate"
 #define CORPUS_CONTAINS_SERVICE "corpus.contains"
 #define CORPUS_APPEND_SERVICE "corpus.append"
@@ -11,6 +12,8 @@
 typedef enum { CB_IRRELEVANT = 0, CB_UNCERTAIN = 1, CB_RELEVANT = 2 } cb_relevance_t;
 typedef enum { CB_UNKNOWN = 0, CB_CONVERSATION, CB_ENGINEERING, CB_RULE, CB_DECISION, CB_OBSERVATION, CB_HYPOTHESIS } cb_category_t;
 typedef struct { cb_relevance_t relevance; cb_category_t category; unsigned int confidence; char reason[256]; } cb_reasoning_result_t;
+typedef struct { char text[4096]; } cb_llama_request_t;
+typedef struct { int available; char context[4096]; } cb_llama_result_t;
 typedef struct { char id[65]; char category[64]; char source[256]; char text[4096]; } cb_corpus_record_t;
 typedef struct { int contains; } cb_contains_result_t;
 typedef struct { int appended; } cb_append_result_t;
@@ -42,12 +45,15 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
 {
     const digit_corpus_builder_request_t *input = request;
     digit_corpus_builder_result_t output;
+    cb_llama_request_t llama_request;
+    cb_llama_result_t llama_result;
     cb_reasoning_result_t reasoning;
     cb_corpus_record_t record;
     cb_contains_result_t contains;
     cb_append_result_t append;
     size_t used = 0;
     stnlabz_module_result_t result;
+    const char *reasoning_input;
     const char *category;
     (void)handler_context;
 
@@ -56,8 +62,16 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || memchr(input->source, '\0', sizeof(input->source)) == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (builder_host == NULL || builder_host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_STATE;
 
+    memset(&llama_request, 0, sizeof(llama_request));
+    memset(&llama_result, 0, sizeof(llama_result));
+    snprintf(llama_request.text, sizeof(llama_request.text), "%s", input->text);
+    result = builder_host->invoke_service(LLAMA_CONTEXT_SERVICE, &llama_request, sizeof(llama_request), &llama_result, sizeof(llama_result), &used);
+    if (result != STNLABZ_MODULE_OK || used != sizeof(llama_result)) return STNLABZ_MODULE_ERR_NOT_FOUND;
+    reasoning_input = llama_result.context[0] != '\0' ? llama_result.context : input->text;
+
     memset(&reasoning, 0, sizeof(reasoning));
-    result = builder_host->invoke_service(REASONING_SERVICE, input->text, strlen(input->text) + 1, &reasoning, sizeof(reasoning), &used);
+    used = 0;
+    result = builder_host->invoke_service(REASONING_SERVICE, reasoning_input, strlen(reasoning_input) + 1, &reasoning, sizeof(reasoning), &used);
     if (result != STNLABZ_MODULE_OK || used != sizeof(reasoning)) return STNLABZ_MODULE_ERR_NOT_FOUND;
 
     memset(&output, 0, sizeof(output));
@@ -116,7 +130,7 @@ static stnlabz_module_result_t builder_start(const stnlabz_module_host_t *host)
     if (host == NULL || host->register_service == NULL || host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_CORPUS_BUILDER_SERVICE, builder_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
     builder_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[CORPUS_BUILDER] module active: qualified candidates commit through Corpus services");
+    if (host->send_message != NULL) (void)host->send_message("[CORPUS_BUILDER] module active: Llama context -> reasoning -> Corpus persistence");
     return STNLABZ_MODULE_OK;
 }
 
@@ -127,5 +141,5 @@ static stnlabz_module_result_t builder_stop(void)
     builder_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 1, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
+static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 2, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &builder_descriptor; }
