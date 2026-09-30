@@ -9,6 +9,7 @@
 #define CORPUS_CONTAINS_SERVICE "corpus.contains"
 #define CORPUS_APPEND_SERVICE "corpus.append"
 #define CB_REASONING_INPUT_MAX 8192
+#define CB_OPERATOR_LEARN_SOURCE "interface:learn"
 
 typedef enum { CB_IRRELEVANT = 0, CB_UNCERTAIN = 1, CB_RELEVANT = 2 } cb_relevance_t;
 typedef enum { CB_UNKNOWN = 0, CB_CONVERSATION, CB_ENGINEERING, CB_RULE, CB_DECISION, CB_OBSERVATION, CB_HYPOTHESIS } cb_category_t;
@@ -42,6 +43,45 @@ static void build_record_id(const digit_corpus_builder_request_t *input, const c
     snprintf(output, output_size, "DIGIT-%016llx", (unsigned long long)hash);
 }
 
+static stnlabz_module_result_t persist_record(const digit_corpus_builder_request_t *input, const char *category, unsigned int confidence, const char *success_reason, digit_corpus_builder_result_t *output)
+{
+    cb_corpus_record_t record;
+    cb_contains_result_t contains;
+    cb_append_result_t append;
+    size_t used = 0;
+    stnlabz_module_result_t result;
+
+    memset(output, 0, sizeof(*output));
+    output->candidate = 1;
+    output->confidence = confidence;
+    snprintf(output->category, sizeof(output->category), "%s", category);
+
+    memset(&record, 0, sizeof(record));
+    snprintf(record.category, sizeof(record.category), "%s", category);
+    snprintf(record.source, sizeof(record.source), "%s", input->source);
+    snprintf(record.text, sizeof(record.text), "%s", input->text);
+    build_record_id(input, category, record.id, sizeof(record.id));
+    snprintf(output->record_id, sizeof(output->record_id), "%s", record.id);
+
+    memset(&contains, 0, sizeof(contains));
+    result = builder_host->invoke_service(CORPUS_CONTAINS_SERVICE, record.id, strlen(record.id) + 1, &contains, sizeof(contains), &used);
+    if (result != STNLABZ_MODULE_OK || used != sizeof(contains)) return STNLABZ_MODULE_ERR_NOT_FOUND;
+
+    if (contains.contains)
+    {
+        snprintf(output->reason, sizeof(output->reason), "Qualified context already exists in Corpus.");
+        return STNLABZ_MODULE_OK;
+    }
+
+    memset(&append, 0, sizeof(append));
+    used = 0;
+    result = builder_host->invoke_service(CORPUS_APPEND_SERVICE, &record, sizeof(record), &append, sizeof(append), &used);
+    if (result != STNLABZ_MODULE_OK || used != sizeof(append) || !append.appended) return STNLABZ_MODULE_ERR_INVALID_STATE;
+    output->stored = 1;
+    snprintf(output->reason, sizeof(output->reason), "%s", success_reason);
+    return STNLABZ_MODULE_OK;
+}
+
 static stnlabz_module_result_t builder_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
 {
     const digit_corpus_builder_request_t *input = request;
@@ -49,9 +89,6 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
     cb_llama_request_t llama_request;
     cb_llama_result_t llama_result;
     cb_reasoning_result_t reasoning;
-    cb_corpus_record_t record;
-    cb_contains_result_t contains;
-    cb_append_result_t append;
     char reasoning_input[CB_REASONING_INPUT_MAX];
     size_t used = 0;
     stnlabz_module_result_t result;
@@ -63,6 +100,15 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
     if (input->text[0] == '\0' || input->source[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || memchr(input->source, '\0', sizeof(input->source)) == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (builder_host == NULL || builder_host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_STATE;
+
+    if (strcmp(input->source, CB_OPERATOR_LEARN_SOURCE) == 0)
+    {
+        result = persist_record(input, "OPERATOR_LEARNED", 100U, "Explicit operator learning committed to Corpus.", &output);
+        if (result != STNLABZ_MODULE_OK) return result;
+        memcpy(response, &output, sizeof(output));
+        *response_used = sizeof(output);
+        return STNLABZ_MODULE_OK;
+    }
 
     memset(&llama_request, 0, sizeof(llama_request));
     memset(&llama_result, 0, sizeof(llama_result));
@@ -99,33 +145,8 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
         return STNLABZ_MODULE_OK;
     }
 
-    output.candidate = 1;
-    memset(&record, 0, sizeof(record));
-    snprintf(record.category, sizeof(record.category), "%s", category);
-    snprintf(record.source, sizeof(record.source), "%s", input->source);
-    snprintf(record.text, sizeof(record.text), "%s", input->text);
-    build_record_id(input, category, record.id, sizeof(record.id));
-    snprintf(output.record_id, sizeof(output.record_id), "%s", record.id);
-
-    memset(&contains, 0, sizeof(contains));
-    used = 0;
-    result = builder_host->invoke_service(CORPUS_CONTAINS_SERVICE, record.id, strlen(record.id) + 1, &contains, sizeof(contains), &used);
-    if (result != STNLABZ_MODULE_OK || used != sizeof(contains)) return STNLABZ_MODULE_ERR_NOT_FOUND;
-
-    if (contains.contains)
-    {
-        snprintf(output.reason, sizeof(output.reason), "Qualified context already exists in Corpus.");
-    }
-    else
-    {
-        memset(&append, 0, sizeof(append));
-        used = 0;
-        result = builder_host->invoke_service(CORPUS_APPEND_SERVICE, &record, sizeof(record), &append, sizeof(append), &used);
-        if (result != STNLABZ_MODULE_OK || used != sizeof(append) || !append.appended) return STNLABZ_MODULE_ERR_INVALID_STATE;
-        output.stored = 1;
-        snprintf(output.reason, sizeof(output.reason), "Qualified context committed to Corpus.");
-    }
-
+    result = persist_record(input, category, reasoning.confidence, "Qualified context committed to Corpus.", &output);
+    if (result != STNLABZ_MODULE_OK) return result;
     memcpy(response, &output, sizeof(output));
     *response_used = sizeof(output);
     return STNLABZ_MODULE_OK;
@@ -142,7 +163,7 @@ static stnlabz_module_result_t builder_start(const stnlabz_module_host_t *host)
     if (host == NULL || host->register_service == NULL || host->invoke_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_CORPUS_BUILDER_SERVICE, builder_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
     builder_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[CORPUS_BUILDER] module active: source + Llama context -> reasoning -> Corpus persistence");
+    if (host->send_message != NULL) (void)host->send_message("[CORPUS_BUILDER] module active: explicit operator learning or source + Llama context -> reasoning -> Corpus persistence");
     return STNLABZ_MODULE_OK;
 }
 
@@ -153,5 +174,5 @@ static stnlabz_module_result_t builder_stop(void)
     builder_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 3, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
+static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 4, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &builder_descriptor; }
