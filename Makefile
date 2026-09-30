@@ -13,7 +13,8 @@ MODULE_DIR := build/modules
 LLAMA_DIR := $(MODULE_DIR)/llama
 LLAMA_SO := $(LLAMA_DIR)/llama.so
 LLAMA_CONF := $(LLAMA_DIR)/module.conf
-SACRIFICIAL_DIR := $(MODULE_DIR)/sacrificial
+TEST_MODULE_DIR := build/tests/modules
+SACRIFICIAL_DIR := $(TEST_MODULE_DIR)/sacrificial
 SACRIFICIAL_SO := $(SACRIFICIAL_DIR)/sacrificial.so
 SACRIFICIAL_CONF := $(SACRIFICIAL_DIR)/module.conf
 TEST_MODULE_MANAGER := build/test_module_manager
@@ -114,7 +115,10 @@ $(MODULE_DIR): | build
 $(LLAMA_DIR): | $(MODULE_DIR)
 	mkdir -p $(LLAMA_DIR)
 
-$(SACRIFICIAL_DIR): | $(MODULE_DIR)
+$(TEST_MODULE_DIR): | build
+	mkdir -p $(TEST_MODULE_DIR)
+
+$(SACRIFICIAL_DIR): | $(TEST_MODULE_DIR)
 	mkdir -p $(SACRIFICIAL_DIR)
 
 clean:
