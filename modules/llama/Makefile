@@ -10,7 +10,11 @@ TEST_TARGET := bin/test_llama
 SOURCE := src/llama.c
 TEST_SOURCE := tests/test_llama.c
 
-.PHONY: all test clean check-abi rebuild
+DIGIT_PREFIX ?= /opt/digit
+INSTALL_DIR := $(DIGIT_PREFIX)/modules/llama
+INSTALL_BIN := $(INSTALL_DIR)/bin
+
+.PHONY: all test clean check-abi rebuild install
 
 all: check-abi $(TARGET)
 
@@ -25,6 +29,14 @@ $(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/llama.h | bin
 
 test: check-abi $(TEST_TARGET)
 	./$(TEST_TARGET)
+
+install: all
+	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
+	install -d -o digit -g digit $(INSTALL_DIR) $(INSTALL_BIN)
+	install -m 0755 $(TARGET) $(INSTALL_BIN)/llama.so
+	install -m 0644 llama.conf $(INSTALL_DIR)/llama.conf
+	chown -R digit:digit $(INSTALL_DIR)
+	@echo "Llama installed to $(INSTALL_DIR). Digit will qualify the candidate."
 
 bin:
 	mkdir -p bin
