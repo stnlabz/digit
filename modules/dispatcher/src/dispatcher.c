@@ -23,6 +23,30 @@ static int contains_ci(const char *text, const char *needle)
     return 0;
 }
 
+static void normalize_answer(char *text)
+{
+    size_t i;
+    int previous_space=0;
+    if(text==NULL)return;
+    for(i=0;text[i]!='\0';++i)
+    {
+        unsigned char c=(unsigned char)text[i];
+        if(c=='\t'||c=='\n'||c=='\r')text[i]=' ';
+        if(text[i]==' ')
+        {
+            if(previous_space)
+            {
+                size_t j=i;
+                do{text[j]=text[j+1];++j;}while(text[j-1]!='\0');
+                --i;
+                continue;
+            }
+            previous_space=1;
+        }
+        else previous_space=0;
+    }
+}
+
 static int source_action(const char *request)
 {
     return contains_ci(request,"scan") || contains_ci(request,"inspect") ||
@@ -87,11 +111,12 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
         if(sr!=STNLABZ_MODULE_OK||used!=sizeof(ro)){out.answered=1;snprintf(out.answer,sizeof(out.answer),"I couldn't complete that request because one of my internal services is unavailable.");}
         else{out.answered=1;snprintf(out.answer,sizeof(out.answer),"%s",ro.answer[0]?ro.answer:"I couldn't produce an answer for that request.");}
     }
+    normalize_answer(out.answer);
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,0,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,0,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
