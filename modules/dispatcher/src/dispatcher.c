@@ -6,6 +6,21 @@
 #include "source.h"
 #include "response.h"
 
+#define LLAMA_GENERATE_SERVICE "llama.generate"
+#define LLAMA_PROMPT_MAX 8192
+#define LLAMA_GENERATED_MAX 4096
+
+typedef struct
+{
+    char prompt[LLAMA_PROMPT_MAX];
+} dispatcher_llama_request_t;
+
+typedef struct
+{
+    int available;
+    char text[LLAMA_GENERATED_MAX];
+} dispatcher_llama_result_t;
+
 static const stnlabz_module_host_t *dispatcher_host = NULL;
 
 static int contains_ci(const char *text, const char *needle)
@@ -54,6 +69,13 @@ static int source_action(const char *request)
            contains_ci(request,"source/");
 }
 
+static int evidence_requested(const char *request)
+{
+    return contains_ci(request,"evidence") || contains_ci(request,"prove") ||
+           contains_ci(request,"proof") || contains_ci(request,"provenance") ||
+           contains_ci(request,"citation");
+}
+
 static int resolve_project(const char *request, char *project, size_t project_size)
 {
     digit_source_projects_result_t projects;
@@ -98,6 +120,47 @@ static void source_scan(const char *request,digit_dispatcher_result_t *out)
     out->answered=1;
 }
 
+static int project_question(const char *request,digit_dispatcher_result_t *out)
+{
+    char project[DIGIT_SOURCE_PROJECT_MAX];
+    digit_source_read_request_t read_request;
+    digit_source_read_result_t read_result;
+    dispatcher_llama_request_t llama_request;
+    dispatcher_llama_result_t llama_result;
+    stnlabz_module_result_t sr;
+    size_t used=0;
+
+    memset(project,0,sizeof(project));
+    if(!resolve_project(request,project,sizeof(project)))return 0;
+
+    memset(&read_request,0,sizeof(read_request));
+    snprintf(read_request.project,sizeof(read_request.project),"%s",project);
+    snprintf(read_request.path,sizeof(read_request.path),"README.md");
+    read_request.start_line=1;
+    read_request.line_count=80;
+    memset(&read_result,0,sizeof(read_result));
+    sr=dispatcher_host->invoke_service(DIGIT_SOURCE_READ_SERVICE,&read_request,sizeof(read_request),&read_result,sizeof(read_result),&used);
+    if(sr!=STNLABZ_MODULE_OK||used!=sizeof(read_result)||!read_result.found||read_result.text[0]=='\0')return 0;
+
+    memset(&llama_request,0,sizeof(llama_request));
+    snprintf(llama_request.prompt,sizeof(llama_request.prompt),
+             "You are Digit. Answer the operator's question using only the authoritative source-project README supplied below. The named project is the primary authority for questions about itself. Answer the question directly. Do not invent facts, URLs, citations, architecture, versions, or properties. Do not show evidence or provenance unless the operator explicitly asked for it. If the README does not establish the answer, say so.\nPROJECT: %s\nQUESTION: %s\nREADME:\n%s\nANSWER:",
+             project,request,read_result.text);
+    memset(&llama_result,0,sizeof(llama_result));used=0;
+    sr=dispatcher_host->invoke_service(LLAMA_GENERATE_SERVICE,&llama_request,sizeof(llama_request),&llama_result,sizeof(llama_result),&used);
+    if(sr!=STNLABZ_MODULE_OK||used!=sizeof(llama_result)||!llama_result.available||llama_result.text[0]=='\0')return 0;
+
+    out->answered=1;
+    snprintf(out->answer,sizeof(out->answer),"%s",llama_result.text);
+    if(evidence_requested(request))
+    {
+        size_t offset=strlen(out->answer);
+        if(offset<sizeof(out->answer)-1)
+            snprintf(out->answer+offset,sizeof(out->answer)-offset," Evidence: [%s/README.md:%zu-%zu]",project,read_result.start_line,read_result.end_line);
+    }
+    return 1;
+}
+
 static stnlabz_module_result_t dispatcher_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
 {
     const digit_dispatcher_request_t *in=request;digit_dispatcher_result_t out;digit_response_request_t rr;digit_response_result_t ro;size_t used=0;stnlabz_module_result_t sr;(void)handler_context;
@@ -105,6 +168,7 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     if(memchr(in->request,'\0',sizeof(in->request))==NULL||in->request[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&out,0,sizeof(out));
     if(source_action(in->request))source_scan(in->request,&out);
+    else if(project_question(in->request,&out)){}
     else{
         memset(&rr,0,sizeof(rr));memset(&ro,0,sizeof(ro));snprintf(rr.question,sizeof(rr.question),"%s",in->request);
         sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),&ro,sizeof(ro),&used);
@@ -118,5 +182,5 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,0,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,1,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
