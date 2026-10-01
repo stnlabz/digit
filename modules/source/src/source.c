@@ -2,15 +2,26 @@
 
 #include <ctype.h>
 #include <dirent.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include "source.h"
 
+#define SOURCE_SEARCH_FILE_MAX 1500U
+#define SOURCE_SEARCH_BYTE_MAX (8U * 1024U * 1024U)
+#define SOURCE_SEARCH_SECONDS_MAX 2.0
+
 static const stnlabz_module_host_t *source_host = NULL;
+
+typedef struct
+{
+    size_t files;
+    size_t bytes;
+    clock_t started;
+    int stopped;
+} source_search_budget_t;
 
 static int safe_name(const char *value)
 {
@@ -93,20 +104,57 @@ static int ignored_entry(const char *name)
 {
     return strcmp(name, ".") == 0 || strcmp(name, "..") == 0 || strcmp(name, ".git") == 0 ||
            strcmp(name, "build") == 0 || strcmp(name, "bin") == 0 || strcmp(name, "vendor") == 0 ||
-           strcmp(name, "node_modules") == 0;
+           strcmp(name, "node_modules") == 0 || strcmp(name, ".cache") == 0 || strcmp(name, "cache") == 0;
 }
 
-static void search_tree(const char *project, const char *relative, const char *query, digit_source_search_result_t *result)
+static int likely_text_source(const char *name)
+{
+    static const char *extensions[] = {
+        ".c", ".h", ".cc", ".cpp", ".hpp", ".php", ".js", ".ts", ".css", ".html", ".htm",
+        ".md", ".txt", ".json", ".xml", ".yml", ".yaml", ".ini", ".conf", ".sh", ".cmd",
+        ".bat", ".ps1", ".py", ".sql", ".gitignore", ".gitattributes"
+    };
+    size_t i, length;
+    const char *dot;
+    if (name == NULL) return 0;
+    if (strcmp(name, "Makefile") == 0 || strcmp(name, "makefile") == 0) return 1;
+    dot = strrchr(name, '.');
+    if (dot == NULL) return 0;
+    length = strlen(dot);
+    for (i = 0; i < sizeof(extensions) / sizeof(extensions[0]); ++i)
+        if (length == strlen(extensions[i]) && strcmp(dot, extensions[i]) == 0) return 1;
+    return 0;
+}
+
+static int budget_available(source_search_budget_t *budget)
+{
+    double elapsed;
+    if (budget == NULL || budget->stopped) return 0;
+    if (budget->files >= SOURCE_SEARCH_FILE_MAX || budget->bytes >= SOURCE_SEARCH_BYTE_MAX)
+    {
+        budget->stopped = 1;
+        return 0;
+    }
+    elapsed = (double)(clock() - budget->started) / (double)CLOCKS_PER_SEC;
+    if (elapsed >= SOURCE_SEARCH_SECONDS_MAX)
+    {
+        budget->stopped = 1;
+        return 0;
+    }
+    return 1;
+}
+
+static void search_tree(const char *project, const char *relative, const char *query, digit_source_search_result_t *result, source_search_budget_t *budget)
 {
     char directory_path[DIGIT_SOURCE_PATH_MAX * 2];
     DIR *directory;
     struct dirent *entry;
-    if (result == NULL || result->count >= DIGIT_SOURCE_SEARCH_MAX) return;
+    if (result == NULL || result->count >= DIGIT_SOURCE_SEARCH_MAX || !budget_available(budget)) return;
     if (relative[0] == '\0') snprintf(directory_path, sizeof(directory_path), "%s/%s", DIGIT_SOURCE_ROOT, project);
     else snprintf(directory_path, sizeof(directory_path), "%s/%s/%s", DIGIT_SOURCE_ROOT, project, relative);
     directory = opendir(directory_path);
     if (directory == NULL) return;
-    while ((entry = readdir(directory)) != NULL && result->count < DIGIT_SOURCE_SEARCH_MAX)
+    while ((entry = readdir(directory)) != NULL && result->count < DIGIT_SOURCE_SEARCH_MAX && budget_available(budget))
     {
         char child_relative[DIGIT_SOURCE_PATH_MAX];
         char child_path[DIGIT_SOURCE_PATH_MAX * 2];
@@ -118,15 +166,19 @@ static void search_tree(const char *project, const char *relative, const char *q
         if (stat(child_path, &st) != 0) continue;
         if (S_ISDIR(st.st_mode))
         {
-            search_tree(project, child_relative, query, result);
+            search_tree(project, child_relative, query, result, budget);
         }
-        else if (S_ISREG(st.st_mode) && st.st_size <= 1024 * 1024)
+        else if (S_ISREG(st.st_mode) && st.st_size >= 0 && st.st_size <= 1024 * 1024 && likely_text_source(entry->d_name))
         {
-            FILE *file = fopen(child_path, "r");
+            FILE *file;
             char line[DIGIT_SOURCE_TEXT_MAX];
             size_t line_number = 0;
+            ++budget->files;
+            budget->bytes += (size_t)st.st_size;
+            if (!budget_available(budget)) break;
+            file = fopen(child_path, "r");
             if (file == NULL) continue;
-            while (fgets(line, sizeof(line), file) != NULL && result->count < DIGIT_SOURCE_SEARCH_MAX)
+            while (fgets(line, sizeof(line), file) != NULL && result->count < DIGIT_SOURCE_SEARCH_MAX && budget_available(budget))
             {
                 digit_source_match_t *match;
                 ++line_number;
@@ -175,13 +227,22 @@ static stnlabz_module_result_t source_search_service(const void *request, size_t
 {
     const digit_source_search_request_t *input = request;
     digit_source_search_result_t result;
+    source_search_budget_t budget;
     char project_path[DIGIT_SOURCE_PATH_MAX * 2];
     (void)handler_context;
     if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(result)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->project, '\0', sizeof(input->project)) == NULL || memchr(input->query, '\0', sizeof(input->query)) == NULL || input->query[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!make_project_path(input->project, project_path, sizeof(project_path)) || !is_directory(project_path)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&result, 0, sizeof(result));
-    search_tree(input->project, "", input->query, &result);
+    memset(&budget, 0, sizeof(budget));
+    budget.started = clock();
+    search_tree(input->project, "", input->query, &result, &budget);
+    if (budget.stopped && source_host != NULL && source_host->send_message != NULL)
+    {
+        char message[256];
+        snprintf(message, sizeof(message), "[SOURCE] bounded search stopped project=%s files=%zu bytes=%zu matches=%zu", input->project, budget.files, budget.bytes, result.count);
+        (void)source_host->send_message(message);
+    }
     memcpy(response, &result, sizeof(result));
     *response_used = sizeof(result);
     return STNLABZ_MODULE_OK;
@@ -293,7 +354,7 @@ static stnlabz_module_result_t source_start(const stnlabz_module_host_t *host)
     if (!host->register_service(DIGIT_SOURCE_READ_SERVICE, source_read_service, NULL)) goto fail_search;
     if (!host->register_service(DIGIT_SOURCE_STATUS_SERVICE, source_status_service, NULL)) goto fail_read;
     source_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[SOURCE] module active: projects, search, read, status registered");
+    if (host->send_message != NULL) (void)host->send_message("[SOURCE] module active: bounded projects, search, read, status registered");
     return STNLABZ_MODULE_OK;
 fail_read:
     if (host->unregister_service != NULL) (void)host->unregister_service(DIGIT_SOURCE_READ_SERVICE, NULL);
@@ -319,7 +380,7 @@ static stnlabz_module_result_t source_stop(void)
 }
 
 static const stnlabz_module_descriptor_t source_descriptor = {
-    "source", "Digit Source Evidence", 1, 0, 0,
+    "source", "Digit Source Evidence", 1, 0, 1,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     source_qualify, source_start, source_stop
 };
