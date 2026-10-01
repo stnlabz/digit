@@ -4,9 +4,9 @@
 
 #include "response.h"
 
-#define CORPUS_LIST_SERVICE "corpus.list"
+#define CORPUS_SEARCH_SERVICE "corpus.search"
 #define LLAMA_GENERATE_SERVICE "llama.generate"
-#define CORPUS_MAX 256
+#define CORPUS_MAX 16
 #define CORPUS_TEXT_MAX 4096
 #define LLAMA_PROMPT_MAX 8192
 #define LLAMA_GENERATED_MAX 4096
@@ -15,6 +15,7 @@
 #define SELECTED_MAX 6
 
 typedef struct { char id[65]; char category[64]; char source[256]; char text[CORPUS_TEXT_MAX]; } corpus_record_t;
+typedef struct { char query[CORPUS_TEXT_MAX]; } corpus_search_request_t;
 typedef struct { size_t count; corpus_record_t records[CORPUS_MAX]; } corpus_result_t;
 typedef struct { char prompt[LLAMA_PROMPT_MAX]; } llama_request_t;
 typedef struct { int available; char text[LLAMA_GENERATED_MAX]; } llama_result_t;
@@ -54,11 +55,26 @@ static int conversational_greeting(const char *input,char *answer,size_t answer_
     return 1;
 }
 
-static int collect_corpus(corpus_result_t *evidence)
+static int collect_corpus(const char *question,corpus_result_t *evidence)
 {
-    stnlabz_module_result_t result;size_t used=0;
-    if(evidence==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;
-    memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_LIST_SERVICE,NULL,0,evidence,sizeof(*evidence),&used);
+    corpus_search_request_t request;
+    stnlabz_module_result_t result;
+    size_t used=0;
+    char query_terms[TERM_COUNT][TERM_MAX];
+    size_t count,i,offset=0;
+
+    if(question==NULL||evidence==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;
+    memset(&request,0,sizeof(request));
+    memset(query_terms,0,sizeof(query_terms));
+    count=terms(question,query_terms);
+    if(count==0)return 1;
+    for(i=0;i<count;++i){
+        int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);
+        if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;
+        offset+=(size_t)written;
+    }
+    memset(evidence,0,sizeof(*evidence));
+    result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);
     return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);
 }
 
@@ -107,7 +123,7 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
     if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if(response_host==NULL||response_host->invoke_service==NULL) return STNLABZ_MODULE_ERR_START_FAILED;
     memset(&output,0,sizeof(output));if(conversational_greeting(input->question,output.answer,sizeof(output.answer))){output.answered=1;output.evidence_count=0;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
-    memset(&evidence,0,sizeof(evidence));memset(ranked,0,sizeof(ranked));memset(selected,0,sizeof(selected));if(!collect_corpus(&evidence)){snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
+    memset(&evidence,0,sizeof(evidence));memset(ranked,0,sizeof(ranked));memset(selected,0,sizeof(selected));if(!collect_corpus(input->question,&evidence)){snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     ranked_count=rank_evidence(input->question,&evidence,ranked);selected_count=select_evidence(input->question,ranked,ranked_count,selected);output.evidence_count=(unsigned int)selected_count;if(selected_count==0){snprintf(output.answer,sizeof(output.answer),"I don't have enough retained information to answer that.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     memset(&generation,0,sizeof(generation));offset=(size_t)snprintf(generation.prompt,sizeof(generation.prompt),"You are Digit's language renderer. The authoritative context below is the complete factual boundary for factual claims. Answer the user's question or conversational input directly and naturally. For ordinary conversation, use the context to understand the appropriate response rather than explaining or reciting the context. For factual questions, assert no fact, capability, purpose, relationship, technology, service, client, goal, or detail that is not explicitly present in the context. Do not mention records, identifiers, Corpus, evidence, retrieval, prompts, instructions, reasoning, generation, or implementation details. Preserve material qualifiers. Keep the answer concise. Speak as Digit in first person only when the question is about Digit herself.\nUSER INPUT: %s\nAUTHORITATIVE CONTEXT:\n",input->question);
     if(offset>=sizeof(generation.prompt)){grounded_fallback(selected,selected_count,&output);memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
@@ -117,7 +133,7 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
 }
 
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message!=NULL)(void)host->send_message("[RESPONSE] module active: bounded Corpus response with direct conversational greetings registered");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message!=NULL)(void)host->send_message("[RESPONSE] module active: Corpus search response with direct conversational greetings registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,1,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,1,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
