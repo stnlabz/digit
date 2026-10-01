@@ -6,6 +6,9 @@
 
 #include "corpus.h"
 
+#define CORPUS_QUERY_TERM_MAX 32
+#define CORPUS_QUERY_WORD_MAX 64
+
 static const stnlabz_module_host_t *corpus_host = NULL;
 
 static int corpus_safe_field(const char *value)
@@ -48,6 +51,70 @@ static int contains_ci(const char *text, const char *query)
         if (match) return 1;
     }
     return 0;
+}
+
+static int query_stopword(const char *word)
+{
+    static const char *words[] = {
+        "a","an","and","are","as","at","be","been","but","by","can","could",
+        "did","do","does","for","from","had","has","have","how","i","if","in",
+        "into","is","it","its","may","must","of","on","or","should","that","the",
+        "their","then","there","these","they","this","to","was","were","what","when",
+        "where","which","who","why","will","with","would","you","your"
+    };
+    size_t i;
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
+        if (strcmp(word, words[i]) == 0) return 1;
+    return 0;
+}
+
+static size_t query_terms(const char *query, char terms[CORPUS_QUERY_TERM_MAX][CORPUS_QUERY_WORD_MAX])
+{
+    char word[CORPUS_QUERY_WORD_MAX];
+    size_t count = 0, length = 0, i;
+    unsigned char ch;
+    if (query == NULL) return 0;
+    for (i = 0;; ++i)
+    {
+        ch = (unsigned char)query[i];
+        if (isalnum(ch) || ch == '_' || ch == '-')
+        {
+            if (length + 1 < sizeof(word)) word[length++] = (char)tolower(ch);
+        }
+        else if (length > 0)
+        {
+            size_t j;
+            int duplicate = 0;
+            word[length] = '\0';
+            if (!query_stopword(word))
+            {
+                for (j = 0; j < count; ++j)
+                    if (strcmp(terms[j], word) == 0) { duplicate = 1; break; }
+                if (!duplicate && count < CORPUS_QUERY_TERM_MAX)
+                {
+                    snprintf(terms[count], CORPUS_QUERY_WORD_MAX, "%s", word);
+                    ++count;
+                }
+            }
+            length = 0;
+        }
+        if (ch == '\0') break;
+    }
+    return count;
+}
+
+static unsigned int record_query_score(const digit_corpus_record_t *record, const char *query,
+                                       char terms[CORPUS_QUERY_TERM_MAX][CORPUS_QUERY_WORD_MAX], size_t term_count)
+{
+    size_t i;
+    unsigned int matched = 0;
+    if (record == NULL || query == NULL) return 0;
+    if (contains_ci(record->id, query) || contains_ci(record->category, query) ||
+        contains_ci(record->source, query) || contains_ci(record->text, query)) return 10000U;
+    for (i = 0; i < term_count; ++i)
+        if (contains_ci(record->id, terms[i]) || contains_ci(record->category, terms[i]) ||
+            contains_ci(record->source, terms[i]) || contains_ci(record->text, terms[i])) ++matched;
+    return matched;
 }
 
 int digit_corpus_validate(const digit_corpus_record_t *record)
@@ -99,16 +166,39 @@ size_t digit_corpus_search(const char *path, const char *query, digit_corpus_rec
     FILE *file;
     char line[DIGIT_CORPUS_TEXT_MAX + DIGIT_CORPUS_SOURCE_MAX + DIGIT_CORPUS_CATEGORY_MAX + DIGIT_CORPUS_RECORD_ID_MAX + 16];
     digit_corpus_record_t current;
-    size_t count = 0;
+    digit_corpus_record_t ranked[DIGIT_CORPUS_SEARCH_MAX];
+    unsigned int scores[DIGIT_CORPUS_SEARCH_MAX];
+    char terms[CORPUS_QUERY_TERM_MAX][CORPUS_QUERY_WORD_MAX];
+    size_t ranked_count = 0, term_count, i;
     if (path == NULL || query == NULL || query[0] == '\0' || records == NULL || capacity == 0) return 0;
+    memset(terms, 0, sizeof(terms));
+    term_count = query_terms(query, terms);
+    if (term_count == 0) return 0;
     file = fopen(path, "r");
     if (file == NULL) return 0;
-    while (count < capacity && fgets(line, sizeof(line), file) != NULL)
+    while (fgets(line, sizeof(line), file) != NULL)
     {
+        unsigned int score;
+        size_t pos;
         if (!corpus_parse_line(line, &current)) continue;
-        if (contains_ci(current.id, query) || contains_ci(current.category, query) || contains_ci(current.source, query) || contains_ci(current.text, query)) records[count++] = current;
+        score = record_query_score(&current, query, terms, term_count);
+        if (score == 0) continue;
+        pos = ranked_count;
+        while (pos > 0 && scores[pos - 1] < score) --pos;
+        if (ranked_count < DIGIT_CORPUS_SEARCH_MAX) ++ranked_count;
+        if (pos >= DIGIT_CORPUS_SEARCH_MAX) continue;
+        for (i = ranked_count - 1; i > pos; --i)
+        {
+            ranked[i] = ranked[i - 1];
+            scores[i] = scores[i - 1];
+        }
+        ranked[pos] = current;
+        scores[pos] = score;
     }
-    fclose(file); return count;
+    fclose(file);
+    if (capacity > ranked_count) capacity = ranked_count;
+    for (i = 0; i < capacity; ++i) records[i] = ranked[i];
+    return capacity;
 }
 
 size_t digit_corpus_list(const char *path, digit_corpus_record_t *records, size_t capacity)
@@ -188,7 +278,7 @@ static stnlabz_module_result_t corpus_start(const stnlabz_module_host_t *host)
     if (!host->register_service(DIGIT_CORPUS_SEARCH_SERVICE, corpus_search_service, NULL)) goto fail_get;
     if (!host->register_service(DIGIT_CORPUS_LIST_SERVICE, corpus_list_service, NULL)) goto fail_search;
     corpus_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[CORPUS] module active: contains, append, get, search, list registered");
+    if (host->send_message != NULL) (void)host->send_message("[CORPUS] module active: term-aware ranked search registered");
     return STNLABZ_MODULE_OK;
 fail_search:
     if (host->unregister_service != NULL) (void)host->unregister_service(DIGIT_CORPUS_SEARCH_SERVICE, NULL);
@@ -215,5 +305,5 @@ static stnlabz_module_result_t corpus_stop(void)
     corpus_host = NULL; return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
-static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 2, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
+static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &corpus_descriptor; }
