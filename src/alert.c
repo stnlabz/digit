@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "alert.h"
+#include "channel.h"
 
 #define DIGIT_ALERT_STATE_DIR "/opt/digit/state/alerts"
 #define DIGIT_ALERTS_FILE DIGIT_ALERT_STATE_DIR "/alerts.tsv"
@@ -35,6 +36,29 @@ static int digit_alert_is_acknowledged(const char *id,unsigned long long *when)
     fclose(file);return 0;
 }
 
+static int digit_alert_find_channel(digit_channel_t *channel)
+{
+    digit_channel_t channels[DIGIT_CHANNEL_MAX];size_t count,index;
+    if(channel==NULL)return 0;
+    count=digit_channel_list(channels,DIGIT_CHANNEL_MAX);if(count>DIGIT_CHANNEL_MAX)count=DIGIT_CHANNEL_MAX;
+    for(index=0;index<count;++index)
+    {
+        if(_POSIX_VERSION && strcasecmp(channels[index].name,"Alerts")==0){*channel=channels[index];return 1;}
+    }
+    return 0;
+}
+
+static void digit_alert_speak(const digit_alert_t *alert)
+{
+    digit_channel_t channel;digit_channel_message_t message;char body[DIGIT_CHANNEL_MESSAGE_MAX];int written;
+    if(alert==NULL||!digit_alert_find_channel(&channel))return;
+    written=snprintf(body,sizeof(body),"%s alert from %s. %s. %s Operational state: %s. Alert ID: %s.",
+                     digit_alert_severity_string(alert->severity),alert->source,alert->summary,alert->detail,
+                     alert->operational_state,alert->id);
+    if(written<=0||(size_t)written>=sizeof(body))return;
+    (void)digit_channel_message_append(channel.id,"digit",body,&message);
+}
+
 int digit_alert_raise(digit_alert_severity_t severity,const char *source,const char *summary,const char *detail,const char *operational_state,digit_alert_t *alert)
 {
     FILE *file;digit_alert_t created;
@@ -45,7 +69,9 @@ int digit_alert_raise(digit_alert_severity_t severity,const char *source,const c
     (void)snprintf(created.source,sizeof(created.source),"%s",source);(void)snprintf(created.summary,sizeof(created.summary),"%s",summary);(void)snprintf(created.detail,sizeof(created.detail),"%s",detail);(void)snprintf(created.operational_state,sizeof(created.operational_state),"%s",operational_state);
     file=fopen(DIGIT_ALERTS_FILE,"a");if(file==NULL)return 0;
     if(fprintf(file,"%s\t%llu\t%d\t%s\t%s\t%s\t%s\n",created.id,created.created_at,(int)created.severity,created.source,created.summary,created.detail,created.operational_state)<0){fclose(file);return 0;}
-    if(fclose(file)!=0)return 0;if(alert!=NULL)*alert=created;return 1;
+    if(fclose(file)!=0)return 0;
+    digit_alert_speak(&created);
+    if(alert!=NULL)*alert=created;return 1;
 }
 
 size_t digit_alert_list(digit_alert_t *alerts,size_t capacity,int unacknowledged_only)
