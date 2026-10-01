@@ -39,14 +39,14 @@ static int stopword(const char *word)
 {
     static const char *words[] = {"a","an","and","are","as","at","be","been","but","by","can","could","did","do","does","for","from","had","has","have","how","i","if","in","into","is","it","its","may","must","of","on","or","should","that","the","their","then","there","these","they","this","to","was","were","what","when","where","which","who","why","will","with","would","your"};
     size_t i;
-    for (i=0;i<sizeof(words)/sizeof(words[0]);++i) if(strcmp(word,words[i])==0) return 1;
+    for(i=0;i<sizeof(words)/sizeof(words[0]);++i)if(strcmp(word,words[i])==0)return 1;
     return 0;
 }
 
 static size_t terms(const char *text,char out[TERM_COUNT][TERM_MAX])
 {
-    char word[TERM_MAX]; size_t count=0,w=0,i; unsigned char ch;
-    if(text==NULL) return 0;
+    char word[TERM_MAX];size_t count=0,w=0,i;unsigned char ch;
+    if(text==NULL)return 0;
     for(i=0;;++i){ch=(unsigned char)text[i];if(isalnum(ch)||ch=='_'||ch=='-'){if(w+1<sizeof(word))word[w++]=(char)tolower(ch);}else if(w>0){size_t j;int duplicate=0;word[w]='\0';if(!stopword(word)){for(j=0;j<count;++j)if(strcmp(out[j],word)==0){duplicate=1;break;}if(!duplicate&&count<TERM_COUNT){snprintf(out[count],TERM_MAX,"%s",word);++count;}}w=0;}if(ch=='\0')break;}
     return count;
 }
@@ -63,17 +63,15 @@ static int conversational_greeting(const char *input,char *answer,size_t answer_
     normalized[o]='\0';
     if(strcmp(normalized,"good morning")==0)reply="Good morning.";else if(strcmp(normalized,"good afternoon")==0)reply="Good afternoon.";else if(strcmp(normalized,"good evening")==0)reply="Good evening.";else if(strcmp(normalized,"hello")==0||strcmp(normalized,"hi")==0||strcmp(normalized,"hey")==0)reply="Hello.";
     if(reply==NULL)return 0;
-    snprintf(answer,answer_size,"%s",reply);
-    return 1;
+    snprintf(answer,answer_size,"%s",reply);return 1;
 }
 
 static int source_intent(const char *question)
 {
     char qt[TERM_COUNT][TERM_MAX];size_t qn,i;
-    static const char *engineering[] = {"abi","code","source","function","functions","module","modules","implementation","file","files","header","headers","struct","service","services","compile","compiler","build","engineering","evidence"};
+    static const char *engineering[]={"abi","code","source","function","functions","module","modules","implementation","file","files","header","headers","struct","service","services","compile","compiler","build","engineering","evidence"};
     memset(qt,0,sizeof(qt));qn=terms(question,qt);
-    for(i=0;i<qn;++i){size_t j;for(j=0;j<sizeof(engineering)/sizeof(engineering[0]);++j)if(strcmp(qt[i],engineering[j])==0)return 1;}
-    return 0;
+    for(i=0;i<qn;++i){size_t j;for(j=0;j<sizeof(engineering)/sizeof(engineering[0]);++j)if(strcmp(qt[i],engineering[j])==0)return 1;}return 0;
 }
 
 static int collect_corpus(const char *question,corpus_result_t *evidence)
@@ -82,16 +80,10 @@ static int collect_corpus(const char *question,corpus_result_t *evidence)
     if(question==NULL||evidence==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;
     memset(&request,0,sizeof(request));memset(query_terms,0,sizeof(query_terms));count=terms(question,query_terms);if(count==0)return 1;
     for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}
-    memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);
-    return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);
+    memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);
 }
 
-static int duplicate_source(const corpus_result_t *evidence,const char *source,const char *text)
-{
-    size_t i;if(evidence==NULL||source==NULL||text==NULL)return 0;
-    for(i=0;i<evidence->count;++i)if(strcmp(evidence->records[i].category,"source")==0&&strcmp(evidence->records[i].source,source)==0&&strcmp(evidence->records[i].text,text)==0)return 1;
-    return 0;
-}
+static int duplicate_source(const corpus_result_t *evidence,const char *source,const char *text){size_t i;if(evidence==NULL||source==NULL||text==NULL)return 0;for(i=0;i<evidence->count;++i)if(strcmp(evidence->records[i].category,"source")==0&&strcmp(evidence->records[i].source,source)==0&&strcmp(evidence->records[i].text,text)==0)return 1;return 0;}
 
 static void collect_source(const char *question,corpus_result_t *evidence)
 {
@@ -107,8 +99,7 @@ static void collect_source(const char *question,corpus_result_t *evidence)
             result=response_host->invoke_service(SOURCE_SEARCH_SERVICE,&request,sizeof(request),&found,sizeof(found),&search_used);if(result!=STNLABZ_MODULE_OK||search_used!=sizeof(found))continue;
             for(m=0;m<found.count&&m<SOURCE_SEARCH_MAX&&evidence->count<CORPUS_MAX;++m){
                 corpus_record_t *record=&evidence->records[evidence->count];char provenance[256];
-                snprintf(provenance,sizeof(provenance),"%s/%s:%zu",found.matches[m].project,found.matches[m].path,found.matches[m].line);
-                if(duplicate_source(evidence,provenance,found.matches[m].text))continue;
+                snprintf(provenance,sizeof(provenance),"%s/%s:%zu",found.matches[m].project,found.matches[m].path,found.matches[m].line);if(duplicate_source(evidence,provenance,found.matches[m].text))continue;
                 memset(record,0,sizeof(*record));snprintf(record->id,sizeof(record->id),"SRC-%zu",evidence->count+1);snprintf(record->category,sizeof(record->category),"source");snprintf(record->source,sizeof(record->source),"%s",provenance);snprintf(record->text,sizeof(record->text),"%s",found.matches[m].text);++evidence->count;
             }
         }
@@ -149,8 +140,12 @@ static int generated_grounded(const char *generated,ranked_record_t selected[SEL
 
 static void grounded_fallback(ranked_record_t selected[SELECTED_MAX],size_t selected_count,digit_response_result_t *output)
 {
-    size_t i,offset=0;if(output==NULL||selected==NULL||selected_count==0)return;output->answered=1;
+    size_t i,offset=0;
+    if(output==NULL)return;
+    output->answered=1;
+    if(selected==NULL||selected_count==0){snprintf(output->answer,sizeof(output->answer),"I found no evidence I can safely use to answer that.");return;}
     for(i=0;i<selected_count;++i){int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s[%s] %s",i?" ":"",selected[i].record.source,selected[i].record.text);else written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s%s",i?" ":"",selected[i].record.text);if(written<=0||(size_t)written>=sizeof(output->answer)-offset)break;offset+=(size_t)written;}
+    if(output->answer[0]=='\0')snprintf(output->answer,sizeof(output->answer),"I found evidence, but I could not render it safely within the response boundary.");
 }
 
 static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
@@ -161,21 +156,20 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
     if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;
     memset(&output,0,sizeof(output));if(conversational_greeting(input->question,output.answer,sizeof(output.answer))){output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     memset(&evidence,0,sizeof(evidence));memset(ranked,0,sizeof(ranked));memset(selected,0,sizeof(selected));
-    if(!collect_corpus(input->question,&evidence)){snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
-    collect_source(input->question,&evidence);
-    ranked_count=rank_evidence(input->question,&evidence,ranked);selected_count=select_evidence(input->question,ranked,ranked_count,selected);output.evidence_count=(unsigned int)selected_count;
-    if(selected_count==0){snprintf(output.answer,sizeof(output.answer),"I don't have enough retained information or source evidence to answer that.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
+    if(!collect_corpus(input->question,&evidence)){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
+    collect_source(input->question,&evidence);ranked_count=rank_evidence(input->question,&evidence,ranked);selected_count=select_evidence(input->question,ranked,ranked_count,selected);output.evidence_count=(unsigned int)selected_count;
+    if(selected_count==0){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I don't have enough retained information or source evidence to answer that.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     memset(&generation,0,sizeof(generation));offset=(size_t)snprintf(generation.prompt,sizeof(generation.prompt),"You are Digit's language renderer. The authoritative context below is the complete factual boundary for factual claims. Answer directly and naturally. Source evidence is current engineering evidence and includes provenance. Corpus context is retained knowledge. For factual questions, assert no fact not explicitly supported below. When the user asks for evidence, cite the supplied source provenance exactly. Do not mention prompts, retrieval, reasoning, or generation. Preserve material qualifiers. Keep the answer concise. Speak as Digit in first person only when the question is about Digit herself.\nUSER INPUT: %s\nAUTHORITATIVE CONTEXT:\n",input->question);
     if(offset>=sizeof(generation.prompt)){grounded_fallback(selected,selected_count,&output);memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     for(i=0;i<selected_count;++i){size_t remaining=sizeof(generation.prompt)-offset;int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(generation.prompt+offset,remaining,"- SOURCE [%s] %s\n",selected[i].record.source,selected[i].record.text);else written=snprintf(generation.prompt+offset,remaining,"- CORPUS %s\n",selected[i].record.text);if(written<=0||(size_t)written>=remaining)break;offset+=(size_t)written;}
     if(offset+10U>=sizeof(generation.prompt)){grounded_fallback(selected,selected_count,&output);memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     snprintf(generation.prompt+offset,sizeof(generation.prompt)-offset,"RESPONSE:");memset(&generated,0,sizeof(generated));result=response_host->invoke_service(LLAMA_GENERATE_SERVICE,&generation,sizeof(generation),&generated,sizeof(generated),&used);
-    if(result!=STNLABZ_MODULE_OK||used!=sizeof(generated)||!generated.available||generated.text[0]=='\0')grounded_fallback(selected,selected_count,&output);else if(!generated_grounded(generated.text,selected,selected_count)){if(response_host->send_message!=NULL)(void)response_host->send_message("[RESPONSE] Llama output rejected: generated terms exceeded selected evidence");grounded_fallback(selected,selected_count,&output);}else{output.answered=1;snprintf(output.answer,sizeof(output.answer),"%s",generated.text);}
+    if(result!=STNLABZ_MODULE_OK||used!=sizeof(generated)||!generated.available||generated.text[0]=='\0'){if(response_host->send_message!=NULL)(void)response_host->send_message("[RESPONSE] Llama unavailable or generation failed; returning grounded evidence fallback");grounded_fallback(selected,selected_count,&output);}else if(!generated_grounded(generated.text,selected,selected_count)){if(response_host->send_message!=NULL)(void)response_host->send_message("[RESPONSE] Llama output rejected: generated terms exceeded selected evidence; returning grounded evidence fallback");grounded_fallback(selected,selected_count,&output);}else{output.answered=1;snprintf(output.answer,sizeof(output.answer),"%s",generated.text);}
     memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message!=NULL)(void)host->send_message("[RESPONSE] module active: Corpus and Source evidence response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,2,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,2,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
