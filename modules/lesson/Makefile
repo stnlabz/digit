@@ -6,14 +6,16 @@ ABI_INCLUDE := $(ABI_DIR)/includes
 CPPFLAGS ?= -Iincludes -I../corpus_builder/includes -I$(ABI_INCLUDE)
 
 TARGET := bin/lesson.so
+TEST_TARGET := bin/test_lesson
 SOURCE := src/lesson.c
+TEST_SOURCE := tests/test_lesson.c
 
 DIGIT_PREFIX ?= /opt/digit
 INSTALL_DIR := $(DIGIT_PREFIX)/modules/lesson
 INSTALL_BIN := $(INSTALL_DIR)/bin
 LESSON_DIR := $(DIGIT_PREFIX)/lessons
 
-.PHONY: all clean check-abi rebuild install
+.PHONY: all clean check-abi rebuild install test
 
 all: check-abi $(TARGET)
 
@@ -22,6 +24,12 @@ check-abi:
 
 $(TARGET): $(SOURCE) includes/lesson.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
+
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/lesson.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@
+
+test: check-abi $(TEST_TARGET)
+	./$(TEST_TARGET)
 
 bin:
 	mkdir -p bin
