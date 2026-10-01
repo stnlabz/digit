@@ -9,7 +9,7 @@
 #define DIGIT_CORPUS_SOURCE_MAX 256
 #define DIGIT_CORPUS_TEXT_MAX 4096
 #define DIGIT_CORPUS_SEARCH_MAX 16
-#define DIGIT_CORPUS_LIST_MAX 64
+#define DIGIT_CORPUS_LIST_MAX 256
 #define DIGIT_CORPUS_PATH "/opt/digit/corpus/corpus.tsv"
 #define DIGIT_CORPUS_CONTAINS_SERVICE "corpus.contains"
 #define DIGIT_CORPUS_APPEND_SERVICE "corpus.append"
