@@ -76,6 +76,14 @@ static int evidence_requested(const char *request)
            contains_ci(request,"citation");
 }
 
+static int historical_question(const char *request)
+{
+    return contains_ci(request,"history") || contains_ci(request,"historical") ||
+           contains_ci(request,"previous") || contains_ci(request,"formerly") ||
+           contains_ci(request,"used before") || contains_ci(request,"have you used") ||
+           contains_ci(request,"versions have") || contains_ci(request,"versions did");
+}
+
 static int resolve_project(const char *request, char *project, size_t project_size)
 {
     digit_source_projects_result_t projects;
@@ -129,9 +137,11 @@ static int project_question(const char *request,digit_dispatcher_result_t *out)
     dispatcher_llama_result_t llama_result;
     stnlabz_module_result_t sr;
     size_t used=0;
+    int history;
 
     memset(project,0,sizeof(project));
     if(!resolve_project(request,project,sizeof(project)))return 0;
+    history=historical_question(request);
 
     memset(&read_request,0,sizeof(read_request));
     snprintf(read_request.project,sizeof(read_request.project),"%s",project);
@@ -144,8 +154,8 @@ static int project_question(const char *request,digit_dispatcher_result_t *out)
 
     memset(&llama_request,0,sizeof(llama_request));
     snprintf(llama_request.prompt,sizeof(llama_request.prompt),
-             "You are Digit. Answer the operator's question using only the authoritative source-project README supplied below. The named project is the primary authority for questions about itself. Answer the question directly. Do not invent facts, URLs, citations, architecture, versions, or properties. Do not show evidence or provenance unless the operator explicitly asked for it. If the README does not establish the answer, say so.\nPROJECT: %s\nQUESTION: %s\nREADME:\n%s\nANSWER:",
-             project,request,read_result.text);
+             "You are Digit. Answer the operator's question using only the authoritative source-project README supplied below. The named project is the primary authority for questions about itself. Determine whether the operator asks for CURRENT state or HISTORY. This request is classified as %s. For CURRENT state, answer only the latest/current/terminal state established by the README; do not return a progression, migration chain, superseded version, or historical list. For HISTORY, historical progression may be returned when the README establishes it. Answer the question directly. Do not invent facts, URLs, citations, architecture, versions, or properties. Do not show evidence or provenance unless the operator explicitly asked for it. If the README does not establish the answer, say so.\nPROJECT: %s\nQUESTION: %s\nREADME:\n%s\nANSWER:",
+             history?"HISTORY":"CURRENT STATE",project,request,read_result.text);
     memset(&llama_result,0,sizeof(llama_result));used=0;
     sr=dispatcher_host->invoke_service(LLAMA_GENERATE_SERVICE,&llama_request,sizeof(llama_request),&llama_result,sizeof(llama_result),&used);
     if(sr!=STNLABZ_MODULE_OK||used!=sizeof(llama_result)||!llama_result.available||llama_result.text[0]=='\0')return 0;
@@ -182,5 +192,5 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,1,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,1,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
