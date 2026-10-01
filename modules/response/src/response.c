@@ -46,9 +46,12 @@ static int conversational_greeting(const char *input,char *answer,size_t answer_
     if(input==NULL||answer==NULL||answer_size==0)return 0;
     while(input[i]!='\0'&&isspace((unsigned char)input[i]))++i;
     while(input[i]!='\0'&&o+1<sizeof(normalized)){unsigned char ch=(unsigned char)input[i++];if(isalnum(ch))normalized[o++]=(char)tolower(ch);else if(isspace(ch)&&o>0&&normalized[o-1]!=' ')normalized[o++]=' ';}
-    while(o>0&&normalized[o-1]==' ')--o;normalized[o]='\0';
+    while(o>0&&normalized[o-1]==' ') --o;
+    normalized[o]='\0';
     if(strcmp(normalized,"good morning")==0)reply="Good morning.";else if(strcmp(normalized,"good afternoon")==0)reply="Good afternoon.";else if(strcmp(normalized,"good evening")==0)reply="Good evening.";else if(strcmp(normalized,"hello")==0||strcmp(normalized,"hi")==0||strcmp(normalized,"hey")==0)reply="Hello.";
-    if(reply==NULL)return 0;snprintf(answer,answer_size,"%s",reply);return 1;
+    if(reply==NULL) return 0;
+    snprintf(answer,answer_size,"%s",reply);
+    return 1;
 }
 
 static int collect_corpus(corpus_result_t *evidence)
@@ -81,7 +84,11 @@ static size_t rank_evidence(const char *question,const corpus_result_t *evidence
 static size_t select_evidence(const char *question,ranked_record_t ranked[CORPUS_MAX],size_t ranked_count,ranked_record_t selected[SELECTED_MAX])
 {
     char qt[TERM_COUNT][TERM_MAX],anchor[TERM_COUNT][TERM_MAX];int covered[TERM_COUNT];size_t qn,an,i,q,count=0;unsigned int minimum_matches;memset(qt,0,sizeof(qt));memset(anchor,0,sizeof(anchor));memset(covered,0,sizeof(covered));qn=terms(question,qt);
-    if(ranked==NULL||selected==NULL||ranked_count==0||qn==0||ranked[0].matches==0)return 0;selected[count++]=ranked[0];minimum_matches=ranked[0].matches>1?ranked[0].matches-1:1;an=terms(ranked[0].record.text,anchor);for(q=0;q<qn;++q)if(has_term(anchor,an,qt[q]))covered[q]=1;
+    if(ranked==NULL||selected==NULL||ranked_count==0||qn==0||ranked[0].matches==0) return 0;
+    selected[count++]=ranked[0];
+    minimum_matches=ranked[0].matches>1?ranked[0].matches-1:1;
+    an=terms(ranked[0].record.text,anchor);
+    for(q=0;q<qn;++q)if(has_term(anchor,an,qt[q]))covered[q]=1;
     for(i=1;i<ranked_count&&count<SELECTED_MAX;++i){char rt[TERM_COUNT][TERM_MAX];size_t rn;unsigned int shared=0;int adds=0;if(ranked[i].matches<minimum_matches)continue;memset(rt,0,sizeof(rt));rn=terms(ranked[i].record.text,rt);for(q=0;q<an;++q)if(has_term(rt,rn,anchor[q]))++shared;if(shared<2)continue;for(q=0;q<qn;++q)if(!covered[q]&&has_term(rt,rn,qt[q])){adds=1;break;}if(!adds)continue;selected[count++]=ranked[i];for(q=0;q<qn;++q)if(has_term(rt,rn,qt[q]))covered[q]=1;}return count;
 }
 
@@ -96,7 +103,9 @@ static void grounded_fallback(ranked_record_t selected[SELECTED_MAX],size_t sele
 static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
 {
     const digit_response_request_t *input=request;digit_response_result_t output;corpus_result_t evidence;ranked_record_t ranked[CORPUS_MAX];ranked_record_t selected[SELECTED_MAX];llama_request_t generation;llama_result_t generated;size_t used=0,i,offset,ranked_count,selected_count;stnlabz_module_result_t result;(void)handler_context;
-    if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;
+    if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if(response_host==NULL||response_host->invoke_service==NULL) return STNLABZ_MODULE_ERR_START_FAILED;
     memset(&output,0,sizeof(output));if(conversational_greeting(input->question,output.answer,sizeof(output.answer))){output.answered=1;output.evidence_count=0;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     memset(&evidence,0,sizeof(evidence));memset(ranked,0,sizeof(ranked));memset(selected,0,sizeof(selected));if(!collect_corpus(&evidence)){snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     ranked_count=rank_evidence(input->question,&evidence,ranked);selected_count=select_evidence(input->question,ranked,ranked_count,selected);output.evidence_count=(unsigned int)selected_count;if(selected_count==0){snprintf(output.answer,sizeof(output.answer),"I don't have enough retained information to answer that.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
