@@ -48,7 +48,6 @@ static int stopword(const char *word)
         "where", "which", "who", "why", "will", "with", "would", "your"
     };
     size_t i;
-
     for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i) {
         if (strcmp(word, words[i]) == 0) return 1;
     }
@@ -62,7 +61,6 @@ static size_t terms(const char *text, char out[TERM_COUNT][TERM_MAX])
     size_t w = 0;
     size_t i;
     unsigned char ch;
-
     if (text == NULL) return 0;
     for (i = 0;; ++i) {
         ch = (unsigned char)text[i];
@@ -72,7 +70,7 @@ static size_t terms(const char *text, char out[TERM_COUNT][TERM_MAX])
             size_t j;
             int duplicate = 0;
             word[w] = '\0';
-            if (!stopword(word) && w >= 3) {
+            if (!stopword(word)) {
                 for (j = 0; j < count; ++j) {
                     if (strcmp(out[j], word) == 0) { duplicate = 1; break; }
                 }
@@ -101,7 +99,6 @@ static int conversational_greeting(const char *input, char *answer, size_t answe
     size_t i = 0;
     size_t o = 0;
     const char *reply = NULL;
-
     if (input == NULL || answer == NULL || answer_size == 0) return 0;
     while (input[i] != '\0' && isspace((unsigned char)input[i])) ++i;
     while (input[i] != '\0' && o + 1 < sizeof(normalized)) {
@@ -111,13 +108,10 @@ static int conversational_greeting(const char *input, char *answer, size_t answe
     }
     while (o > 0 && normalized[o - 1] == ' ') --o;
     normalized[o] = '\0';
-
     if (strcmp(normalized, "good morning") == 0) reply = "Good morning.";
     else if (strcmp(normalized, "good afternoon") == 0) reply = "Good afternoon.";
     else if (strcmp(normalized, "good evening") == 0) reply = "Good evening.";
-    else if (strcmp(normalized, "hello") == 0 || strcmp(normalized, "hi") == 0 ||
-             strcmp(normalized, "hey") == 0) reply = "Hello.";
-
+    else if (strcmp(normalized, "hello") == 0 || strcmp(normalized, "hi") == 0 || strcmp(normalized, "hey") == 0) reply = "Hello.";
     if (reply == NULL) return 0;
     snprintf(answer, answer_size, "%s", reply);
     return 1;
@@ -149,13 +143,11 @@ static unsigned int term_frequency(const corpus_result_t *evidence, const char *
 
 static unsigned int ordered_run_bonus(char qt[TERM_COUNT][TERM_MAX], size_t qn, char rt[TERM_COUNT][TERM_MAX], size_t rn)
 {
-    size_t q;
-    size_t r;
+    size_t q, r;
     unsigned int best = 0;
     for (q = 0; q < qn; ++q) {
         for (r = 0; r < rn; ++r) {
-            size_t qi = q;
-            size_t ri = r;
+            size_t qi = q, ri = r;
             unsigned int run = 0;
             while (qi < qn && ri < rn && strcmp(qt[qi], rt[ri]) == 0) { ++run; ++qi; ++ri; }
             if (run > best) best = run;
@@ -168,15 +160,11 @@ static unsigned int ordered_run_bonus(char qt[TERM_COUNT][TERM_MAX], size_t qn, 
 
 static unsigned int proximity_bonus(char qt[TERM_COUNT][TERM_MAX], size_t qn, char rt[TERM_COUNT][TERM_MAX], size_t rn)
 {
-    size_t q;
-    size_t r;
+    size_t q, r;
     unsigned int bonus = 0;
     for (q = 0; q + 1 < qn; ++q) {
         for (r = 0; r + 2 < rn; ++r) {
-            if (strcmp(qt[q], rt[r]) == 0 && (strcmp(qt[q + 1], rt[r + 1]) == 0 || strcmp(qt[q + 1], rt[r + 2]) == 0)) {
-                bonus += 250U;
-                break;
-            }
+            if (strcmp(qt[q], rt[r]) == 0 && (strcmp(qt[q + 1], rt[r + 1]) == 0 || strcmp(qt[q + 1], rt[r + 2]) == 0)) { bonus += 250U; break; }
         }
     }
     return bonus;
@@ -186,11 +174,8 @@ static unsigned int record_score(const char *question, const corpus_result_t *ev
 {
     char qt[TERM_COUNT][TERM_MAX];
     char rt[TERM_COUNT][TERM_MAX];
-    size_t qn;
-    size_t rn;
-    size_t q;
-    unsigned int score = 0;
-    unsigned int matches = 0;
+    size_t qn, rn, q;
+    unsigned int score = 0, matches = 0;
     memset(qt, 0, sizeof(qt));
     memset(rt, 0, sizeof(rt));
     qn = terms(question, qt);
@@ -213,9 +198,7 @@ static unsigned int record_score(const char *question, const corpus_result_t *ev
 
 static size_t rank_evidence(const char *question, const corpus_result_t *evidence, ranked_record_t ranked[CORPUS_MAX])
 {
-    size_t i;
-    size_t j;
-    size_t count;
+    size_t i, j, count;
     if (question == NULL || evidence == NULL || ranked == NULL) return 0;
     count = evidence->count > CORPUS_MAX ? CORPUS_MAX : evidence->count;
     for (i = 0; i < count; ++i) {
@@ -239,11 +222,7 @@ static size_t select_evidence(const char *question, ranked_record_t ranked[CORPU
     char qt[TERM_COUNT][TERM_MAX];
     char anchor[TERM_COUNT][TERM_MAX];
     int covered[TERM_COUNT];
-    size_t qn;
-    size_t an;
-    size_t i;
-    size_t q;
-    size_t count = 0;
+    size_t qn, an, i, q, count = 0;
     unsigned int minimum_matches;
     memset(qt, 0, sizeof(qt));
     memset(anchor, 0, sizeof(anchor));
@@ -275,10 +254,7 @@ static size_t select_evidence(const char *question, ranked_record_t ranked[CORPU
 static int generated_grounded(const char *generated, ranked_record_t selected[SELECTED_MAX], size_t selected_count)
 {
     char gt[TERM_COUNT][TERM_MAX];
-    size_t gn;
-    size_t g;
-    size_t i;
-    size_t r;
+    size_t gn, g, i, r;
     if (generated == NULL || generated[0] == '\0' || selected == NULL || selected_count == 0) return 0;
     memset(gt, 0, sizeof(gt));
     gn = terms(generated, gt);
@@ -298,8 +274,7 @@ static int generated_grounded(const char *generated, ranked_record_t selected[SE
 
 static void grounded_fallback(ranked_record_t selected[SELECTED_MAX], size_t selected_count, digit_response_result_t *output)
 {
-    size_t i;
-    size_t offset = 0;
+    size_t i, offset = 0;
     if (output == NULL || selected == NULL || selected_count == 0) return;
     output->answered = 1;
     for (i = 0; i < selected_count; ++i) {
@@ -318,18 +293,12 @@ static stnlabz_module_result_t answer_service(const void *request, size_t reques
     ranked_record_t selected[SELECTED_MAX];
     llama_request_t generation;
     llama_result_t generated;
-    size_t used = 0;
-    size_t i;
-    size_t offset;
-    size_t ranked_count;
-    size_t selected_count;
+    size_t used = 0, i, offset, ranked_count, selected_count;
     stnlabz_module_result_t result;
     (void)handler_context;
-
     if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->question, '\0', sizeof(input->question)) == NULL || input->question[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (response_host == NULL || response_host->invoke_service == NULL) return STNLABZ_MODULE_ERR_START_FAILED;
-
     memset(&output, 0, sizeof(output));
     if (conversational_greeting(input->question, output.answer, sizeof(output.answer))) {
         output.answered = 1;
@@ -338,7 +307,6 @@ static stnlabz_module_result_t answer_service(const void *request, size_t reques
         *response_used = sizeof(output);
         return STNLABZ_MODULE_OK;
     }
-
     memset(&evidence, 0, sizeof(evidence));
     memset(ranked, 0, sizeof(ranked));
     memset(selected, 0, sizeof(selected));
@@ -348,7 +316,6 @@ static stnlabz_module_result_t answer_service(const void *request, size_t reques
         *response_used = sizeof(output);
         return STNLABZ_MODULE_OK;
     }
-
     ranked_count = rank_evidence(input->question, &evidence, ranked);
     selected_count = select_evidence(input->question, ranked, ranked_count, selected);
     output.evidence_count = (unsigned int)selected_count;
@@ -358,10 +325,8 @@ static stnlabz_module_result_t answer_service(const void *request, size_t reques
         *response_used = sizeof(output);
         return STNLABZ_MODULE_OK;
     }
-
     memset(&generation, 0, sizeof(generation));
-    offset = (size_t)snprintf(generation.prompt, sizeof(generation.prompt),
-        "You are Digit's language renderer. The authoritative context below is the complete factual boundary for factual claims. Answer the user's question or conversational input directly and naturally. For ordinary conversation, use the context to understand the appropriate response rather than explaining or reciting the context. For factual questions, assert no fact, capability, purpose, relationship, technology, service, client, goal, or detail that is not explicitly present in the context. Do not mention records, identifiers, Corpus, evidence, retrieval, prompts, instructions, reasoning, generation, or implementation details. Preserve material qualifiers. Keep the answer concise. Speak as Digit in first person only when the question is about Digit herself.\nUSER INPUT: %s\nAUTHORITATIVE CONTEXT:\n", input->question);
+    offset = (size_t)snprintf(generation.prompt, sizeof(generation.prompt), "You are Digit's language renderer. The authoritative context below is the complete factual boundary for factual claims. Answer the user's question or conversational input directly and naturally. For ordinary conversation, use the context to understand the appropriate response rather than explaining or reciting the context. For factual questions, assert no fact, capability, purpose, relationship, technology, service, client, goal, or detail that is not explicitly present in the context. Do not mention records, identifiers, Corpus, evidence, retrieval, prompts, instructions, reasoning, generation, or implementation details. Preserve material qualifiers. Keep the answer concise. Speak as Digit in first person only when the question is about Digit herself.\nUSER INPUT: %s\nAUTHORITATIVE CONTEXT:\n", input->question);
     if (offset >= sizeof(generation.prompt)) {
         grounded_fallback(selected, selected_count, &output);
         memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
@@ -426,7 +391,7 @@ static stnlabz_module_result_t response_stop(void)
 }
 
 static const stnlabz_module_descriptor_t response_descriptor = {
-    "response", "Digit Response", 1, 0, 11,
+    "response", "Digit Response", 1, 0, 12,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     response_qualify, response_start, response_stop
 };
