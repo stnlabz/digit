@@ -30,8 +30,8 @@ int main(void)
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0,
           "module identity is response");
     check(descriptor != NULL && descriptor->version_major == 1 &&
-          descriptor->version_minor == 0 && descriptor->version_patch == 10,
-          "internal version is 1.0.10");
+          descriptor->version_minor == 3 && descriptor->version_patch == 2,
+          "internal version is 1.3.2");
     check(descriptor != NULL && descriptor->qualify != NULL,
           "qualification callback exists");
     check(descriptor != NULL &&
