@@ -98,10 +98,28 @@ static size_t select_evidence(const char *question,const corpus_result_t *eviden
     for(i=0;i<count&&out<SELECTED_MAX;++i)if(ranked[i].matches>0)selected[out++]=ranked[i];return out;
 }
 
+static int has_untrusted_reference(const char *text)
+{
+    if(text==NULL)return 0;
+    return strstr(text,"http://")!=NULL||strstr(text,"https://")!=NULL||strstr(text,"github.com/")!=NULL||strstr(text,"CITATION:")!=NULL||strstr(text,"Citation:")!=NULL;
+}
+
+static int evidence_contains_number(ranked_record_t selected[SELECTED_MAX],size_t selected_count,const char *number)
+{
+    size_t i;for(i=0;i<selected_count;++i)if(strstr(selected[i].record.text,number)!=NULL||strstr(selected[i].record.source,number)!=NULL)return 1;return 0;
+}
+
+static int unsupported_number(const char *generated,ranked_record_t selected[SELECTED_MAX],size_t selected_count)
+{
+    char number[64];size_t i=0,n=0;if(generated==NULL)return 0;
+    for(;;++i){unsigned char c=(unsigned char)generated[i];if(isdigit(c)){if(n+1<sizeof(number))number[n++]=(char)c;}else if(n>0){number[n]='\0';if(!evidence_contains_number(selected,selected_count,number))return 1;n=0;}if(c=='\0')break;}return 0;
+}
+
 static void grounded_fallback(ranked_record_t selected[SELECTED_MAX],size_t selected_count,digit_response_result_t *output)
 {
     size_t i,offset=0;output->answered=1;if(selected_count==0){snprintf(output->answer,sizeof(output->answer),"I don't have enough evidence to answer that.");return;}
-    for(i=0;i<selected_count;++i){int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s[%s] %s",i?" ":"",selected[i].record.source,selected[i].record.text);else written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s%s",i?" ":"",selected[i].record.text);if(written<=0||(size_t)written>=sizeof(output->answer)-offset)break;offset+=(size_t)written;}
+    snprintf(output->answer,sizeof(output->answer),"I found relevant evidence, but it does not support a more specific conclusion. Evidence: ");offset=strlen(output->answer);
+    for(i=0;i<selected_count&&i<3;++i){int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s[%s] %s",i?" ":"",selected[i].record.source,selected[i].record.text);else written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s%s",i?" ":"",selected[i].record.text);if(written<=0||(size_t)written>=sizeof(output->answer)-offset)break;offset+=(size_t)written;}
 }
 
 static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
@@ -114,16 +132,18 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
     memset(&evidence,0,sizeof(evidence));memset(selected,0,sizeof(selected));if(!collect_corpus(input->question,&evidence)){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I can't access retained information right now.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
     collect_source(input->question,&evidence);selected_count=select_evidence(input->question,&evidence,selected);output.evidence_count=(unsigned int)selected_count;
     if(selected_count==0){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I don't have enough retained information or source evidence to answer that.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
-    memset(&generation,0,sizeof(generation));offset=(size_t)snprintf(generation.prompt,sizeof(generation.prompt),"You are Digit's response renderer. Answer the user's actual question in clear natural language. The evidence below is authoritative and is the complete factual boundary: do not invent facts beyond it. Synthesize the evidence; do not dump raw matches unless the user explicitly asks for raw evidence. If the user asks for evidence, give the answer first and then cite the supplied provenance. Technical names and ordinary connective language may be used naturally. Keep the answer concise.\nUSER: %s\nEVIDENCE:\n",input->question);
+    memset(&generation,0,sizeof(generation));offset=(size_t)snprintf(generation.prompt,sizeof(generation.prompt),"You are Digit's response renderer. Answer only what the supplied evidence explicitly establishes. Natural connective language is allowed, but do not infer a technical property merely because related words appear. If the evidence does not establish the requested fact, say that directly. Never invent a URL, citation, repository, file, line number, bit width, version, architecture, platform, or technical property. Provenance may ONLY be copied exactly from bracketed SOURCE labels below. Do not create external links. Give provenance only when the user asks for evidence. Keep the answer concise.\nUSER: %s\nEVIDENCE:\n",input->question);
     if(offset>=sizeof(generation.prompt)){grounded_fallback(selected,selected_count,&output);memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
-    for(i=0;i<selected_count;++i){size_t remaining=sizeof(generation.prompt)-offset;int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(generation.prompt+offset,remaining,"- [%s] %s\n",selected[i].record.source,selected[i].record.text);else written=snprintf(generation.prompt+offset,remaining,"- %s\n",selected[i].record.text);if(written<=0||(size_t)written>=remaining)break;offset+=(size_t)written;}
+    for(i=0;i<selected_count;++i){size_t remaining=sizeof(generation.prompt)-offset;int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(generation.prompt+offset,remaining,"- SOURCE [%s] %s\n",selected[i].record.source,selected[i].record.text);else written=snprintf(generation.prompt+offset,remaining,"- CORPUS %s\n",selected[i].record.text);if(written<=0||(size_t)written>=remaining)break;offset+=(size_t)written;}
     snprintf(generation.prompt+offset,sizeof(generation.prompt)-offset,"ANSWER:");memset(&generated,0,sizeof(generated));result=response_host->invoke_service(LLAMA_GENERATE_SERVICE,&generation,sizeof(generation),&generated,sizeof(generated),&used);
-    if(result!=STNLABZ_MODULE_OK||used!=sizeof(generated)||!generated.available||generated.text[0]=='\0'){if(response_host->send_message)(void)response_host->send_message("[RESPONSE] renderer unavailable; returning evidence fallback");grounded_fallback(selected,selected_count,&output);}else{output.answered=1;snprintf(output.answer,sizeof(output.answer),"%s",generated.text);}
+    if(result!=STNLABZ_MODULE_OK||used!=sizeof(generated)||!generated.available||generated.text[0]=='\0'){if(response_host->send_message)(void)response_host->send_message("[RESPONSE] renderer unavailable; returning bounded evidence fallback");grounded_fallback(selected,selected_count,&output);}
+    else if(has_untrusted_reference(generated.text)||unsupported_number(generated.text,selected,selected_count)){if(response_host->send_message)(void)response_host->send_message("[RESPONSE] renderer output rejected: unsupported reference or numeric claim");grounded_fallback(selected,selected_count,&output);}
+    else{output.answered=1;snprintf(output.answer,sizeof(output.answer),"%s",generated.text);}
     memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: evidence synthesis response registered");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: evidence-bounded synthesis response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
