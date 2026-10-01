@@ -54,9 +54,14 @@ static int conversational_greeting(const char *input,char *answer,size_t answer_
     char normalized[128];size_t i=0,o=0;const char *reply=NULL;if(input==NULL||answer==NULL||answer_size==0)return 0;
     while(input[i]!='\0'&&isspace((unsigned char)input[i]))++i;
     while(input[i]!='\0'&&o+1<sizeof(normalized)){unsigned char ch=(unsigned char)input[i++];if(isalnum(ch))normalized[o++]=(char)tolower(ch);else if(isspace(ch)&&o>0&&normalized[o-1]!=' ')normalized[o++]=' ';}
-    while(o>0&&normalized[o-1]==' ')--o;normalized[o]='\0';
+    while(o>0&&normalized[o-1]==' ')
+        --o;
+    normalized[o]='\0';
     if(strcmp(normalized,"good morning")==0)reply="Good morning.";else if(strcmp(normalized,"good afternoon")==0)reply="Good afternoon.";else if(strcmp(normalized,"good evening")==0)reply="Good evening.";else if(strcmp(normalized,"hello")==0||strcmp(normalized,"hi")==0||strcmp(normalized,"hey")==0)reply="Hello.";
-    if(reply==NULL)return 0;snprintf(answer,answer_size,"%s",reply);return 1;
+    if(reply==NULL)
+        return 0;
+    snprintf(answer,answer_size,"%s",reply);
+    return 1;
 }
 
 static int source_intent(const char *question)
@@ -95,7 +100,10 @@ static size_t select_evidence(const char *question,const corpus_result_t *eviden
     ranked_record_t ranked[CORPUS_MAX];size_t count=evidence->count>CORPUS_MAX?CORPUS_MAX:evidence->count,i,j,out=0;
     for(i=0;i<count;++i){ranked[i].record=evidence->records[i];ranked[i].score=record_score(question,&evidence->records[i],&ranked[i].matches);}
     for(i=1;i<count;++i){ranked_record_t key=ranked[i];j=i;while(j>0&&ranked[j-1].score<key.score){ranked[j]=ranked[j-1];--j;}ranked[j]=key;}
-    for(i=0;i<count&&out<SELECTED_MAX;++i)if(ranked[i].matches>0)selected[out++]=ranked[i];return out;
+    for(i=0;i<count&&out<SELECTED_MAX;++i)
+        if(ranked[i].matches>0)
+            selected[out++]=ranked[i];
+    return out;
 }
 
 static int has_untrusted_reference(const char *text)
@@ -145,5 +153,5 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: evidence-bounded synthesis response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
