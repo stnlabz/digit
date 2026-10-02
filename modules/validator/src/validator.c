@@ -198,27 +198,45 @@ static int evidence_divergence(const char *question, const char *candidate, cons
     char ct[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
     char et[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
     size_t qn, cn, en, i;
-    unsigned int candidate_supported = 0;
-    unsigned int evidence_relevant = 0;
-    int possessive_fact;
+    unsigned int relevant_evidence_terms = 0;
+    unsigned int answer_terms = 0;
+    unsigned int supported_answer_terms = 0;
 
     if (question == NULL || candidate == NULL || evidence == NULL || evidence[0] == '\0') return 0;
-    memset(qt, 0, sizeof(qt)); memset(ct, 0, sizeof(ct)); memset(et, 0, sizeof(et));
+    memset(qt, 0, sizeof(qt));
+    memset(ct, 0, sizeof(ct));
+    memset(et, 0, sizeof(et));
     qn = collect_terms(question, qt);
     cn = collect_terms(candidate, ct);
     en = collect_terms(evidence, et);
     if (qn == 0 || cn == 0 || en == 0) return 0;
 
-    for (i = 0; i < qn; ++i) if (has_term(et, en, qt[i])) ++evidence_relevant;
-    if (evidence_relevant == 0) return 0;
+    /* Only enforce grounding when the supplied evidence is actually about the question. */
+    for (i = 0; i < qn; ++i)
+        if (has_term(et, en, qt[i])) ++relevant_evidence_terms;
+    if (relevant_evidence_terms == 0) return 0;
 
-    for (i = 0; i < cn; ++i)
-        if (has_term(et, en, ct[i]) || has_term(qt, qn, ct[i])) ++candidate_supported;
+    /*
+     * Question vocabulary proves only that the candidate is on-topic. It must never
+     * be counted as factual support. Evaluate only answer-bearing terms: candidate
+     * terms that were not already supplied by the operator's question.
+     */
+    for (i = 0; i < cn; ++i) {
+        if (has_term(qt, qn, ct[i])) continue;
+        ++answer_terms;
+        if (has_term(et, en, ct[i])) ++supported_answer_terms;
+    }
 
-    possessive_fact = contains_ci(question, "your ") || contains_ci(question, "digit's ") || contains_ci(question, "digit ");
+    if (answer_terms == 0) return 1;
 
-    if (possessive_fact && candidate_supported < 2) return 1;
-    if (cn >= 4 && candidate_supported * 4U < cn) return 1;
+    /*
+     * A factual answer may paraphrase, so exact lexical identity is not required.
+     * It must, however, carry substantive answer content from retained evidence.
+     * Requiring at least half of answer-bearing terms to be evidenced rejects a
+     * fluent invented predicate while allowing modest connective/paraphrase terms.
+     */
+    if (supported_answer_terms == 0) return 1;
+    if (answer_terms >= 2 && supported_answer_terms * 2U < answer_terms) return 1;
     return 0;
 }
 
@@ -319,7 +337,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 3,
+        "validator", "Validator", 1, 0, 4,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
