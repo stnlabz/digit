@@ -15,7 +15,7 @@ int main(void)
     memset(&request,0,sizeof(request));memset(&result,0,sizeof(result));
     check(descriptor!=NULL,"descriptor is exported");
     check(descriptor!=NULL&&strcmp(descriptor->id,"lesson")==0,"module identity is lesson");
-    check(descriptor!=NULL&&descriptor->version_major==1&&descriptor->version_minor==0&&descriptor->version_patch==0,"internal version is 1.0.0");
+    check(descriptor!=NULL&&descriptor->version_major==1&&descriptor->version_minor==1&&descriptor->version_patch==0,"internal version is 1.1.0");
     check(descriptor!=NULL&&descriptor->qualify!=NULL,"qualification callback exists");
     check(descriptor!=NULL&&descriptor->qualify(&qualification)==STNLABZ_MODULE_OK,"qualification executes");
     check(qualification.tests_executed>=STNLABZ_MODULE_MIN_TESTS,"required test count is reported");
