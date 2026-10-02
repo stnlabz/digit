@@ -33,6 +33,7 @@ typedef struct { char name[SOURCE_PROJECT_MAX]; } source_project_t;
 typedef struct { size_t count; source_project_t projects[SOURCE_PROJECTS_MAX]; } source_projects_result_t;
 typedef struct { char project[SOURCE_PROJECT_MAX]; char query[SOURCE_QUERY_MAX]; } source_search_request_t;
 typedef struct { char project[SOURCE_PROJECT_MAX]; char path[SOURCE_PATH_MAX]; size_t line; char text[CORPUS_TEXT_MAX]; } source_match_t;
+typedef struct { size_t count; source_match_t matches[SOURCE_SEARCH_MAX]; } source_search_result_t;
 typedef struct { char prompt[LLAMA_PROMPT_MAX]; } llama_request_t;
 typedef struct { int available; char text[LLAMA_GENERATED_MAX]; } llama_result_t;
 typedef struct { corpus_record_t record; unsigned int score; unsigned int matches; } ranked_record_t;
@@ -74,5 +75,5 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,11,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,3,12,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
