@@ -113,6 +113,46 @@ static int evidence_supports(const char *candidate, const char *evidence)
     return 1;
 }
 
+static int contradictory_relationship(const char *candidate, const char *evidence)
+{
+    static const char *claims[] = {
+        "controller receives input from the model",
+        "controllers receive input from the model",
+        "controller gets input from the model",
+        "controllers get input from the model",
+        "view sends data to the controller",
+        "views send data to the controller",
+        "model receives the request",
+        "models receive the request"
+    };
+    size_t i;
+    if (candidate == NULL) return 0;
+    for (i = 0; i < sizeof(claims) / sizeof(claims[0]); ++i)
+        if (contains_ci(candidate, claims[i]) && !contains_ci(evidence, claims[i])) return 1;
+    return 0;
+}
+
+static int unsupported_primary_responsibility(const char *candidate, const char *evidence)
+{
+    static const char *prefixes[] = {
+        "main responsibility", "primary responsibility", "main purpose",
+        "primary purpose", "responsible for"
+    };
+    static const char *narrow_actions[] = {
+        "creating new objects", "updating existing ones", "database",
+        "insert", "delete records", "write records"
+    };
+    size_t i, j;
+    if (candidate == NULL) return 0;
+    for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+        if (!contains_ci(candidate, prefixes[i])) continue;
+        for (j = 0; j < sizeof(narrow_actions) / sizeof(narrow_actions[0]); ++j) {
+            if (contains_ci(candidate, narrow_actions[j]) && !contains_ci(evidence, prefixes[i])) return 1;
+        }
+    }
+    return 0;
+}
+
 static stnlabz_module_result_t inbound_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *context)
 {
     const digit_validator_inbound_request_t *in;
@@ -161,6 +201,10 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
         snprintf(out->reason, sizeof(out->reason), "ECHO");
     else if (asks_explain(question) && weak_explanation(in->candidate))
         snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
+    else if (contradictory_relationship(in->candidate, in->evidence))
+        snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
+    else if (unsupported_primary_responsibility(in->candidate, in->evidence))
+        snprintf(out->reason, sizeof(out->reason), "OVERBROAD_CLAIM");
     else if (!evidence_supports(in->candidate, in->evidence))
         snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
     else {
@@ -212,7 +256,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 1,
+        "validator", "Validator", 1, 0, 2,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
