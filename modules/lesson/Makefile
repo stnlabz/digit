@@ -3,7 +3,7 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 
 ABI_DIR ?= ../../../ABI
 ABI_INCLUDE := $(ABI_DIR)/includes
-CPPFLAGS ?= -Iincludes -I../corpus_builder/includes -I$(ABI_INCLUDE)
+CPPFLAGS ?= -Iincludes -I../corpus/includes -I$(ABI_INCLUDE)
 
 TARGET := bin/lesson.so
 TEST_TARGET := bin/test_lesson
@@ -22,10 +22,10 @@ all: check-abi $(TARGET)
 check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/lesson.h | bin
+$(TARGET): $(SOURCE) includes/lesson.h ../corpus/includes/corpus.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
 
-$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/lesson.h | bin
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/lesson.h ../corpus/includes/corpus.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@
 
 test: check-abi $(TEST_TARGET)
