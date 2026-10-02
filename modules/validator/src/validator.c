@@ -4,6 +4,9 @@
 
 #include "validator.h"
 
+#define VALIDATOR_TERM_MAX 64
+#define VALIDATOR_TERM_COUNT 64
+
 static const stnlabz_module_host_t *validator_host = NULL;
 
 static int contains_ci(const char *text, const char *needle)
@@ -16,6 +19,56 @@ static int contains_ci(const char *text, const char *needle)
             if (tolower((unsigned char)text[i + j]) != tolower((unsigned char)needle[j])) break;
         if (j == n) return 1;
     }
+    return 0;
+}
+
+static int stopword(const char *word)
+{
+    static const char *words[] = {
+        "a","an","and","are","as","at","be","been","but","by","can","could","did","do","does",
+        "for","from","had","has","have","how","i","if","in","into","is","it","its","may","must",
+        "of","on","or","should","that","the","their","then","there","these","they","this","to",
+        "was","were","what","when","where","which","who","why","will","with","would","your","you"
+    };
+    size_t i;
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
+        if (strcmp(word, words[i]) == 0) return 1;
+    return 0;
+}
+
+static size_t collect_terms(const char *text, char out[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX])
+{
+    char word[VALIDATOR_TERM_MAX];
+    size_t count = 0, w = 0, i;
+    unsigned char ch;
+    if (text == NULL) return 0;
+    for (i = 0;; ++i) {
+        ch = (unsigned char)text[i];
+        if (isalnum(ch) || ch == '_' || ch == '-') {
+            if (w + 1 < sizeof(word)) word[w++] = (char)tolower(ch);
+        } else if (w > 0) {
+            size_t j;
+            int duplicate = 0;
+            word[w] = '\0';
+            if (!stopword(word)) {
+                for (j = 0; j < count; ++j)
+                    if (strcmp(out[j], word) == 0) { duplicate = 1; break; }
+                if (!duplicate && count < VALIDATOR_TERM_COUNT) {
+                    snprintf(out[count], VALIDATOR_TERM_MAX, "%s", word);
+                    ++count;
+                }
+            }
+            w = 0;
+        }
+        if (ch == '\0') break;
+    }
+    return count;
+}
+
+static int has_term(char list[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX], size_t count, const char *term)
+{
+    size_t i;
+    for (i = 0; i < count; ++i) if (strcmp(list[i], term) == 0) return 1;
     return 0;
 }
 
@@ -63,9 +116,7 @@ static void canonical_text(const char *src, char *dst, size_t size)
             if (pending_space && o > 0 && o + 1 < size) dst[o++] = ' ';
             dst[o++] = (char)tolower(ch);
             pending_space = 0;
-        } else if (o > 0) {
-            pending_space = 1;
-        }
+        } else if (o > 0) pending_space = 1;
     }
     dst[o] = '\0';
 }
@@ -107,23 +158,18 @@ static int evidence_supports(const char *candidate, const char *evidence)
     };
     size_t i;
     if (candidate == NULL) return 0;
-    for (i = 0; i < sizeof(risky) / sizeof(risky[0]); ++i) {
+    for (i = 0; i < sizeof(risky) / sizeof(risky[0]); ++i)
         if (contains_ci(candidate, risky[i]) && !contains_ci(evidence, risky[i])) return 0;
-    }
     return 1;
 }
 
 static int contradictory_relationship(const char *candidate, const char *evidence)
 {
     static const char *claims[] = {
-        "controller receives input from the model",
-        "controllers receive input from the model",
-        "controller gets input from the model",
-        "controllers get input from the model",
-        "view sends data to the controller",
-        "views send data to the controller",
-        "model receives the request",
-        "models receive the request"
+        "controller receives input from the model", "controllers receive input from the model",
+        "controller gets input from the model", "controllers get input from the model",
+        "view sends data to the controller", "views send data to the controller",
+        "model receives the request", "models receive the request"
     };
     size_t i;
     if (candidate == NULL) return 0;
@@ -134,22 +180,45 @@ static int contradictory_relationship(const char *candidate, const char *evidenc
 
 static int unsupported_primary_responsibility(const char *candidate, const char *evidence)
 {
-    static const char *prefixes[] = {
-        "main responsibility", "primary responsibility", "main purpose",
-        "primary purpose", "responsible for"
-    };
-    static const char *narrow_actions[] = {
-        "creating new objects", "updating existing ones", "database",
-        "insert", "delete records", "write records"
-    };
+    static const char *prefixes[] = {"main responsibility","primary responsibility","main purpose","primary purpose","responsible for"};
+    static const char *narrow_actions[] = {"creating new objects","updating existing ones","database","insert","delete records","write records"};
     size_t i, j;
     if (candidate == NULL) return 0;
     for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
         if (!contains_ci(candidate, prefixes[i])) continue;
-        for (j = 0; j < sizeof(narrow_actions) / sizeof(narrow_actions[0]); ++j) {
+        for (j = 0; j < sizeof(narrow_actions) / sizeof(narrow_actions[0]); ++j)
             if (contains_ci(candidate, narrow_actions[j]) && !contains_ci(evidence, prefixes[i])) return 1;
-        }
     }
+    return 0;
+}
+
+static int evidence_divergence(const char *question, const char *candidate, const char *evidence)
+{
+    char qt[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
+    char ct[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
+    char et[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
+    size_t qn, cn, en, i;
+    unsigned int candidate_supported = 0;
+    unsigned int evidence_relevant = 0;
+    int possessive_fact;
+
+    if (question == NULL || candidate == NULL || evidence == NULL || evidence[0] == '\0') return 0;
+    memset(qt, 0, sizeof(qt)); memset(ct, 0, sizeof(ct)); memset(et, 0, sizeof(et));
+    qn = collect_terms(question, qt);
+    cn = collect_terms(candidate, ct);
+    en = collect_terms(evidence, et);
+    if (qn == 0 || cn == 0 || en == 0) return 0;
+
+    for (i = 0; i < qn; ++i) if (has_term(et, en, qt[i])) ++evidence_relevant;
+    if (evidence_relevant == 0) return 0;
+
+    for (i = 0; i < cn; ++i)
+        if (has_term(et, en, ct[i]) || has_term(qt, qn, ct[i])) ++candidate_supported;
+
+    possessive_fact = contains_ci(question, "your ") || contains_ci(question, "digit's ") || contains_ci(question, "digit ");
+
+    if (possessive_fact && candidate_supported < 2) return 1;
+    if (cn >= 4 && candidate_supported * 4U < cn) return 1;
     return 0;
 }
 
@@ -195,24 +264,18 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
     out->status = DIGIT_VALIDATOR_FAIL;
     out->retry_allowed = in->attempt < DIGIT_VALIDATOR_MAX_ATTEMPTS;
 
-    if (in->candidate[0] == '\0')
-        snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
-    else if (nearly_echo(question, in->candidate))
-        snprintf(out->reason, sizeof(out->reason), "ECHO");
-    else if (asks_explain(question) && weak_explanation(in->candidate))
-        snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
-    else if (contradictory_relationship(in->candidate, in->evidence))
-        snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
-    else if (unsupported_primary_responsibility(in->candidate, in->evidence))
-        snprintf(out->reason, sizeof(out->reason), "OVERBROAD_CLAIM");
-    else if (!evidence_supports(in->candidate, in->evidence))
-        snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
+    if (in->candidate[0] == '\0') snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
+    else if (nearly_echo(question, in->candidate)) snprintf(out->reason, sizeof(out->reason), "ECHO");
+    else if (asks_explain(question) && weak_explanation(in->candidate)) snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
+    else if (contradictory_relationship(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
+    else if (unsupported_primary_responsibility(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "OVERBROAD_CLAIM");
+    else if (evidence_divergence(question, in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "EVIDENCE_DIVERGENCE");
+    else if (!evidence_supports(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
     else {
         out->status = DIGIT_VALIDATOR_PASS;
         out->retry_allowed = 0;
         snprintf(out->reason, sizeof(out->reason), "PASS");
     }
-
     *response_used = sizeof(*out);
     return STNLABZ_MODULE_OK;
 }
@@ -256,7 +319,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 2,
+        "validator", "Validator", 1, 0, 3,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
