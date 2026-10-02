@@ -50,18 +50,36 @@ static void replace_word(char *text, size_t size, const char *bad, const char *g
     snprintf(text, size, "%s", work);
 }
 
+static void canonical_text(const char *src, char *dst, size_t size)
+{
+    size_t i, o = 0;
+    int pending_space = 0;
+    if (dst == NULL || size == 0) return;
+    dst[0] = '\0';
+    if (src == NULL) return;
+    for (i = 0; src[i] != '\0' && o + 1 < size; ++i) {
+        unsigned char ch = (unsigned char)src[i];
+        if (isalnum(ch)) {
+            if (pending_space && o > 0 && o + 1 < size) dst[o++] = ' ';
+            dst[o++] = (char)tolower(ch);
+            pending_space = 0;
+        } else if (o > 0) {
+            pending_space = 1;
+        }
+    }
+    dst[o] = '\0';
+}
+
 static int nearly_echo(const char *input, const char *candidate)
 {
     char a[DIGIT_VALIDATOR_TEXT_MAX], b[DIGIT_VALIDATOR_TEXT_MAX];
-    size_t i, ao = 0, bo = 0;
-    if (input == NULL || candidate == NULL) return 0;
-    for (i = 0; input[i] && ao + 1 < sizeof(a); ++i)
-        if (isalnum((unsigned char)input[i])) a[ao++] = (char)tolower((unsigned char)input[i]);
-    a[ao] = '\0';
-    for (i = 0; candidate[i] && bo + 1 < sizeof(b); ++i)
-        if (isalnum((unsigned char)candidate[i])) b[bo++] = (char)tolower((unsigned char)candidate[i]);
-    b[bo] = '\0';
-    return ao > 0 && strcmp(a, b) == 0;
+    canonical_text(input, a, sizeof(a));
+    canonical_text(candidate, b, sizeof(b));
+    if (a[0] == '\0' || b[0] == '\0') return 0;
+    if (strcmp(a, b) == 0) return 1;
+    if (strlen(a) >= 12 && strstr(b, a) != NULL && strlen(b) <= strlen(a) + 24) return 1;
+    if (strlen(b) >= 12 && strstr(a, b) != NULL && strlen(a) <= strlen(b) + 24) return 1;
+    return 0;
 }
 
 static int asks_explain(const char *text)
@@ -127,22 +145,30 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
 {
     const digit_validator_outbound_request_t *in;
     digit_validator_outbound_result_t *out;
+    const char *question;
     (void)context;
     if (request == NULL || response == NULL || response_used == NULL || request_size != sizeof(*in) || response_size < sizeof(*out)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     in = (const digit_validator_outbound_request_t *)request;
     out = (digit_validator_outbound_result_t *)response;
     memset(out, 0, sizeof(*out));
+    question = in->normalized[0] ? in->normalized : in->raw;
     out->status = DIGIT_VALIDATOR_FAIL;
     out->retry_allowed = in->attempt < DIGIT_VALIDATOR_MAX_ATTEMPTS;
-    if (in->candidate[0] == '\0') snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
-    else if (nearly_echo(in->normalized[0] ? in->normalized : in->raw, in->candidate)) snprintf(out->reason, sizeof(out->reason), "ECHO");
-    else if (asks_explain(in->normalized[0] ? in->normalized : in->raw) && weak_explanation(in->candidate)) snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
-    else if (!evidence_supports(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
+
+    if (in->candidate[0] == '\0')
+        snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
+    else if (nearly_echo(question, in->candidate))
+        snprintf(out->reason, sizeof(out->reason), "ECHO");
+    else if (asks_explain(question) && weak_explanation(in->candidate))
+        snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
+    else if (!evidence_supports(in->candidate, in->evidence))
+        snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
     else {
         out->status = DIGIT_VALIDATOR_PASS;
         out->retry_allowed = 0;
         snprintf(out->reason, sizeof(out->reason), "PASS");
     }
+
     *response_used = sizeof(*out);
     return STNLABZ_MODULE_OK;
 }
@@ -186,7 +212,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 0,
+        "validator", "Validator", 1, 0, 1,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
