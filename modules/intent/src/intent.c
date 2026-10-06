@@ -118,7 +118,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     }
     if (has_word(text, "define"))
     {
-        copy_subject_after_lead(text, result->subject, sizeof(result->subject));
+        copy_subject_after_word(text, "define", result->subject, sizeof(result->subject));
         set_result(result, DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE,
                    result->subject[0] != '\0', "Request asks for a definition.");
         return;
@@ -278,7 +278,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 3,
+    "intent", "Digit Intent", 1, 0, 4,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
