@@ -6,6 +6,7 @@
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T22:41:00Z] Initial deterministic Intent implementation. Interprets request purpose and target only; it contains no subject-specific knowledge or answers. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:03:00Z] Qualification now executes the deterministic interpreter and reports measured pass/fail results instead of declared results. */
+/* [AI:GPT-5.6 Sol | 2026-10-07T00:52:00Z] Knowledge operations are recognized inside conversational framing instead of requiring the operation verb to be the first token. Subject extraction begins after the established operation. */
 
 static const stnlabz_module_host_t *intent_host = NULL;
 
@@ -55,15 +56,27 @@ static int any_word(const char *text, const char *const *words, size_t count)
     return 0;
 }
 
-static void copy_subject_after_lead(const char *text, char *subject, size_t size)
+static void copy_subject_after_word(const char *text, const char *word, char *subject, size_t size)
 {
     const char *p = text;
     if (subject == NULL || size == 0) return;
     subject[0] = '\0';
-    if (text == NULL) return;
-    while (*p && !isspace((unsigned char)*p)) ++p;
-    while (*p && isspace((unsigned char)*p)) ++p;
-    if (*p) snprintf(subject, size, "%s", p);
+    if (text == NULL || word == NULL) return;
+    while (*p)
+    {
+        const char *start;
+        size_t length;
+        while (*p && !isalnum((unsigned char)*p) && *p != '_' && *p != '-') ++p;
+        start = p;
+        while (*p && (isalnum((unsigned char)*p) || *p == '_' || *p == '-')) ++p;
+        length = (size_t)(p - start);
+        if (length > 0 && word_equal_ci(start, length, word))
+        {
+            while (*p && isspace((unsigned char)*p)) ++p;
+            if (*p) snprintf(subject, size, "%s", p);
+            return;
+        }
+    }
 }
 
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
@@ -96,14 +109,14 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
                    "Request asks about current operational state.");
         return;
     }
-    if (starts_with_word(text, "explain"))
+    if (has_word(text, "explain"))
     {
-        copy_subject_after_lead(text, result->subject, sizeof(result->subject));
+        copy_subject_after_word(text, "explain", result->subject, sizeof(result->subject));
         set_result(result, DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE,
                    result->subject[0] != '\0', "Request asks for an explanation.");
         return;
     }
-    if (starts_with_word(text, "define"))
+    if (has_word(text, "define"))
     {
         copy_subject_after_lead(text, result->subject, sizeof(result->subject));
         set_result(result, DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE,
@@ -265,7 +278,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 2,
+    "intent", "Digit Intent", 1, 0, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
