@@ -47,6 +47,7 @@ typedef struct
     char reason[DIGIT_INTENT_REASON_MAX];
 } digit_intent_result_t;
 
+void digit_intent_interpret(const char *text, digit_intent_result_t *result);
 const char *digit_intent_class_string(digit_intent_class_t intent);
 const char *digit_intent_target_string(digit_intent_target_t target);
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
