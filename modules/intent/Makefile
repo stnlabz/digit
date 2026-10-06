@@ -6,13 +6,15 @@ ABI_INCLUDE := $(ABI_DIR)/includes
 CPPFLAGS ?= -Iincludes -I$(ABI_INCLUDE)
 
 TARGET := bin/intent.so
+TEST_TARGET := bin/test_intent
 SOURCE := src/intent.c
+TEST_SOURCE := tests/test_intent.c
 
 DIGIT_PREFIX ?= /opt/digit
 INSTALL_DIR := $(DIGIT_PREFIX)/modules/intent
 INSTALL_BIN := $(INSTALL_DIR)/bin
 
-.PHONY: all clean check-abi rebuild install
+.PHONY: all test clean check-abi rebuild install
 
 all: check-abi $(TARGET)
 
@@ -21,6 +23,12 @@ check-abi:
 
 $(TARGET): $(SOURCE) includes/intent.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
+
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/intent.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@
+
+test: check-abi $(TEST_TARGET)
+	./$(TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
