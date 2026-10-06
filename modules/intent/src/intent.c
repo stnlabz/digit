@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "intent.h"
+#include "../../corpus/includes/corpus.h"
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T22:41:00Z] Initial deterministic Intent implementation. Interprets request purpose and target only; it contains no subject-specific knowledge or answers. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:03:00Z] Qualification now executes the deterministic interpreter and reports measured pass/fail results instead of declared results. */
@@ -79,6 +80,35 @@ static void semantic_subject(const char *after, char *subject, size_t size)
     subject[n] = '\0';
 }
 
+static int learned_word(const char *word,char *out,size_t cap)
+{
+    digit_corpus_search_request_t q; digit_corpus_search_result_t r; size_t used=0,i;
+    if(!word||!out||!cap||!intent_host||!intent_host->invoke_service)return 0;
+    memset(&q,0,sizeof(q)); memset(&r,0,sizeof(r)); snprintf(q.query,sizeof(q.query),"%s",word);
+    if(intent_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&q,sizeof(q),&r,sizeof(r),&used)!=STNLABZ_MODULE_OK||used!=sizeof(r))return 0;
+    for(i=0;i<r.count&&i<DIGIT_CORPUS_SEARCH_MAX;i++){
+        const char *p,*m; size_t n=0;
+        if(strcmp(r.records[i].category,"OPERATOR_LEARNED")!=0||!has_word(r.records[i].text,word))continue;
+        m=strstr(r.records[i].text," means "); if(!m)continue; p=m+7;
+        while(*p&&(!isalnum((unsigned char)*p)&&*p!='_'&&*p!='-'))p++;
+        while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-')&&n+1<cap)n++;
+        if(n){memcpy(out,p,n);out[n]=0;return 1;}
+    } return 0;
+}
+static void learned_text(const char *in,char *out,size_t cap)
+{
+    const char *p=in; size_t used=0; if(!out||!cap)return; out[0]=0;
+    while(p&&*p&&used+1<cap){
+        if(isalnum((unsigned char)*p)||*p=='_'||*p=='-'){
+            const char *s=p; char w[128],r[128]; size_t n;
+            while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))p++;
+            n=(size_t)(p-s); if(n>=sizeof(w))n=sizeof(w)-1; memcpy(w,s,n);w[n]=0;
+            if(learned_word(w,r,sizeof(r))){s=r;n=strlen(r);}
+            if(n>=cap-used)n=cap-used-1;memcpy(out+used,s,n);used+=n;
+        }else out[used++]=*p++;
+    } out[used]=0;
+}
+
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
                        digit_intent_target_t target, unsigned int established,
                        const char *reason)
@@ -96,11 +126,14 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     static const char *const social_words[] = {"hi","hello","hey","morning","afternoon","evening","thanks","thank","sorry","ouch","paws"};
     static const char *const compare_words[] = {"compare","versus","difference","differences"};
     const char *after = NULL;
+    char interpreted[DIGIT_INTENT_TEXT_MAX];
     int action, status, explain, define, compare, why, how, fact, social;
     unsigned int operational_count;
     if (result == NULL) return;
     memset(result, 0, sizeof(*result));
     if (text == NULL || text[0] == '\0') { set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established."); return; }
+    learned_text(text,interpreted,sizeof(interpreted));
+    text=interpreted;
     action=any_word(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
     status=any_word(text,status_words,sizeof(status_words)/sizeof(status_words[0]));
     explain=find_word(text,"explain",&after);
@@ -245,7 +278,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 6,
+    "intent", "Digit Intent", 1, 0, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
