@@ -11,8 +11,11 @@
 /* [AI:GPT-5.6 Sol | 2026-10-06T21:41:00Z] Removed Dispatcher LLM dependency. Project questions now pass through Response so source/corpus selection and Validator remain the bounded answer path. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:28:00Z] Dispatcher now requires Intent interpretation before normal routing. Existing bounded lesson/source/action behavior is preserved while Intent becomes the authoritative request-purpose classification. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:44:00Z] Established Intent now controls downstream dispatch. Structured intent, target, and subject accompany the original request; UNKNOWN/AMBIGUOUS fail closed instead of entering generic retrieval. */
+/* [AI:GPT-5.6 Sol | 2026-10-07T00:09:00Z] Removed direct linkage to Intent module implementation symbols. Dispatcher communicates with Intent only through the registered service ABI so RTLD_NOW can load Dispatcher independently. */
 
 static const stnlabz_module_host_t *dispatcher_host=NULL;
+static const char *intent_class_name(digit_intent_class_t intent){switch(intent){case DIGIT_INTENT_CONVERSATION:return "CONVERSATION";case DIGIT_INTENT_FACT:return "FACT";case DIGIT_INTENT_DEFINE:return "DEFINE";case DIGIT_INTENT_EXPLAIN:return "EXPLAIN";case DIGIT_INTENT_COMPARE:return "COMPARE";case DIGIT_INTENT_WHY:return "WHY";case DIGIT_INTENT_HOW:return "HOW";case DIGIT_INTENT_STATUS:return "STATUS";case DIGIT_INTENT_ACTION:return "ACTION";case DIGIT_INTENT_AMBIGUOUS:return "AMBIGUOUS";default:return "UNKNOWN";}}
+static const char *intent_target_name(digit_intent_target_t target){switch(target){case DIGIT_INTENT_TARGET_SOCIAL:return "SOCIAL";case DIGIT_INTENT_TARGET_KNOWLEDGE:return "KNOWLEDGE";case DIGIT_INTENT_TARGET_RUNTIME:return "RUNTIME";case DIGIT_INTENT_TARGET_CAPABILITY:return "CAPABILITY";default:return "UNKNOWN";}}
 
 static int contains_ci(const char *text,const char *needle){size_t i,j,tl,nl;if(text==NULL||needle==NULL||needle[0]=='\0')return 0;tl=strlen(text);nl=strlen(needle);if(nl>tl)return 0;for(i=0;i+nl<=tl;++i){for(j=0;j<nl;++j)if(tolower((unsigned char)text[i+j])!=tolower((unsigned char)needle[j]))break;if(j==nl)return 1;}return 0;}
 static void normalize_answer(char *text){size_t i;int previous_space=0;if(text==NULL)return;for(i=0;text[i]!='\0';++i){unsigned char c=(unsigned char)text[i];if(c=='\t'||c=='\n'||c=='\r')text[i]=' ';if(text[i]==' '){if(previous_space){size_t j=i;do{text[j]=text[j+1];++j;}while(text[j-1]!='\0');--i;continue;}previous_space=1;}else previous_space=0;}}
@@ -49,7 +52,7 @@ static void dispatch_intent_response(const char *request,const digit_intent_resu
 {
     digit_response_request_t rr;digit_response_result_t ro;size_t used=0;stnlabz_module_result_t sr;const char *intent_name;const char *target_name;
     if(intent==NULL){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't interpret that request.");return;}
-    intent_name=digit_intent_class_string(intent->intent);target_name=digit_intent_target_string(intent->target);
+    intent_name=intent_class_name(intent->intent);target_name=intent_target_name(intent->target);
     memset(&rr,0,sizeof(rr));memset(&ro,0,sizeof(ro));
     if(snprintf(rr.question,sizeof(rr.question),"INTENT: %s\nTARGET: %s\nSUBJECT: %s\nREQUEST: %s",intent_name,target_name,intent->subject,request)>=(int)sizeof(rr.question)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"The interpreted request is too large to dispatch safely.");return;}
     sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),&ro,sizeof(ro),&used);
@@ -64,5 +67,5 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,2,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,2,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
