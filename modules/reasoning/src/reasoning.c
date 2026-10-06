@@ -135,6 +135,7 @@ static stnlabz_module_result_t reasoning_service(const void *request, size_t req
 }
 
 /* [AI:GPT-5.6 Sol | 2026-10-07T00:24:00Z] Deterministic EXPLAIN reasoning organizes only supplied authorized evidence. It ranks subject-defining evidence before descriptive evidence, rejects question-like evidence, deduplicates records, and introduces no external knowledge. */
+/* [AI:GPT-5.6 Sol | 2026-10-07T00:39:00Z] EXPLAIN now classifies evidence by semantic role and selects at most one identity, purpose, characteristic, and incidental detail in that priority order. This prevents repeated low-level facts from masquerading as an explanation. */
 static int explanation_question_like(const char *text)
 {
     const char *p;
@@ -148,16 +149,37 @@ static int explanation_contains_ci(const char *text, const char *needle)
     return text != NULL && needle != NULL && source_contains_ci(text, strlen(text), needle);
 }
 
+typedef enum
+{
+    EXPLANATION_ROLE_NONE = 0,
+    EXPLANATION_ROLE_IDENTITY,
+    EXPLANATION_ROLE_PURPOSE,
+    EXPLANATION_ROLE_CHARACTERISTIC,
+    EXPLANATION_ROLE_DETAIL
+} explanation_role_t;
+
+static explanation_role_t explanation_role(const char *subject, const char *text)
+{
+    int names_subject;
+    if (subject == NULL || text == NULL || text[0] == '\0' || explanation_question_like(text)) return EXPLANATION_ROLE_NONE;
+    names_subject = explanation_contains_ci(text, subject);
+    if (!names_subject) return EXPLANATION_ROLE_NONE;
+    if (explanation_contains_ci(text, "stands for") || explanation_contains_ci(text, " is a ") || explanation_contains_ci(text, " is an ")) return EXPLANATION_ROLE_IDENTITY;
+    if (explanation_contains_ci(text, "used for") || explanation_contains_ci(text, "used to") || explanation_contains_ci(text, "allows") || explanation_contains_ci(text, "provides") || explanation_contains_ci(text, "purpose")) return EXPLANATION_ROLE_PURPOSE;
+    if (explanation_contains_ci(text, "supports") || explanation_contains_ci(text, "uses") || explanation_contains_ci(text, "works") || explanation_contains_ci(text, "runs") || explanation_contains_ci(text, "typed") || explanation_contains_ci(text, "type")) return EXPLANATION_ROLE_CHARACTERISTIC;
+    return EXPLANATION_ROLE_DETAIL;
+}
+
 static unsigned int explanation_rank(const char *subject, const char *text)
 {
-    unsigned int score = 0;
-    if (subject == NULL || text == NULL || text[0] == '\0' || explanation_question_like(text)) return 0;
-    if (explanation_contains_ci(text, subject)) score += 100U;
-    if (explanation_contains_ci(text, "stands for") || explanation_contains_ci(text, " is a ") || explanation_contains_ci(text, " is an ")) score += 80U;
-    if (explanation_contains_ci(text, "used for") || explanation_contains_ci(text, "used to") || explanation_contains_ci(text, "allows") || explanation_contains_ci(text, "provides")) score += 50U;
-    if (explanation_contains_ci(text, "supports") || explanation_contains_ci(text, "uses") || explanation_contains_ci(text, "can ")) score += 30U;
-    if (score == 0 && explanation_contains_ci(text, subject)) score = 10U;
-    return score;
+    switch (explanation_role(subject, text))
+    {
+        case EXPLANATION_ROLE_IDENTITY: return 400U;
+        case EXPLANATION_ROLE_PURPOSE: return 300U;
+        case EXPLANATION_ROLE_CHARACTERISTIC: return 200U;
+        case EXPLANATION_ROLE_DETAIL: return 100U;
+        default: return 0U;
+    }
 }
 
 static stnlabz_module_result_t reasoning_explain_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
@@ -185,19 +207,25 @@ static stnlabz_module_result_t reasoning_explain_service(const void *request, si
         while (j > 0 && rank[order[j - 1]] < rank[key]) { order[j] = order[j - 1]; --j; }
         order[j] = key;
     }
-    for (i = 0; i < count && output.evidence_used < 3; ++i)
     {
-        size_t index = order[i];
-        int duplicate = 0;
-        int written;
-        size_t k;
-        if (rank[index] == 0 || input->evidence[index][0] == '\0') continue;
-        for (k = 0; k < i; ++k) if (strcmp(input->evidence[index], input->evidence[order[k]]) == 0) { duplicate = 1; break; }
-        if (duplicate) continue;
-        written = snprintf(output.explanation + offset, sizeof(output.explanation) - offset, "%s%s", offset ? " " : "", input->evidence[index]);
-        if (written <= 0 || (size_t)written >= sizeof(output.explanation) - offset) break;
-        offset += (size_t)written;
-        ++output.evidence_used;
+        int role_used[EXPLANATION_ROLE_DETAIL + 1] = {0};
+        for (i = 0; i < count && output.evidence_used < 3; ++i)
+        {
+            size_t index = order[i];
+            explanation_role_t role = explanation_role(input->subject, input->evidence[index]);
+            int duplicate = 0;
+            int written;
+            size_t k;
+            if (rank[index] == 0 || role == EXPLANATION_ROLE_NONE || input->evidence[index][0] == '\0') continue;
+            if (role_used[role]) continue;
+            for (k = 0; k < i; ++k) if (strcmp(input->evidence[index], input->evidence[order[k]]) == 0) { duplicate = 1; break; }
+            if (duplicate) continue;
+            written = snprintf(output.explanation + offset, sizeof(output.explanation) - offset, "%s%s", offset ? " " : "", input->evidence[index]);
+            if (written <= 0 || (size_t)written >= sizeof(output.explanation) - offset) break;
+            offset += (size_t)written;
+            role_used[role] = 1;
+            ++output.evidence_used;
+        }
     }
     output.explained = output.evidence_used > 0;
     memcpy(response, &output, sizeof(output));
@@ -239,7 +267,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 3,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 4,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
