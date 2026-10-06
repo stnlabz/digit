@@ -5,6 +5,12 @@
 #include "module.h"
 
 #define DIGIT_REASONING_SERVICE "reasoning.evaluate"
+#define DIGIT_REASONING_EXPLAIN_SERVICE "reasoning.explain"
+
+#define DIGIT_REASONING_SUBJECT_MAX 256
+#define DIGIT_REASONING_EVIDENCE_MAX 6
+#define DIGIT_REASONING_EVIDENCE_TEXT_MAX 4096
+#define DIGIT_REASONING_EXPLANATION_MAX 4096
 
 typedef enum
 {
@@ -31,6 +37,26 @@ typedef struct
     unsigned int confidence;
     char reason[256];
 } digit_reasoning_result_t;
+
+/*
+ * [AI:GPT-5.6 Sol | 2026-10-07T00:18:00Z]
+ * Public deterministic EXPLAIN contract. Reasoning receives only the
+ * established subject and already-selected authorized evidence. It may
+ * organize that evidence, but it may not introduce unsupported knowledge.
+ */
+typedef struct
+{
+    char subject[DIGIT_REASONING_SUBJECT_MAX];
+    size_t evidence_count;
+    char evidence[DIGIT_REASONING_EVIDENCE_MAX][DIGIT_REASONING_EVIDENCE_TEXT_MAX];
+} digit_reasoning_explain_request_t;
+
+typedef struct
+{
+    int explained;
+    size_t evidence_used;
+    char explanation[DIGIT_REASONING_EXPLANATION_MAX];
+} digit_reasoning_explain_result_t;
 
 int digit_reasoning_evaluate(
     const char *context,
