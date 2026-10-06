@@ -5,6 +5,7 @@
 #include "intent.h"
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T22:41:00Z] Initial deterministic Intent implementation. Interprets request purpose and target only; it contains no subject-specific knowledge or answers. */
+/* [AI:GPT-5.6 Sol | 2026-10-06T23:03:00Z] Qualification now executes the deterministic interpreter and reports measured pass/fail results instead of declared results. */
 
 static const stnlabz_module_host_t *intent_host = NULL;
 
@@ -75,7 +76,7 @@ static void set_result(digit_intent_result_t *result, digit_intent_class_t inten
     snprintf(result->reason, sizeof(result->reason), "%s", reason);
 }
 
-static void interpret(const char *text, digit_intent_result_t *result)
+void digit_intent_interpret(const char *text, digit_intent_result_t *result)
 {
     static const char *const action_words[] = {"create","build","write","generate","make","implement","produce","fix","remove","delete","install","uninstall","update","patch"};
     static const char *const status_words[] = {"status","errors","error","alerts","alert","broken","health","running","failures","failure"};
@@ -185,21 +186,61 @@ static stnlabz_module_result_t intent_service(const void *request, size_t reques
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || input->text[0] == '\0')
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    interpret(input->text, &result);
+    digit_intent_interpret(input->text, &result);
     memcpy(response, &result, sizeof(result));
     *response_used = sizeof(result);
     return STNLABZ_MODULE_OK;
 }
 
+static int qualification_case(const char *text, digit_intent_class_t expected_intent,
+                              digit_intent_target_t expected_target,
+                              unsigned int expected_established)
+{
+    digit_intent_result_t interpreted;
+    digit_intent_interpret(text, &interpreted);
+    return interpreted.intent == expected_intent &&
+           interpreted.target == expected_target &&
+           interpreted.established == expected_established;
+}
+
 static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_result_t *result)
 {
+    static const struct
+    {
+        const char *text;
+        digit_intent_class_t intent;
+        digit_intent_target_t target;
+        unsigned int established;
+    } cases[] =
+    {
+        {"hello Digit", DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U},
+        {"what is the first General Order", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"define deterministic behavior", DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"explain deterministic behavior", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"compare these two implementations", DIGIT_INTENT_COMPARE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"why did qualification fail", DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
+        {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
+        {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
+    };
+    size_t i;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(result, 0, sizeof(*result));
-    result->tests_executed = 10;
-    result->tests_passed = 10;
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+    {
+        ++result->tests_executed;
+        if (qualification_case(cases[i].text, cases[i].intent, cases[i].target,
+                               cases[i].established))
+            ++result->tests_passed;
+    }
+    result->tests_failed = result->tests_executed - result->tests_passed;
     result->negative_test_executed = 1;
-    result->negative_test_passed = 1;
-    return STNLABZ_MODULE_OK;
+    result->negative_test_passed =
+        qualification_case("flibbertigibbet", DIGIT_INTENT_UNKNOWN,
+                           DIGIT_INTENT_TARGET_UNKNOWN, 0U);
+    return result->tests_failed == 0 && result->negative_test_passed
+        ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_QUALIFICATION_FAILED;
 }
 
 static stnlabz_module_result_t intent_start(const stnlabz_module_host_t *host)
@@ -224,7 +265,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 0,
+    "intent", "Digit Intent", 1, 0, 1,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
