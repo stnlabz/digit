@@ -240,7 +240,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         qualification_case("flibbertigibbet", DIGIT_INTENT_UNKNOWN,
                            DIGIT_INTENT_TARGET_UNKNOWN, 0U);
     return result->tests_failed == 0 && result->negative_test_passed
-        ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_QUALIFICATION_FAILED;
+        ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 
 static stnlabz_module_result_t intent_start(const stnlabz_module_host_t *host)
@@ -265,7 +265,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 1,
+    "intent", "Digit Intent", 1, 0, 2,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
