@@ -36,6 +36,14 @@ static int has_word(const char *text, const char *word)
     return 0;
 }
 
+static int any_word(const char *text, const char *const *words, size_t count)
+{
+    size_t i;
+    for (i = 0; i < count; ++i)
+        if (has_word(text, words[i])) return 1;
+    return 0;
+}
+
 static int find_word(const char *text, const char *word, const char **after)
 {
     const char *p = text;
@@ -237,7 +245,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 5,
+    "intent", "Digit Intent", 1, 0, 6,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
