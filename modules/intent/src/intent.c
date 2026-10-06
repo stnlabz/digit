@@ -104,7 +104,9 @@ static void learned_text(const char *in,char *out,size_t cap)
             while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))p++;
             n=(size_t)(p-s); if(n>=sizeof(w))n=sizeof(w)-1; memcpy(w,s,n);w[n]=0;
             if(learned_word(w,r,sizeof(r))){s=r;n=strlen(r);}
-            if(n>=cap-used)n=cap-used-1;memcpy(out+used,s,n);used+=n;
+            if(n>=cap-used)n=cap-used-1;
+            memcpy(out+used,s,n);
+            used+=n;
         }else out[used++]=*p++;
     } out[used]=0;
 }
@@ -278,7 +280,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 7,
+    "intent", "Digit Intent", 1, 0, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
