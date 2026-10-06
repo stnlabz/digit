@@ -72,8 +72,40 @@ static void expect_intent(const char *name, const char *text,
            digit_intent_target_string(expected_target));
 }
 
-int main(void)
+static void print_interpretation(const char *text)
 {
+    digit_intent_result_t result;
+    digit_intent_interpret(text, &result);
+    printf("INTENT: %s\n", digit_intent_class_string(result.intent));
+    printf("TARGET: %s\n", digit_intent_target_string(result.target));
+    printf("ESTABLISHED: %s\n", result.established ? "YES" : "NO");
+    printf("SUBJECT: %s\n", result.subject);
+    printf("REASON: %s\n", result.reason);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc > 1)
+    {
+        char input[DIGIT_INTENT_TEXT_MAX];
+        size_t used = 0;
+        int i;
+        input[0] = '\0';
+        for (i = 1; i < argc; ++i)
+        {
+            int written = snprintf(input + used, sizeof(input) - used, "%s%s",
+                                   i == 1 ? "" : " ", argv[i]);
+            if (written < 0 || (size_t)written >= sizeof(input) - used)
+            {
+                fprintf(stderr, "Input exceeds %u bytes.\n", (unsigned int)(sizeof(input) - 1U));
+                return 2;
+            }
+            used += (size_t)written;
+        }
+        print_interpretation(input);
+        return 0;
+    }
+
     expect_intent("conversation", "hello Digit",
                   DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
     expect_intent("fact", "what is the first General Order",
