@@ -36,32 +36,10 @@ static int has_word(const char *text, const char *word)
     return 0;
 }
 
-static int starts_with_word(const char *text, const char *word)
+static int find_word(const char *text, const char *word, const char **after)
 {
     const char *p = text;
-    const char *start;
-    size_t length;
     if (text == NULL || word == NULL) return 0;
-    while (*p && !isalnum((unsigned char)*p) && *p != '_' && *p != '-') ++p;
-    start = p;
-    while (*p && (isalnum((unsigned char)*p) || *p == '_' || *p == '-')) ++p;
-    length = (size_t)(p - start);
-    return length > 0 && word_equal_ci(start, length, word);
-}
-
-static int any_word(const char *text, const char *const *words, size_t count)
-{
-    size_t i;
-    for (i = 0; i < count; ++i) if (has_word(text, words[i])) return 1;
-    return 0;
-}
-
-static void copy_subject_after_word(const char *text, const char *word, char *subject, size_t size)
-{
-    const char *p = text;
-    if (subject == NULL || size == 0) return;
-    subject[0] = '\0';
-    if (text == NULL || word == NULL) return;
     while (*p)
     {
         const char *start;
@@ -72,11 +50,25 @@ static void copy_subject_after_word(const char *text, const char *word, char *su
         length = (size_t)(p - start);
         if (length > 0 && word_equal_ci(start, length, word))
         {
-            while (*p && isspace((unsigned char)*p)) ++p;
-            if (*p) snprintf(subject, size, "%s", p);
-            return;
+            if (after != NULL) *after = p;
+            return 1;
         }
     }
+    return 0;
+}
+
+static void semantic_subject(const char *after, char *subject, size_t size)
+{
+    size_t n;
+    if (subject == NULL || size == 0) return;
+    subject[0] = '\0';
+    if (after == NULL) return;
+    while (*after && !isalnum((unsigned char)*after) && *after != '_' && *after != '-') ++after;
+    n = strlen(after);
+    while (n > 0 && !isalnum((unsigned char)after[n - 1]) && after[n - 1] != '_' && after[n - 1] != '-') --n;
+    if (n >= size) n = size - 1;
+    memcpy(subject, after, n);
+    subject[n] = '\0';
 }
 
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
@@ -95,66 +87,33 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     static const char *const status_words[] = {"status","errors","error","alerts","alert","broken","health","running","failures","failure"};
     static const char *const social_words[] = {"hi","hello","hey","morning","afternoon","evening","thanks","thank","sorry","ouch","paws"};
     static const char *const compare_words[] = {"compare","versus","difference","differences"};
+    const char *after = NULL;
+    int action, status, explain, define, compare, why, how, fact, social;
+    unsigned int operational_count;
+    if (result == NULL) return;
     memset(result, 0, sizeof(*result));
-
-    if (any_word(text, action_words, sizeof(action_words)/sizeof(action_words[0])))
-    {
-        set_result(result, DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U,
-                   "Request directs Digit to perform or change something.");
-        return;
-    }
-    if (any_word(text, status_words, sizeof(status_words)/sizeof(status_words[0])))
-    {
-        set_result(result, DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U,
-                   "Request asks about current operational state.");
-        return;
-    }
-    if (has_word(text, "explain"))
-    {
-        copy_subject_after_word(text, "explain", result->subject, sizeof(result->subject));
-        set_result(result, DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE,
-                   result->subject[0] != '\0', "Request asks for an explanation.");
-        return;
-    }
-    if (has_word(text, "define"))
-    {
-        copy_subject_after_word(text, "define", result->subject, sizeof(result->subject));
-        set_result(result, DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE,
-                   result->subject[0] != '\0', "Request asks for a definition.");
-        return;
-    }
-    if (any_word(text, compare_words, sizeof(compare_words)/sizeof(compare_words[0])))
-    {
-        set_result(result, DIGIT_INTENT_COMPARE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U,
-                   "Request asks for a comparison.");
-        return;
-    }
-    if (starts_with_word(text, "why"))
-    {
-        set_result(result, DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U,
-                   "Request asks for a supported reason or cause.");
-        return;
-    }
-    if (starts_with_word(text, "how"))
-    {
-        set_result(result, DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U,
-                   "Request asks how something works or is done.");
-        return;
-    }
-    if (starts_with_word(text, "what") || starts_with_word(text, "who"))
-    {
-        set_result(result, DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U,
-                   "Request asks for factual knowledge.");
-        return;
-    }
-    if (any_word(text, social_words, sizeof(social_words)/sizeof(social_words[0])))
-    {
-        set_result(result, DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U,
-                   "Request is conversational rather than an operational or knowledge task.");
-        return;
-    }
-    set_result(result, DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U,
-               "Intent is not deterministically established.");
+    if (text == NULL || text[0] == '\0') { set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established."); return; }
+    action=any_word(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
+    status=any_word(text,status_words,sizeof(status_words)/sizeof(status_words[0]));
+    explain=find_word(text,"explain",&after);
+    define=find_word(text,"define",NULL);
+    compare=any_word(text,compare_words,sizeof(compare_words)/sizeof(compare_words[0]));
+    why=has_word(text,"why");
+    how=has_word(text,"how");
+    fact=has_word(text,"what")||has_word(text,"who");
+    social=any_word(text,social_words,sizeof(social_words)/sizeof(social_words[0]));
+    operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
+    if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
+    if(action){set_result(result,DIGIT_INTENT_ACTION,DIGIT_INTENT_TARGET_CAPABILITY,1U,"Request directs Digit to perform or change something.");return;}
+    if(status){set_result(result,DIGIT_INTENT_STATUS,DIGIT_INTENT_TARGET_RUNTIME,1U,"Request asks about current operational state.");return;}
+    if(explain){semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_EXPLAIN,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for an explanation.");return;}
+    if(define){find_word(text,"define",&after);semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_DEFINE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a definition.");return;}
+    if(compare){set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a comparison.");return;}
+    if(why){set_result(result,DIGIT_INTENT_WHY,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a supported reason or cause.");return;}
+    if(how){set_result(result,DIGIT_INTENT_HOW,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks how something works or is done.");return;}
+    if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
+    if(social){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Request is conversational rather than an operational or knowledge task.");return;}
+    set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established.");
 }
 
 const char *digit_intent_class_string(digit_intent_class_t intent)
@@ -278,7 +237,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 4,
+    "intent", "Digit Intent", 1, 0, 5,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
