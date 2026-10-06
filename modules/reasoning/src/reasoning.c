@@ -134,6 +134,77 @@ static stnlabz_module_result_t reasoning_service(const void *request, size_t req
     return STNLABZ_MODULE_OK;
 }
 
+/* [AI:GPT-5.6 Sol | 2026-10-07T00:24:00Z] Deterministic EXPLAIN reasoning organizes only supplied authorized evidence. It ranks subject-defining evidence before descriptive evidence, rejects question-like evidence, deduplicates records, and introduces no external knowledge. */
+static int explanation_question_like(const char *text)
+{
+    const char *p;
+    if (text == NULL) return 0;
+    for (p = text; *p != '\0'; ++p) if (*p == '?') return 1;
+    return 0;
+}
+
+static int explanation_contains_ci(const char *text, const char *needle)
+{
+    return text != NULL && needle != NULL && source_contains_ci(text, strlen(text), needle);
+}
+
+static unsigned int explanation_rank(const char *subject, const char *text)
+{
+    unsigned int score = 0;
+    if (subject == NULL || text == NULL || text[0] == '\0' || explanation_question_like(text)) return 0;
+    if (explanation_contains_ci(text, subject)) score += 100U;
+    if (explanation_contains_ci(text, "stands for") || explanation_contains_ci(text, " is a ") || explanation_contains_ci(text, " is an ")) score += 80U;
+    if (explanation_contains_ci(text, "used for") || explanation_contains_ci(text, "used to") || explanation_contains_ci(text, "allows") || explanation_contains_ci(text, "provides")) score += 50U;
+    if (explanation_contains_ci(text, "supports") || explanation_contains_ci(text, "uses") || explanation_contains_ci(text, "can ")) score += 30U;
+    if (score == 0 && explanation_contains_ci(text, subject)) score = 10U;
+    return score;
+}
+
+static stnlabz_module_result_t reasoning_explain_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
+{
+    const digit_reasoning_explain_request_t *input = request;
+    digit_reasoning_explain_result_t output;
+    size_t order[DIGIT_REASONING_EVIDENCE_MAX];
+    unsigned int rank[DIGIT_REASONING_EVIDENCE_MAX];
+    size_t count, i, j, offset = 0;
+    (void)handler_context;
+    if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if (memchr(input->subject, '\0', sizeof(input->subject)) == NULL || input->subject[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    count = input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX ? DIGIT_REASONING_EVIDENCE_MAX : input->evidence_count;
+    memset(&output, 0, sizeof(output));
+    for (i = 0; i < count; ++i)
+    {
+        if (memchr(input->evidence[i], '\0', sizeof(input->evidence[i])) == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+        order[i] = i;
+        rank[i] = explanation_rank(input->subject, input->evidence[i]);
+    }
+    for (i = 1; i < count; ++i)
+    {
+        size_t key = order[i];
+        j = i;
+        while (j > 0 && rank[order[j - 1]] < rank[key]) { order[j] = order[j - 1]; --j; }
+        order[j] = key;
+    }
+    for (i = 0; i < count && output.evidence_used < 3; ++i)
+    {
+        size_t index = order[i];
+        int duplicate = 0;
+        int written;
+        size_t k;
+        if (rank[index] == 0 || input->evidence[index][0] == '\0') continue;
+        for (k = 0; k < i; ++k) if (strcmp(input->evidence[index], input->evidence[order[k]]) == 0) { duplicate = 1; break; }
+        if (duplicate) continue;
+        written = snprintf(output.explanation + offset, sizeof(output.explanation) - offset, "%s%s", offset ? " " : "", input->evidence[index]);
+        if (written <= 0 || (size_t)written >= sizeof(output.explanation) - offset) break;
+        offset += (size_t)written;
+        ++output.evidence_used;
+    }
+    output.explained = output.evidence_used > 0;
+    memcpy(response, &output, sizeof(output));
+    *response_used = sizeof(output);
+    return STNLABZ_MODULE_OK;
+}
+
 static stnlabz_module_result_t reasoning_qualify(stnlabz_module_qualification_result_t *result)
 {
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -149,8 +220,9 @@ static stnlabz_module_result_t reasoning_start(const stnlabz_module_host_t *host
 {
     if (host == NULL || host->register_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_REASONING_SERVICE, reasoning_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
+    if (!host->register_service(DIGIT_REASONING_EXPLAIN_SERVICE, reasoning_explain_service, NULL)) { (void)host->unregister_service(DIGIT_REASONING_SERVICE, NULL); return STNLABZ_MODULE_ERR_START_FAILED; }
     reasoning_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[REASONING] module active: authoritative-source reasoning.evaluate registered");
+    if (host->send_message != NULL) (void)host->send_message("[REASONING] module active: reasoning.evaluate and deterministic reasoning.explain registered");
     return STNLABZ_MODULE_OK;
 }
 
@@ -158,6 +230,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 {
     if (reasoning_host != NULL && reasoning_host->unregister_service != NULL)
     {
+        if (!reasoning_host->unregister_service(DIGIT_REASONING_EXPLAIN_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
         if (!reasoning_host->unregister_service(DIGIT_REASONING_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
     }
     reasoning_host = NULL;
@@ -166,7 +239,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 2,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
