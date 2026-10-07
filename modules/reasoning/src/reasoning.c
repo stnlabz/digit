@@ -170,6 +170,27 @@ static explanation_role_t explanation_role(const char *subject, const char *text
     return EXPLANATION_ROLE_DETAIL;
 }
 
+/* [AI:GPT-5.6 Sol | 2026-10-07T02:18:00Z] COMPARE subject attribution requires token-bounded identity so short subject names do not bind to longer language names or arbitrary character substrings. */
+static int subject_token_match(const char *text, const char *subject)
+{
+    size_t i, n;
+    if (text == NULL || subject == NULL || subject[0] == '\0') return 0;
+    n = strlen(subject);
+    for (i = 0; text[i] != '\0'; ++i)
+    {
+        size_t j;
+        if (i > 0 && (isalnum((unsigned char)text[i - 1]) || text[i - 1] == '_' || text[i - 1] == '#' || text[i - 1] == '+')) continue;
+        for (j = 0; j < n; ++j)
+        {
+            if (text[i + j] == '\0' || tolower((unsigned char)text[i + j]) != tolower((unsigned char)subject[j])) break;
+        }
+        if (j != n) continue;
+        if (text[i + n] != '\0' && (isalnum((unsigned char)text[i + n]) || text[i + n] == '_' || text[i + n] == '#' || text[i + n] == '+')) continue;
+        return 1;
+    }
+    return 0;
+}
+
 static unsigned int explanation_rank(const char *subject, const char *text)
 {
     switch (explanation_role(subject, text))
@@ -253,10 +274,16 @@ static stnlabz_module_result_t reasoning_compare_service(const void *request, si
     {
         unsigned int rank;
         if (memchr(input->evidence[i], '\0', sizeof(input->evidence[i])) == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-        rank = explanation_rank(input->left, input->evidence[i]);
-        if (rank > left_rank) { left_rank = rank; left_text = input->evidence[i]; }
-        rank = explanation_rank(input->right, input->evidence[i]);
-        if (rank > right_rank) { right_rank = rank; right_text = input->evidence[i]; }
+        if (subject_token_match(input->evidence[i], input->left))
+        {
+            rank = explanation_rank(input->left, input->evidence[i]);
+            if (rank > left_rank) { left_rank = rank; left_text = input->evidence[i]; }
+        }
+        if (subject_token_match(input->evidence[i], input->right))
+        {
+            rank = explanation_rank(input->right, input->evidence[i]);
+            if (rank > right_rank) { right_rank = rank; right_text = input->evidence[i]; }
+        }
     }
     if (left_text == NULL || right_text == NULL || left_text == right_text)
     {
@@ -305,7 +332,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 5,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 6,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
