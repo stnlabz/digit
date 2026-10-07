@@ -8,6 +8,7 @@
 /* [AI:GPT-5.6 Sol | 2026-10-06T22:41:00Z] Initial deterministic Intent implementation. Interprets request purpose and target only; it contains no subject-specific knowledge or answers. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:03:00Z] Qualification now executes the deterministic interpreter and reports measured pass/fail results instead of declared results. */
 /* [AI:GPT-5.6 Sol | 2026-10-07T00:52:00Z] Knowledge operations are recognized inside conversational framing instead of requiring the operation verb to be the first token. Subject extraction begins after the established operation. */
+/* [AI:GPT-5.6 Sol | 2026-10-07T01:50:00Z] COMPARE now carries its established comparison subject expression in the Intent envelope so downstream retrieval does not rank the operation word as evidence. */
 
 static const stnlabz_module_host_t *intent_host = NULL;
 
@@ -151,7 +152,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if(status){set_result(result,DIGIT_INTENT_STATUS,DIGIT_INTENT_TARGET_RUNTIME,1U,"Request asks about current operational state.");return;}
     if(explain){semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_EXPLAIN,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for an explanation.");return;}
     if(define){find_word(text,"define",&after);semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_DEFINE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a definition.");return;}
-    if(compare){set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a comparison.");return;}
+    if(compare){if(find_word(text,"compare",&after)){semantic_subject(after,result->subject,sizeof(result->subject));}else{snprintf(result->subject,sizeof(result->subject),"%s",text);}set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a comparison.");return;}
     if(why){set_result(result,DIGIT_INTENT_WHY,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a supported reason or cause.");return;}
     if(how){set_result(result,DIGIT_INTENT_HOW,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks how something works or is done.");return;}
     if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
@@ -280,7 +281,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 8,
+    "intent", "Digit Intent", 1, 0, 9,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
