@@ -6,6 +6,7 @@
 
 #define DIGIT_REASONING_SERVICE "reasoning.evaluate"
 #define DIGIT_REASONING_EXPLAIN_SERVICE "reasoning.explain"
+#define DIGIT_REASONING_COMPARE_SERVICE "reasoning.compare"
 
 #define DIGIT_REASONING_SUBJECT_MAX 256
 #define DIGIT_REASONING_EVIDENCE_MAX 6
@@ -57,6 +58,22 @@ typedef struct
     size_t evidence_used;
     char explanation[DIGIT_REASONING_EXPLANATION_MAX];
 } digit_reasoning_explain_result_t;
+
+typedef struct
+{
+    char left[DIGIT_REASONING_SUBJECT_MAX];
+    char right[DIGIT_REASONING_SUBJECT_MAX];
+    size_t evidence_count;
+    char evidence[DIGIT_REASONING_EVIDENCE_MAX][DIGIT_REASONING_EVIDENCE_TEXT_MAX];
+} digit_reasoning_compare_request_t;
+
+typedef struct
+{
+    int compared;
+    size_t left_evidence_used;
+    size_t right_evidence_used;
+    char comparison[DIGIT_REASONING_EXPLANATION_MAX];
+} digit_reasoning_compare_result_t;
 
 int digit_reasoning_evaluate(
     const char *context,
