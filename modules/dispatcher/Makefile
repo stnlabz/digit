@@ -3,7 +3,7 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 
 ABI_DIR ?= ../../../ABI
 ABI_INCLUDE := $(ABI_DIR)/includes
-CPPFLAGS ?= -Iincludes -I../source/includes -I../response/includes -I../lesson/includes -I../intent/includes -I$(ABI_INCLUDE)
+CPPFLAGS ?= -Iincludes -I../source/includes -I../response/includes -I../lesson/includes -I../intent/includes -I../interpretation/includes -I$(ABI_INCLUDE)
 
 TARGET := bin/dispatcher.so
 SOURCE := src/dispatcher.c
@@ -19,7 +19,7 @@ all: check-abi $(TARGET)
 check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/dispatcher.h ../source/includes/source.h ../response/includes/response.h ../lesson/includes/lesson.h ../intent/includes/intent.h | bin
+$(TARGET): $(SOURCE) includes/dispatcher.h ../source/includes/source.h ../response/includes/response.h ../lesson/includes/lesson.h ../intent/includes/intent.h ../interpretation/includes/interpretation.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
 
 bin:
