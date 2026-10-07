@@ -6,6 +6,8 @@
 
 #include "corpus.h"
 
+/* [AI:GPT-5.6 Sol | 2026-10-07T01:00:00Z] Corpus lexical matching now enforces token boundaries for token-shaped queries, preventing short terms such as "hi" from matching inside unrelated words. */
+
 #define CORPUS_QUERY_TERM_MAX 32
 #define CORPUS_QUERY_WORD_MAX 64
 
@@ -37,15 +39,26 @@ static int corpus_parse_line(char *line, digit_corpus_record_t *record)
     return 1;
 }
 
+static int token_char(unsigned char ch)
+{
+    return isalnum(ch) || ch == '_' || ch == '-';
+}
+
 static int contains_ci(const char *text, const char *query)
 {
     size_t i, j, text_length, query_length;
+    int query_starts_token, query_ends_token;
     if (text == NULL || query == NULL || query[0] == '\0') return 0;
     text_length = strlen(text); query_length = strlen(query);
     if (query_length > text_length) return 0;
+    query_starts_token = token_char((unsigned char)query[0]);
+    query_ends_token = token_char((unsigned char)query[query_length - 1]);
     for (i = 0; i + query_length <= text_length; ++i)
     {
         int match = 1;
+        if (query_starts_token && i > 0 && token_char((unsigned char)text[i - 1])) continue;
+        if (query_ends_token && i + query_length < text_length &&
+            token_char((unsigned char)text[i + query_length])) continue;
         for (j = 0; j < query_length; ++j)
             if (tolower((unsigned char)text[i + j]) != tolower((unsigned char)query[j])) { match = 0; break; }
         if (match) return 1;
@@ -305,5 +318,5 @@ static stnlabz_module_result_t corpus_stop(void)
     corpus_host = NULL; return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
-static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 0, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
+static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 1, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &corpus_descriptor; }
