@@ -20,7 +20,7 @@ int main(void)
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "reasoning") == 0, "module identity is reasoning");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 2, "internal version is 1.0.2");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 6, "internal version is 1.0.6");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT, "qualification rejects null result");
     check(digit_reasoning_evaluate("Digit module qualification must pass before load.", &result) && result.relevance == DIGIT_RELEVANCE_RELEVANT && result.category == DIGIT_CONTEXT_RULE, "Digit must requirement is classified as rule");
