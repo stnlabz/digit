@@ -233,6 +233,42 @@ static stnlabz_module_result_t reasoning_explain_service(const void *request, si
     return STNLABZ_MODULE_OK;
 }
 
+/* [AI:GPT-5.6 Sol | 2026-10-07T01:35:00Z] Deterministic COMPARE reasoning separates supplied authorized evidence by established subject and emits only evidence-backed statements for both sides. */
+static stnlabz_module_result_t reasoning_compare_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *handler_context)
+{
+    const digit_reasoning_compare_request_t *input = request;
+    digit_reasoning_compare_result_t output;
+    const char *left_text = NULL, *right_text = NULL;
+    unsigned int left_rank = 0, right_rank = 0;
+    size_t count, i;
+    (void)handler_context;
+    if (request == NULL || request_size != sizeof(*input) || response == NULL ||
+        response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if (memchr(input->left, '\0', sizeof(input->left)) == NULL || input->left[0] == '\0' ||
+        memchr(input->right, '\0', sizeof(input->right)) == NULL || input->right[0] == '\0')
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(&output, 0, sizeof(output));
+    count = input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX ? DIGIT_REASONING_EVIDENCE_MAX : input->evidence_count;
+    for (i = 0; i < count; ++i)
+    {
+        unsigned int rank;
+        if (memchr(input->evidence[i], '\0', sizeof(input->evidence[i])) == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+        rank = explanation_rank(input->left, input->evidence[i]);
+        if (rank > left_rank) { left_rank = rank; left_text = input->evidence[i]; }
+        rank = explanation_rank(input->right, input->evidence[i]);
+        if (rank > right_rank) { right_rank = rank; right_text = input->evidence[i]; }
+    }
+    if (left_text == NULL || right_text == NULL || left_text == right_text)
+    {
+        memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
+    }
+    snprintf(output.comparison, sizeof(output.comparison), "%s %s", left_text, right_text);
+    output.left_evidence_used = 1;
+    output.right_evidence_used = 1;
+    output.compared = 1;
+    memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
+}
+
 static stnlabz_module_result_t reasoning_qualify(stnlabz_module_qualification_result_t *result)
 {
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -249,8 +285,9 @@ static stnlabz_module_result_t reasoning_start(const stnlabz_module_host_t *host
     if (host == NULL || host->register_service == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_REASONING_SERVICE, reasoning_service, NULL)) return STNLABZ_MODULE_ERR_START_FAILED;
     if (!host->register_service(DIGIT_REASONING_EXPLAIN_SERVICE, reasoning_explain_service, NULL)) { (void)host->unregister_service(DIGIT_REASONING_SERVICE, NULL); return STNLABZ_MODULE_ERR_START_FAILED; }
+    if (!host->register_service(DIGIT_REASONING_COMPARE_SERVICE, reasoning_compare_service, NULL)) { (void)host->unregister_service(DIGIT_REASONING_EXPLAIN_SERVICE, NULL); (void)host->unregister_service(DIGIT_REASONING_SERVICE, NULL); return STNLABZ_MODULE_ERR_START_FAILED; }
     reasoning_host = host;
-    if (host->send_message != NULL) (void)host->send_message("[REASONING] module active: reasoning.evaluate and deterministic reasoning.explain registered");
+    if (host->send_message != NULL) (void)host->send_message("[REASONING] module active: evaluate, explain, and deterministic compare registered");
     return STNLABZ_MODULE_OK;
 }
 
@@ -258,6 +295,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 {
     if (reasoning_host != NULL && reasoning_host->unregister_service != NULL)
     {
+        if (!reasoning_host->unregister_service(DIGIT_REASONING_COMPARE_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
         if (!reasoning_host->unregister_service(DIGIT_REASONING_EXPLAIN_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
         if (!reasoning_host->unregister_service(DIGIT_REASONING_SERVICE, NULL)) return STNLABZ_MODULE_ERR_STOP_FAILED;
     }
@@ -267,7 +305,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 4,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 5,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
