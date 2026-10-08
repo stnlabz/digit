@@ -80,6 +80,11 @@ int main(void) {
     check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"removed project membership denies active SA");
     write_acl(file,"security\trestricted\tdigit\nsecurity\trestricted\tsysadmin\n");
     check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"restored project membership grants active SA");
+    write_acl(file,"security\trestricted\tsysadmin\nsecurity\trestricted\tsysadmin\n");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"duplicate project security membership denied");
+    write_acl(file,"security\trestricted\tsysadmin\nmalformed\n");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"malformed project security roster denied");
+    write_acl(file,"security\trestricted\tdigit\nsecurity\trestricted\tsysadmin\n");
     write_acl(sa,"sysadmin\tstn-labz\tSA\t1\t0\t1\n");
     check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"SA assignment revoked immediately denies access");
     unlink(path);
