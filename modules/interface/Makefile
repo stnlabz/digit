@@ -11,7 +11,7 @@ TARGET := bin/interface.so
 TEST_TARGET := bin/test_interface
 ACCESS_TEST_TARGET := bin/test_access_policy
 SESSION_TEST_TARGET := bin/test_session_store
-SOURCE := src/interface.c
+SOURCE := src/interface.c src/session_store.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -26,10 +26,10 @@ check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TARGET): $(SOURCE) includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@ $(LDLIBS)
 
 $(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
