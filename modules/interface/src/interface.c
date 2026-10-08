@@ -16,6 +16,7 @@
 #include "http_auth.h"
 #include "account_auth.h"
 #include "channel_acl.h"
+#include "channel_acl.h"
 #include "core_services.h"
 
 #define INTERFACE_BUFFER_MAX 65536
@@ -79,7 +80,7 @@ static void interface_alerts_list(int client,int unacknowledged){digit_alert_lis
 static void interface_alert_get(int client,const char *id){digit_alert_get_request_t in;digit_alert_get_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_GET,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"found\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 static void interface_alert_ack(int client,const char *id){digit_alert_acknowledge_request_t in;digit_alert_acknowledge_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.acknowledged){interface_reply(client,404,"{\"acknowledged\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"acknowledged\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 
-static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
+static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
  * Login has no self-registration or caller-supplied privilege flags.
@@ -142,13 +143,26 @@ if(strncmp(request,"POST /session/logout ",21)==0){
  * checks remain a separate required gate before multi-tenant channel release.
  */
 {
-    char identity[DIGIT_SESSION_ID_SIZE];
     if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
        !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
 }
-if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client);return;}if(strncmp(request,"POST /channels ",15)==0){interface_channel_create(client,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
+/* [AI:GPT-6 | 2026-10-08] Route-independent channel scope check. */
+if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",15)==0){
+    const char *begin=request+(request[0]=='G'?14:15);
+    const char *end=strpbrk(begin,"/ ");
+    size_t length;
+    char target[DIGIT_CHANNEL_ID_MAX];
+    if(!end || end==begin || (length=(size_t)(end-begin))>=sizeof(target)){
+        interface_reply(client,404,"{\"error\":\"not found\"}\n");return;
+    }
+    memcpy(target,begin,length);target[length]='\0';
+    if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,target)){
+        interface_reply(client,404,"{\"error\":\"not found\"}\n");return;
+    }
+}
+if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,identity);return;}if(strncmp(request,"POST /channels ",15)==0){interface_reply(client,403,"{\"error\":\"channel provisioning not available\"}\n");return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 if(strncmp(request,"GET /corpus/",12)==0){char rid[65],rj[9000],json[9200];const char *start=request+12,*end=strchr(start,' ');size_t len,used=0;interface_corpus_get_result_t out;if(!end||end==start){interface_reply(client,400,"{\"error\":\"record id required\"}\n");return;}len=(size_t)(end-start);if(len>=sizeof(rid)){interface_reply(client,400,"{\"error\":\"record id too large\"}\n");return;}memcpy(rid,start,len);rid[len]=0;memset(&out,0,sizeof(out));if(!interface_invoke(CORPUS_GET_SERVICE,rid,strlen(rid)+1,&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_record_json(&out.record,rj,sizeof(rj));snprintf(json,sizeof(json),"{\"found\":true,\"record\":%s}\n",rj);interface_reply(client,200,json);return;}
