@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "project_provision.h"
+#include "security_sa.h"
 
 /* [AI:GPT-6 | 2026-10-08] READY is published only after both records.
  * Incomplete folders are NOT provisioned projects.
@@ -60,11 +61,14 @@ end:
     return good;
 }
 int digit_project_provision(const char *root,const char *org,
-                             const char *project,const char *admin) {
+                             const char *project,const char *admin,
+                             const char *security_sa,const char *sa_registry) {
     int base=-1,o=-1,p=-1,good=0,created=0;
     char metadata[256],security[256];
     if(!root||!project_name(org)||!project_name(project)||
-       !project_name(admin)||strcmp(admin,"digit")==0)return 0;
+       !project_name(admin)||strcmp(admin,"digit")==0 ||
+       !project_name(security_sa) ||
+       !digit_security_sa_verify(sa_registry,org,security_sa))return 0;
     base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
     if(!private_dir(base))goto end;
     if(mkdirat(base,org,0700)!=0 && errno!=EEXIST)goto end;
@@ -73,7 +77,7 @@ int digit_project_provision(const char *root,const char *org,
     created=1;
     p=open_private(o,project);if(p<0)goto end;
     if(snprintf(metadata,sizeof(metadata),"%s\t%s\t%s\n",org,project,admin)<0)goto end;
-    if(snprintf(security,sizeof(security),"security\trestricted\tdigit\nsecurity\trestricted\t%s\n",admin)<0)goto end;
+    if(snprintf(security,sizeof(security),"security\trestricted\tdigit\nsecurity\trestricted\t%s\n",security_sa)<0)goto end;
     if(!record(p,"project.tsv",metadata)||
        !record(p,"security.tsv",security)||
        !record(p,"READY","security-initialized\n"))goto end;
