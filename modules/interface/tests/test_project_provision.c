@@ -15,7 +15,7 @@ static void check(int ok,const char *name) {
 }
 int main(void) {
     char root[]="/tmp/digit-project-XXXXXX";
-    char project[256],security[300],ready[300],org[256];
+    char project[256],security[300],ready[300],org[256],registry[256];
     FILE *f;
     char line[120];
     if(!mkdtemp(root))return 1;
@@ -23,14 +23,19 @@ int main(void) {
     snprintf(org,sizeof(org),"%s/stn-labz",root);
     snprintf(security,sizeof(security),"%s/security.tsv",project);
     snprintf(ready,sizeof(ready),"%s/READY",project);
+    snprintf(registry,sizeof(registry),"%s/sa.tsv",root);
+    f=fopen(registry,"w");if(!f)return 1;
+    fputs("poe\tstn-labz\tADMIN\t1\t1\t1\n",f);
+    fputs("sysadmin\tstn-labz\tSA\t1\t1\t1\n",f);
+    fclose(f);chmod(registry,0600);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"absent project not ready");
-    check(!digit_project_provision(root,"stn-labz","digit","digit"),"Digit cannot self-approve founding administrator");
-    check(!digit_project_provision(root,"bad/name","digit","poe"),"invalid organization denied");
-    check(!digit_project_provision(root,"stn-labz","../bad","poe"),"path traversal denied");
-    check(!digit_project_provision(root,"stn-labz","digit","bad/user"),"invalid founder denied");
-    check(digit_project_provision(root,"stn-labz","digit","poe"),"project provision succeeds");
+    check(!digit_project_provision(root,"stn-labz","digit","digit","sysadmin",registry),"Digit cannot self-approve founding administrator");
+    check(!digit_project_provision(root,"bad/name","digit","poe","sysadmin",registry),"invalid organization denied");
+    check(!digit_project_provision(root,"stn-labz","../bad","poe","sysadmin",registry),"path traversal denied");
+    check(!digit_project_provision(root,"stn-labz","digit","bad/user","sysadmin",registry),"invalid founder denied");
+    check(digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"project provision succeeds");
     check(digit_project_security_ready(root,"stn-labz","digit"),"restricted security record published");
-    check(!digit_project_provision(root,"stn-labz","digit","poe"),"duplicate project denied");
+    check(!digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"duplicate project denied");
     check(!digit_project_security_ready(root,"stn-labz","other"),"unregistered project denied");
     f=fopen(security,"r");
     check(f!=NULL,"security membership file exists");
@@ -38,15 +43,15 @@ int main(void) {
         int digit=0,founder=0;
         while(fgets(line,sizeof(line),f)) {
             if(strcmp(line,"security\trestricted\tdigit\n")==0)digit=1;
-            if(strcmp(line,"security\trestricted\tpoe\n")==0)founder=1;
+            if(strcmp(line,"security\trestricted\tsysadmin\n")==0)founder=1;
         }
         fclose(f);
         check(digit,"Digit initially assigned to restricted security");
-        check(founder,"founding administrator initially assigned");
+        check(founder,"verified SA initially assigned");
     }
     check(!digit_project_security_ready(root,"stn-labz","bad/name"),"unsafe channel path denied");
     check(!digit_project_security_ready(root,"elsewhere","digit"),"organization isolation");
-    check(!digit_project_provision(NULL,"stn-labz","other","poe"),"null root denied");
+    check(!digit_project_provision(NULL,"stn-labz","other","poe","sysadmin",registry),"null root denied");
     printf("\nProject provisioning tests: %u executed, %u failed\n",total,failures);
     return failures!=0;
 }
