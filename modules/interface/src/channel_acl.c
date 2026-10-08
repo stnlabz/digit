@@ -90,7 +90,8 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
                      fields[2],security_id,sizeof(security_id)))
                     ok=0;
                 else if(strcmp(security_id,channel_id)==0 &&
-                        !digit_security_sa_verify(sa_registry,fields[1],verified_user))
+                        (!digit_security_sa_verify(sa_registry,fields[1],verified_user) ||
+                         !digit_project_security_member(project_root,fields[1],fields[2],verified_user)))
                     ok=0;
             }
         }
