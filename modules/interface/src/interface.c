@@ -19,6 +19,7 @@
 #include "project_channel_bridge.h"
 #include "message_origin.h"
 #include "project_admin_route.h"
+#include "security_sa.h"
 #include "channel_acl.h"
 #include "core_services.h"
 
