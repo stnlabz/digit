@@ -60,10 +60,14 @@ int main(void) {
     write_acl(file,"security\trestricted\tdigit\n");
     write_acl(sa,"regular\tstn-labz\tADMIN\t1\t1\t1\n"
                  "sysadmin\tstn-labz\tSA\t1\t1\t1\n");
+    /* [AI:GPT-6 | 2026-10-08] Match protected 0600 files created by
+     * production provisioning, independent of the operator umask. */
+    if(chmod(sa,0600)!=0)return 1;
     write_acl(path,"regular\tstn-labz\tdigit\tchannel-123-1\t1\t1\t1\t1\n");
     check(!digit_channel_acl_check_scoped(path,root,sa,"regular","channel-123-1"),"no access before Core security binding");
     snprintf(file,sizeof(file),"%s/security_channel.id",project);
     write_acl(file,"channel-123-1\n");
+    if(chmod(file,0600)!=0)return 1;
     check(!digit_channel_acl_check_scoped(path,root,sa,"regular","channel-123-1"),"regular admin denied even with explicit security grant");
     write_acl(path,"sysadmin\tstn-labz\tdigit\tchannel-123-1\t1\t1\t1\t1\n");
     check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"verified SA with grant accesses bound security channel");
