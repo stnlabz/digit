@@ -70,7 +70,6 @@ int digit_project_security_channel_id(const char *root,const char *org,
 end:
     if(fd>=0)close(fd);
     if(dir>=0)close(dir);
-    if(lockfd>=0)close(lockfd);
     return ok;
 }
 /* [AI:GPT-6 | 2026-10-08] Resolve a protected Core ID to its unique
