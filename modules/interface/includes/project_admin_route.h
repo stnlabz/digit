@@ -29,7 +29,9 @@ static inline int digit_project_bind_route(const char *request,
     b=(size_t)(end-(separator+1));
     if(a==0||b==0||a>=DIGIT_PROJECT_ID_MAX||b>=DIGIT_PROJECT_ID_MAX||
        a>=organization_capacity||b>=project_capacity||
-       strcmp(end,suffix)!=0)return 0;
+       strncmp(end,suffix,sizeof(suffix)-1)!=0 ||
+       (end[sizeof(suffix)-1]!=0 &&
+        strncmp(end+sizeof(suffix)-1,"\r\n",2)!=0))return 0;
     for(i=0;i<a;i++){
         char c=begin[i];
         if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
