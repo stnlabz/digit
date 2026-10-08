@@ -154,7 +154,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     fact=has_word(text,"what")||has_word(text,"who");
     social=any_word(text,social_words,sizeof(social_words)/sizeof(social_words[0]));
     /* Question words framing an explicit knowledge operation are not conflicting intents. */
-    if(explain||define||compare){why=0;how=0;fact=0;}
+    if(explain||define||compare){status=0;why=0;how=0;fact=0;}
     operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
     if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
     if(action){set_result(result,DIGIT_INTENT_ACTION,DIGIT_INTENT_TARGET_CAPABILITY,1U,"Request directs Digit to perform or change something.");return;}
@@ -292,7 +292,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 1,
+    "intent", "Digit Intent", 1, 1, 2,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
