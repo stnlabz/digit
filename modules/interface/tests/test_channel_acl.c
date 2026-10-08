@@ -19,6 +19,8 @@ static int write_acl(const char *path,const char *entry) {
 }
 int main(void) {
     char path[]="/tmp/digit-acl-XXXXXX";
+    char root[]="/tmp/digit-acl-project-XXXXXX";
+    char org[256],project[256],file[320],sa[320];
     int fd=mkstemp(path);
     if(fd<0)return 1;
     close(fd);chmod(path,0600);
@@ -46,6 +48,27 @@ int main(void) {
     check(!digit_channel_acl_check_file(path,"ezra","general"),"malformed registry denied");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1");
     check(!digit_channel_acl_check_file(path,"ezra","general"),"unterminated line denied");
+    /* [AI:GPT-6 | 2026-10-08] Security channels are not ordinary grants. */
+    if(!mkdtemp(root))return 1;
+    snprintf(org,sizeof(org),"%s/stn-labz",root);
+    snprintf(project,sizeof(project),"%s/digit",org);
+    snprintf(sa,sizeof(sa),"%s/sa.tsv",root);
+    mkdir(org,0700);mkdir(project,0700);
+    snprintf(file,sizeof(file),"%s/READY",project);
+    write_acl(file,"security-initialized\n");
+    snprintf(file,sizeof(file),"%s/security.tsv",project);
+    write_acl(file,"security\trestricted\tdigit\n");
+    write_acl(sa,"regular\tstn-labz\tADMIN\t1\t1\t1\n"
+                 "sysadmin\tstn-labz\tSA\t1\t1\t1\n");
+    write_acl(path,"regular\tstn-labz\tdigit\tchannel-123-1\t1\t1\t1\t1\n");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"regular","channel-123-1"),"no access before Core security binding");
+    snprintf(file,sizeof(file),"%s/security_channel.id",project);
+    write_acl(file,"channel-123-1\n");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"regular","channel-123-1"),"regular admin denied even with explicit security grant");
+    write_acl(path,"sysadmin\tstn-labz\tdigit\tchannel-123-1\t1\t1\t1\t1\n");
+    check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"verified SA with grant accesses bound security channel");
+    write_acl(sa,"sysadmin\tstn-labz\tSA\t1\t0\t1\n");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"SA assignment revoked immediately denies access");
     unlink(path);
     check(!digit_channel_acl_check_file(path,"ezra","general"),"missing registry denied");
     printf("Channel ACL: %u executed, %u failed\n",count,failed);
