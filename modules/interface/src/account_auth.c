@@ -33,7 +33,7 @@ static int account_secure_file(FILE *f)
 static int account_match(const char *path,const char *user,const char *password,int verify)
 {
     FILE *f;
-    char line[1024],id[DIGIT_ACCOUNT_ID_MAX],state[8],hash[768];
+    char line[1024],hash[768];
     int matches=0,valid=0,malformed=0;
     size_t password_length=0;
     if(!path || !account_id_valid(user)) return 0;
@@ -46,7 +46,7 @@ static int account_match(const char *path,const char *user,const char *password,
     if(!f) return 0;
     if(!account_secure_file(f)){fclose(f);return 0;}
     while(fgets(line,sizeof(line),f)) {
-        char *a,*b,*c,*end;
+        char *a,*b,*c;
         size_t len=strlen(line);
         if(len==0 || line[len-1]!='\n') {malformed=1;break;}
         line[len-1]='\0';
@@ -74,7 +74,6 @@ static int account_match(const char *path,const char *user,const char *password,
             }
             memset(&data,0,sizeof(data));
         }
-        (void)end;
     }
     if(ferror(f))malformed=1;
     fclose(f);
