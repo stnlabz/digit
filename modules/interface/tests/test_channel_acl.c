@@ -20,7 +20,8 @@ static int write_acl(const char *path,const char *entry) {
 int main(void) {
     char path[]="/tmp/digit-acl-XXXXXX";
     char root[]="/tmp/digit-acl-project-XXXXXX";
-    char org[256],project[320],file[384],sa[320];
+    char org[256],project[320],file[384];
+    char sa[]="/tmp/digit-acl-sa-XXXXXX";
     int fd=mkstemp(path);
     if(fd<0)return 1;
     close(fd);chmod(path,0600);
@@ -52,7 +53,9 @@ int main(void) {
     if(!mkdtemp(root))return 1;
     snprintf(org,sizeof(org),"%s/stn-labz",root);
     snprintf(project,sizeof(project),"%s/digit",org);
-    snprintf(sa,sizeof(sa),"%s/sa.tsv",root);
+    fd=mkstemp(sa);
+    if(fd<0)return 1;
+    close(fd);
     mkdir(org,0700);mkdir(project,0700);
     snprintf(file,sizeof(file),"%s/READY",project);
     write_acl(file,"security-initialized\n");
