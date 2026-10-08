@@ -87,15 +87,15 @@ int digit_project_security_member(const char *root,const char *org,
     while(fgets(line,sizeof(line),file)){
         char *tab1,*tab2;
         size_t n=strlen(line);
-        if(!n||line[n-1]!='\\n'){invalid=1;break;}
-        line[n-1]='\\0';
-        tab1=strchr(line,'\\t');
+        if(!n||line[n-1]!='\n'){invalid=1;break;}
+        line[n-1]='\0';
+        tab1=strchr(line,'\t');
         if(!tab1){invalid=1;break;}
-        *tab1++='\\0';
-        tab2=strchr(tab1,'\\t');
+        *tab1++='\0';
+        tab2=strchr(tab1,'\t');
         if(!tab2){invalid=1;break;}
-        *tab2++='\\0';
-        if(strchr(tab2,'\\t')||strcmp(line,"security")!=0||
+        *tab2++='\0';
+        if(strchr(tab2,'\t')||strcmp(line,"security")!=0||
            strcmp(tab1,"restricted")!=0||!project_name(tab2)){
             invalid=1;break;
         }
