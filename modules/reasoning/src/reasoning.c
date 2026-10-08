@@ -340,11 +340,34 @@ static stnlabz_module_result_t reasoning_qualify(stnlabz_module_qualification_re
         comparison.compared && comparison.left_evidence_used == 1 &&
         comparison.right_evidence_used == 1) ++result->tests_passed;
 
+    /* Additional measured cases satisfy the Core minimum without declared passes. */
+    {
+        static const char *const contexts[] = {
+            "Digit core is active",
+            "Digit module status",
+            "Digit corpus evidence",
+            "Digit qualification record",
+            "Digit will report",
+            "Digit decided to retain the result",
+            "Digit might require more evidence"
+        };
+        size_t i;
+        for (i = 0; i < sizeof(contexts) / sizeof(contexts[0]); ++i)
+        {
+            ++result->tests_executed;
+            if (digit_reasoning_evaluate(contexts[i], &relevance) &&
+                relevance.relevance == DIGIT_RELEVANCE_RELEVANT)
+                ++result->tests_passed;
+        }
+    }
+
     ++result->negative_test_executed;
     if (reasoning_explain_service(NULL, 0, &explanation,
                                   sizeof(explanation), &used, NULL) ==
         STNLABZ_MODULE_ERR_INVALID_ARGUMENT) ++result->negative_test_passed;
-    return STNLABZ_MODULE_OK;
+    result->tests_failed = result->tests_executed - result->tests_passed;
+    return result->tests_failed == 0 && result->negative_test_passed
+        ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 
 static stnlabz_module_result_t reasoning_start(const stnlabz_module_host_t *host)
@@ -372,7 +395,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 7,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
