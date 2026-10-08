@@ -55,6 +55,18 @@ int main(void) {
         check(digit_channel_acl_check_file(path,"ezra","general"),
               "valid bounded ACL remains authorized");
     }
+    {
+        char alias[128];
+        snprintf(alias,sizeof(alias),"%s-hardlink",path);
+        check(link(path,alias)==0,"ACL hard-link fixture created");
+        check(!digit_channel_acl_check_file(path,"ezra","general"),
+              "multiply linked original ACL registry denied");
+        check(!digit_channel_acl_check_file(alias,"ezra","general"),
+              "hard-link alias cannot authorize grants");
+        check(unlink(alias)==0,"ACL hard-link alias removed");
+        check(digit_channel_acl_check_file(path,"ezra","general"),
+              "single-link ACL registry authorization restored");
+    }
     check(!digit_channel_acl_check_file(path,"poe","general"),"other user denied");
     check(!digit_channel_acl_check_file(path,"ezra","security"),"other channel denied");
     check(!digit_channel_acl_check_file(NULL,"ezra","general"),"null path denied");
