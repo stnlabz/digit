@@ -33,19 +33,24 @@ static void check(int ok,const char *name) {
 }
 int main(void) {
     char root[]="/tmp/digit-bridge-XXXXXX";
-    char id[DIGIT_CHANNEL_ID_MAX],path[256];
+    char id[DIGIT_CHANNEL_ID_MAX],path[256],registry[256];
+    FILE *sa_file;
     if(!mkdtemp(root))return 1;
+    snprintf(registry,sizeof(registry),"%s/sa.tsv",root);
+    sa_file=fopen(registry,"w");if(!sa_file)return 1;
+    fputs("sysadmin\tstn-labz\tSA\t1\t1\t1\n",sa_file);
+    fclose(sa_file);chmod(registry,0600);
     check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"no unprovisioned binding");
     check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"unprovisioned Core creation denied");
     check(!digit_project_bind_security(root,"stn-labz","digit",NULL,NULL),"missing callback denied");
-    check(digit_project_provision(root,"stn-labz","digit","poe"),"restricted project initialized");
+    check(digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"restricted project initialized");
     check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"security binding not inferred");
     fail_call=1;
     check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"Core service failure denied");
     check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"failed reservation not published");
     check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"failed reservation blocks duplicate creation");
     check(calls==1,"failed Core call not repeated");
-    check(digit_project_provision(root,"stn-labz","second","poe"),"another project initialized");
+    check(digit_project_provision(root,"stn-labz","second","poe","sysadmin",registry),"another project initialized");
     /* Successful Core reply must be persisted before the channel is visible. */
     snprintf(path,sizeof(path),"%s/stn-labz/second/security_channel.id",root);
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)),"second project starts without Core binding");
