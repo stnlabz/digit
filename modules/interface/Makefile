@@ -50,8 +50,8 @@ $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_sto
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
 
-$(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c includes/channel_acl.h includes/access_policy.h | bin
-	$(CC) -Iincludes $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c -o $@
+$(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c -o $@
 
 $(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c includes/project_provision.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c src/security_sa.c -o $@
