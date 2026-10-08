@@ -27,6 +27,17 @@ int main(void) {
     close(fd);chmod(path,0600);
     check(write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\n"),"fixture installed");
     check(digit_channel_acl_check_file(path,"ezra","general"),"eligible member");
+    {
+        char linkpath[128];
+        snprintf(linkpath,sizeof(linkpath),"%s-link",path);
+        check(symlink(path,linkpath)==0,"ACL symlink fixture created");
+        check(!digit_channel_acl_check_file(linkpath,"ezra","general"),
+              "symlinked grant registry denied despite valid target");
+        check(unlink(linkpath)==0,"ACL symlink fixture removed");
+        check(digit_channel_acl_check_file(path,"ezra","general"),
+              "ordinary protected grant file remains accessible");
+    }
+
     check(!digit_channel_acl_check_file(path,"poe","general"),"other user denied");
     check(!digit_channel_acl_check_file(path,"ezra","security"),"other channel denied");
     check(!digit_channel_acl_check_file(NULL,"ezra","general"),"null path denied");
