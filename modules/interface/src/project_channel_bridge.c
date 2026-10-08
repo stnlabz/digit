@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include "project_provision.h"
 #include "project_channel_bridge.h"
+#include "security_sa.h"
 
 /* [AI:GPT-6 | 2026-10-08] Core-backed channel bridge.
  * A failed Core call or persistence step leaves no active binding.
@@ -69,14 +70,19 @@ end:
     return ok;
 }
 int digit_project_bind_security(const char *root,const char *org,
-    const char *project,digit_project_core_invoke_t invoke,void *context) {
+    const char *project,const char *actor,const char *sa_registry,
+    digit_project_core_invoke_t invoke,void *context) {
     digit_channel_create_request_t request;
     digit_channel_create_response_t result;
     char existing[DIGIT_CHANNEL_ID_MAX],entry[DIGIT_CHANNEL_ID_MAX+2];
     size_t used=0;
     int dir=-1,fd=-1,ok=0;
     int length;
-    if(!invoke||!digit_project_security_ready(root,org,project))return 0;
+    /* [AI:GPT-6 | 2026-10-08] No service call or reservation is allowed
+     * without independently verified current SA + project membership. */
+    if(!invoke||!digit_project_security_ready(root,org,project)||
+       !digit_security_sa_verify(sa_registry,org,actor)||
+       !digit_project_security_member(root,org,project,actor))return 0;
     if(digit_project_security_channel_id(root,org,project,existing,sizeof(existing)))
         return 0;
     dir=project_open(root,org,project);
