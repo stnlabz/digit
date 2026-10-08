@@ -47,6 +47,12 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
        (st.st_mode & 077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid())) {
         close(fd);return 0;
     }
+    /* [AI:GPT-6 | 2026-10-08] Bound the protected ACL snapshot before
+     * parsing. Reject oversized or empty authorization registries rather
+     * than consuming unbounded input. The 8 MiB limit applies to files. */
+    if(st.st_size<=0 || st.st_size>8*1024*1024){
+        close(fd);return 0;
+    }
     file=fdopen(fd,"r");
     if(!file){close(fd);return 0;}
     while(fgets(line,sizeof(line),file)) {
