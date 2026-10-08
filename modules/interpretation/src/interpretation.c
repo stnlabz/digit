@@ -8,6 +8,7 @@
 /* [AI:GPT-5.6 Sol | 2026-10-07T00:45:00Z] Initial deterministic Interpretation module. Resolves explicit operator-learned "means" relationships from Corpus before Intent without embedding vocabulary knowledge in code. */
 /* [AI:GPT-5.6 Sol | 2026-10-07T01:20:00Z] Interpretation can remove a terminal addressee only when authorized Corpus evidence establishes both a conversational response relation for the utterance and identity evidence for the addressee; no names or greetings are embedded in code. */
 
+/* [AI:GPT-6 | 2026-10-08] Restrict learned-meaning substitutions to exact definition subjects; unrelated words in learned records cannot redefine input. */
 static const stnlabz_module_host_t *interpretation_host = NULL;
 
 static int word_equal_ci(const char *start, size_t length, const char *word)
@@ -51,13 +52,17 @@ static int learned_meaning(const char *word, char *out, size_t out_size)
         used != sizeof(result)) return 0;
     for (i = 0; i < result.count && i < DIGIT_CORPUS_SEARCH_MAX; ++i)
     {
-        const char *meaning, *p;
-        size_t n = 0;
+        const char *meaning, *p, *start;
+        size_t n = 0, subject_length;
         if (strcmp(result.records[i].category, "OPERATOR_LEARNED") != 0 ||
-            strcmp(result.records[i].source, "interface:learn") != 0 ||
-            !has_word(result.records[i].text, word)) continue;
-        meaning = strstr(result.records[i].text, " means ");
+            strcmp(result.records[i].source, "interface:learn") != 0) continue;
+        start = result.records[i].text;
+        meaning = strstr(start, " means ");
         if (meaning == NULL) continue;
+        while (start < meaning && isspace((unsigned char)*start)) ++start;
+        subject_length = (size_t)(meaning - start);
+        while (subject_length > 0 && isspace((unsigned char)start[subject_length - 1])) --subject_length;
+        if (!word_equal_ci(start, subject_length, word)) continue;
         p = meaning + strlen(" means ");
         while (*p && !isalnum((unsigned char)*p) && *p != '_' && *p != '-') ++p;
         while (p[n] && (isalnum((unsigned char)p[n]) || p[n] == '_' || p[n] == '-') && n + 1 < out_size) ++n;
@@ -238,7 +243,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 1,
+    "interpretation", "Digit Interpretation", 1, 0, 2,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
