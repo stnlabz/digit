@@ -16,6 +16,7 @@ ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
 PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
+SA_TEST_TARGET := bin/test_security_sa
 SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
 TEST_SOURCE := tests/test_interface.c
 
@@ -58,7 +59,10 @@ $(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c i
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
 
-test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET)
+$(SA_TEST_TARGET): tests/test_security_sa.c src/security_sa.c includes/security_sa.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_security_sa.c src/security_sa.c -o $@
+
+test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(ACCESS_TEST_TARGET)
 	./$(SESSION_TEST_TARGET)
@@ -67,6 +71,7 @@ test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HT
 	./$(CHANNEL_ACL_TEST_TARGET)
 	./$(PROJECT_TEST_TARGET)
 	./$(PROJECT_BRIDGE_TEST_TARGET)
+	./$(SA_TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
