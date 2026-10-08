@@ -38,6 +38,23 @@ int main(void) {
               "ordinary protected grant file remains accessible");
     }
 
+    {
+        FILE *large;
+        check(write_acl(path,""),"empty ACL fixture written");
+        check(!digit_channel_acl_check_file(path,"ezra","general"),
+              "empty grant registry denied");
+        large=fopen(path,"w");
+        if(!large)return 1;
+        check(ftruncate(fileno(large),8*1024*1024+1)==0,
+              "oversized ACL fixture created");
+        if(fclose(large)!=0)return 1;
+        check(!digit_channel_acl_check_file(path,"ezra","general"),
+              "ACL registry larger than 8 MiB denied");
+        check(write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\n"),
+              "valid ACL fixture restored");
+        check(digit_channel_acl_check_file(path,"ezra","general"),
+              "valid bounded ACL remains authorized");
+    }
     check(!digit_channel_acl_check_file(path,"poe","general"),"other user denied");
     check(!digit_channel_acl_check_file(path,"ezra","security"),"other channel denied");
     check(!digit_channel_acl_check_file(NULL,"ezra","general"),"null path denied");
