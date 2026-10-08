@@ -43,7 +43,9 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
      * regular file. Reject symlinks before opening it for parsing. */
     fd=open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
     if(fd<0)return 0;
-    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) ||
+    /* [AI:GPT-6 | 2026-10-08] A protected grant registry must have
+     * exactly one filesystem link, preventing alternate hard-link aliases. */
+    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) || st.st_nlink!=1 ||
        (st.st_mode & 077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid())) {
         close(fd);return 0;
     }
