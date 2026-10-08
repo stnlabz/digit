@@ -118,6 +118,19 @@ int main(void) {
     check(digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"successful Core binding");
     check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) && strcmp(id,"channel-123-1")==0,"Core channel ID persisted and resolved");
     check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"duplicate bound channel rejected");
+    {
+        char binding[256],alias[256];
+        snprintf(binding,sizeof(binding),"%s/stn-labz/second/security_channel.id",root);
+        snprintf(alias,sizeof(alias),"%s/stn-labz/second/binding-alias",root);
+        check(link(binding,alias)==0,"protected binding hard-link fixture created");
+        check(!digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)),
+              "hard-linked protected channel binding denied");
+        check(unlink(alias)==0,"protected binding alias removed");
+        check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) &&
+              strcmp(id,"channel-123-1")==0,
+              "single-link protected binding restored");
+    }
+
     check(!digit_project_security_channel_id(root,"other-org","second",id,sizeof(id)),"organization scope required");
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,1),"small output rejected");
     check(!digit_project_security_channel_id(root,"stn-labz","../second",id,sizeof(id)),"traversal rejected");
