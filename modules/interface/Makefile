@@ -11,7 +11,8 @@ TARGET := bin/interface.so
 TEST_TARGET := bin/test_interface
 ACCESS_TEST_TARGET := bin/test_access_policy
 SESSION_TEST_TARGET := bin/test_session_store
-SOURCE := src/interface.c src/session_store.c
+HTTP_AUTH_TEST_TARGET := bin/test_http_auth
+SOURCE := src/interface.c src/session_store.c src/http_auth.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -38,10 +39,14 @@ $(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
 $(SESSION_TEST_TARGET): tests/test_session_store.c src/session_store.c includes/session_store.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_session_store.c src/session_store.c -o $@
 
-test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET)
+$(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_store.c includes/http_auth.h includes/session_store.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_http_auth.c src/http_auth.c src/session_store.c -o $@
+
+test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(ACCESS_TEST_TARGET)
 	./$(SESSION_TEST_TARGET)
+	./$(HTTP_AUTH_TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
