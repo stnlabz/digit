@@ -8,7 +8,7 @@
 #include "project_channel_bridge.h"
 
 /* [AI:GPT-6 | 2026-10-08] Mock Core service, no production registry writes. */
-static int calls=0,fail_call=0;
+static int calls=0,fail_call=0,force_collision=0;
 static int mock(const char *service,const void *request,size_t request_size,
                 void *response,size_t response_size,size_t *used,void *unused) {
     const digit_channel_create_request_t *in=request;
@@ -18,10 +18,13 @@ static int mock(const char *service,const void *request,size_t request_size,
     if(fail_call || strcmp(service,DIGIT_CHANNEL_SERVICE_CREATE)!=0 ||
        request_size!=sizeof(*in) || response_size<sizeof(*out) ||
        (strcmp(in->name,"security-stn-labz-second")!=0 &&
-        strcmp(in->name,"security-stn-labz-third")!=0))return 0;
+        strcmp(in->name,"security-stn-labz-third")!=0 &&
+        strcmp(in->name,"security-stn-labz-fourth")!=0))return 0;
     memset(out,0,sizeof(*out));
     out->created=1;
-    strcpy(out->channel.id,"channel-123-1");
+    strcpy(out->channel.id,force_collision ||
+           strcmp(in->name,"security-stn-labz-second")==0 ?
+           "channel-123-1":"channel-123-2");
     strcpy(out->channel.name,in->name);
     *used=sizeof(*out);
     return 1;
@@ -42,10 +45,13 @@ static void check(int ok,const char *name) {
 }
 int main(void) {
     char root[]="/tmp/digit-bridge-XXXXXX";
-    char id[DIGIT_CHANNEL_ID_MAX],path[256],registry[256];
+    char id[DIGIT_CHANNEL_ID_MAX],path[256];
+    char registry[]="/tmp/digit-bridge-sa-XXXXXX";
+    int sa_fd;
     FILE *sa_file;
     if(!mkdtemp(root))return 1;
-    snprintf(registry,sizeof(registry),"%s/sa.tsv",root);
+    sa_fd=mkstemp(registry);if(sa_fd<0)return 1;
+    close(sa_fd);
     sa_file=fopen(registry,"w");if(!sa_file)return 1;
     fputs("sysadmin\tstn-labz\tSA\t1\t1\t1\n",sa_file);
     fclose(sa_file);chmod(registry,0600);
@@ -59,6 +65,13 @@ int main(void) {
     check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"failed reservation not published");
     check(!digit_project_bind_security(root,"stn-labz","digit","sysadmin",registry,mock,NULL),"failed reservation blocks duplicate creation");
     check(calls==1,"failed Core call not repeated");
+    /* Operator reconciliation of the deliberately failed reservation.
+     * This remains inaccessible until explicitly removed. */
+    {
+        char pending[256];
+        snprintf(pending,sizeof(pending),"%s/stn-labz/digit/security_channel.id",root);
+        check(unlink(pending)==0,"failed reservation explicitly reconciled");
+    }
     check(digit_project_provision(root,"stn-labz","second","poe","sysadmin",registry),"another project initialized");
     /* Successful Core reply must be persisted before the channel is visible. */
     snprintf(path,sizeof(path),"%s/stn-labz/second/security_channel.id",root);
@@ -112,9 +125,22 @@ int main(void) {
         check(digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,&host),
               "qualified SA binds security through trusted host");
         check(digit_project_security_channel_id(root,"stn-labz","third",id,sizeof(id)) &&
-              strcmp(id,"channel-123-1")==0,"host Core response durably bound");
+              strcmp(id,"channel-123-2")==0,"host Core response durably bound");
         check(!digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,&host),
               "host adapter denies duplicate binding");
+    }
+
+    {
+        char binding[256];
+        check(digit_project_provision(root,"stn-labz","fourth","poe","sysadmin",registry),
+              "collision candidate project provisioned");
+        force_collision=1;
+        check(!digit_project_bind_security(root,"stn-labz","fourth","sysadmin",registry,mock,NULL),
+              "Core duplicate protected channel ID denied at creation");
+        snprintf(binding,sizeof(binding),"%s/stn-labz/fourth/security_channel.id",root);
+        check(!digit_project_security_channel_id(root,"stn-labz","fourth",id,sizeof(id)),
+              "duplicate Core channel ID not published");
+        check(access(binding,F_OK)==0,"failed Core binding remains reserved for reconciliation");
     }
     printf("\nProject Core bridge tests: %u executed, %u failed\n",count,failures);
     return failures?1:0;
