@@ -1,5 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -69,6 +71,93 @@ end:
     if(dir>=0)close(dir);
     return ok;
 }
+/* [AI:GPT-6 | 2026-10-08] Resolve a protected Core ID to its unique
+ * project owner. Corrupt or unreadable inventory fails closed. A missing
+ * root means no project registry has been provisioned yet.
+ */
+int digit_project_security_owner(const char *root,const char *channel_id,
+    char *organization,size_t org_capacity,char *project,size_t project_capacity)
+{
+    DIR *organizations=NULL,*projects=NULL;
+    struct dirent *o,*p;
+    int rootfd=-1,orgfd=-1,found=0;
+    char candidate[DIGIT_CHANNEL_ID_MAX];
+    if(organization&&org_capacity)organization[0]=0;
+    if(project&&project_capacity)project[0]=0;
+    if(!root||!project_component(channel_id)||!organization||!project||
+       !org_capacity||!project_capacity)return -1;
+    rootfd=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+    if(rootfd<0)return errno==ENOENT?0:-1;
+    {
+        struct stat st;
+        if(fstat(rootfd,&st)!=0||!S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)
+            goto failure;
+    }
+    organizations=fdopendir(rootfd);
+    if(!organizations)goto failure;
+    rootfd=-1;
+    errno=0;
+    while((o=readdir(organizations))!=NULL){
+        struct stat st;
+        if(o->d_name[0]=='.' && (!o->d_name[1] ||
+           (o->d_name[1]=='.'&&!o->d_name[2])))continue;
+        if(!project_component(o->d_name))goto failure;
+        if(fstatat(dirfd(organizations),o->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0 ||
+           !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)goto failure;
+        orgfd=openat(dirfd(organizations),o->d_name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+        if(orgfd<0)goto failure;
+        projects=fdopendir(orgfd);
+        if(!projects)goto failure;
+        orgfd=-1;
+        errno=0;
+        while((p=readdir(projects))!=NULL){
+            if(p->d_name[0]=='.' && (!p->d_name[1] ||
+               (p->d_name[1]=='.'&&!p->d_name[2])))continue;
+            if(!project_component(p->d_name))goto failure;
+            if(fstatat(dirfd(projects),p->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0||
+               !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)goto failure;
+            if(!digit_project_security_ready(root,o->d_name,p->d_name))continue;
+            if(digit_project_security_channel_id(root,o->d_name,p->d_name,
+                    candidate,sizeof(candidate))){
+                if(strcmp(candidate,channel_id)==0){
+                    if(++found>1||strlen(o->d_name)>=org_capacity||
+                       strlen(p->d_name)>=project_capacity)goto failure;
+                    strcpy(organization,o->d_name);
+                    strcpy(project,p->d_name);
+                }
+            }else{
+                /* An unbound project is valid; an existing damaged binding
+                 * is not. Do not permit shadowing of protected IDs. */
+                if(fstatat(dirfd(projects),p->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0)
+                    goto failure;
+                {
+                    int pd=openat(dirfd(projects),p->d_name,
+                                  O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+                    if(pd<0)goto failure;
+                    if(fstatat(pd,"security_channel.id",&st,AT_SYMLINK_NOFOLLOW)==0){
+                        close(pd);goto failure;
+                    }
+                    if(errno!=ENOENT){close(pd);goto failure;}
+                    close(pd);
+                }
+            }
+        }
+        if(errno!=0)goto failure;
+        closedir(projects);projects=NULL;
+        errno=0;
+    }
+    if(errno!=0)goto failure;
+    closedir(organizations);
+    return found;
+failure:
+    if(projects)closedir(projects);
+    if(orgfd>=0)close(orgfd);
+    if(organizations)closedir(organizations);
+    if(rootfd>=0)close(rootfd);
+    organization[0]=0;project[0]=0;
+    return -1;
+}
+
 int digit_project_bind_security(const char *root,const char *org,
     const char *project,const char *actor,const char *sa_registry,
     digit_project_core_invoke_t invoke,void *context) {
