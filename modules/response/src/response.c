@@ -45,6 +45,7 @@ typedef struct { char project[SOURCE_PROJECT_MAX]; char path[SOURCE_PATH_MAX]; s
 typedef struct { size_t count; source_match_t matches[SOURCE_SEARCH_MAX]; } source_search_result_t;
 typedef struct { corpus_record_t record; unsigned int score; unsigned int matches; } ranked_record_t;
 static void grounded_fallback(const char *question, ranked_record_t selected[SELECTED_MAX], size_t selected_count, digit_response_result_t *output);
+static int complete_phrase_match(const char *phrase, const char *text);
 static int collect_corpus(const char *question, corpus_result_t *evidence);
 static size_t select_evidence(const char *question, const corpus_result_t *evidence, ranked_record_t selected[SELECTED_MAX]);
 static void trace_evidence(const char *question, const corpus_result_t *evidence, ranked_record_t selected[SELECTED_MAX], size_t selected_count);
