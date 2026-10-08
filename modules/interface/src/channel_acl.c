@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -33,16 +34,21 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
                                   const char *channel_id)
 {
     FILE *file;
+    int fd;
     struct stat st;
     char line[1024];
     int matched=0,ok=0,malformed=0;
     if(!path || !acl_id(verified_user) || !acl_id(channel_id))return 0;
-    file=fopen(path,"r");
-    if(!file)return 0;
-    if(fstat(fileno(file),&st)!=0 || !S_ISREG(st.st_mode) ||
+    /* [AI:GPT-6 | 2026-10-08] The grant record itself must be a private
+     * regular file. Reject symlinks before opening it for parsing. */
+    fd=open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+    if(fd<0)return 0;
+    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) ||
        (st.st_mode & 077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid())) {
-        fclose(file);return 0;
+        close(fd);return 0;
     }
+    file=fdopen(fd,"r");
+    if(!file){close(fd);return 0;}
     while(fgets(line,sizeof(line),file)) {
         char *fields[8],*p=line;
         size_t i,n=strlen(line);
