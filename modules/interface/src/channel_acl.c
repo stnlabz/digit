@@ -79,15 +79,18 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
                 strcmp(fields[7],"1")==0
             };
             ok=digit_access_evaluate(&principal,&resource)==DIGIT_ACCESS_ELIGIBLE;
-            if(ok) {
+            if(ok && digit_project_security_ready(project_root,fields[1],fields[2])) {
                 char security_id[DIGIT_CHANNEL_ID_MAX];
-                /* [AI:GPT-6 | 2026-10-08] ACL alone cannot authorize a
-                 * restricted security workspace. Even an admin with a
-                 * mistaken general grant must hold current SA status. */
-                if(digit_project_security_channel_id(project_root,fields[1],
-                     fields[2],security_id,sizeof(security_id)) &&
-                   strcmp(security_id,channel_id)==0 &&
-                   !digit_security_sa_verify(sa_registry,fields[1],verified_user))
+                /* [AI:GPT-6 | 2026-10-08] No project channel is
+                 * accessible until its restricted security Core binding
+                 * is complete. For #security, SA is mandatory, regardless
+                 * of any mistaken general ACL entry.
+                 */
+                if(!digit_project_security_channel_id(project_root,fields[1],
+                     fields[2],security_id,sizeof(security_id)))
+                    ok=0;
+                else if(strcmp(security_id,channel_id)==0 &&
+                        !digit_security_sa_verify(sa_registry,fields[1],verified_user))
                     ok=0;
             }
         }
