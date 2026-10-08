@@ -165,6 +165,7 @@ int digit_project_bind_security(const char *root,const char *org,
     digit_channel_create_request_t request;
     digit_channel_create_response_t result;
     char existing[DIGIT_CHANNEL_ID_MAX],entry[DIGIT_CHANNEL_ID_MAX+2];
+    char owner_org[DIGIT_PROJECT_ID_MAX],owner_project[DIGIT_PROJECT_ID_MAX];
     size_t used=0;
     int dir=-1,fd=-1,ok=0;
     int length;
@@ -175,6 +176,9 @@ int digit_project_bind_security(const char *root,const char *org,
        !digit_project_security_member(root,org,project,actor))return 0;
     if(digit_project_security_channel_id(root,org,project,existing,sizeof(existing)))
         return 0;
+    /* Refuse new creation while protected inventory is inconsistent. */
+    if(digit_project_security_owner(root,"channel-probe",owner_org,sizeof(owner_org),
+                                   owner_project,sizeof(owner_project))<0)return 0;
     dir=project_open(root,org,project);
     if(dir<0)return 0;
     /* Reserve binding name before Core creation. Incomplete reservations
@@ -189,6 +193,11 @@ int digit_project_bind_security(const char *root,const char *org,
                &result,sizeof(result),&used,context) ||
        used!=sizeof(result) || !result.created ||
        !project_component(result.channel.id))goto end;
+    /* [AI:GPT-6 | 2026-10-08] A Core-issued channel ID is not proof
+     * of unique ownership. Never publish a duplicate protected binding. */
+    if(digit_project_security_owner(root,result.channel.id,
+           owner_org,sizeof(owner_org),owner_project,sizeof(owner_project))!=0)
+        goto end;
     length=snprintf(entry,sizeof(entry),"%s\n",result.channel.id);
     if(length<=0 || (size_t)length>=sizeof(entry))goto end;
     if(write(fd,entry,(size_t)length)!=length || fsync(fd)!=0)goto end;
