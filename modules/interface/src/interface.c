@@ -162,9 +162,9 @@ if(strncmp(request,"POST /projects/",15)==0){
        !interface_host ||
        !digit_project_bind_security_host(DIGIT_PROJECT_ROOT,organization,
               project,identity,DIGIT_SECURITY_SA_REGISTRY,interface_host)){
-        interface_reply(client,404,"{\\"error\\":\\"not found\\"}\\n");return;
+        interface_reply(client,404,"{\"error\":\"not found\"}\n");return;
     }
-    interface_reply(client,200,"{\\"bound\\":true}\\n");return;
+    interface_reply(client,200,"{\"bound\":true}\n");return;
 }
 /* [AI:GPT-6 | 2026-10-08] Route-independent channel scope check. */
 if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",15)==0){
