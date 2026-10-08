@@ -56,6 +56,7 @@ test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HT
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
 	install -d -o digit -g digit $(INSTALL_DIR) $(INSTALL_BIN)
+	install -d -o digit -g digit -m 0700 $(DIGIT_PREFIX)/state/auth
 	install -m 0755 $(TARGET) $(INSTALL_BIN)/interface.so
 	install -m 0644 module.conf $(INSTALL_DIR)/module.conf
 	install -m 0644 interface.conf $(INSTALL_DIR)/interface.conf
