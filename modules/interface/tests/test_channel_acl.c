@@ -56,8 +56,13 @@ int main(void) {
     mkdir(org,0700);mkdir(project,0700);
     snprintf(file,sizeof(file),"%s/READY",project);
     write_acl(file,"security-initialized\n");
+    if(chmod(file,0600)!=0)return 1;
+    snprintf(file,sizeof(file),"%s/project.tsv",project);
+    write_acl(file,"stn-labz\tdigit\tregular\n");
+    if(chmod(file,0600)!=0)return 1;
     snprintf(file,sizeof(file),"%s/security.tsv",project);
     write_acl(file,"security\trestricted\tdigit\n");
+    if(chmod(file,0600)!=0)return 1;
     write_acl(sa,"regular\tstn-labz\tADMIN\t1\t1\t1\n"
                  "sysadmin\tstn-labz\tSA\t1\t1\t1\n");
     /* [AI:GPT-6 | 2026-10-08] Match protected 0600 files created by
