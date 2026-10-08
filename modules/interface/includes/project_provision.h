@@ -15,6 +15,10 @@ int digit_project_provision(const char *root, const char *organization,
                             const char *project, const char *founding_admin,
                             const char *security_sa,
                             const char *sa_registry);
+/* Membership is independent of SA qualification and general channel ACL.
+ * Missing, malformed, or duplicate membership records deny access. */
+int digit_project_security_member(const char *root,const char *organization,
+                                  const char *project,const char *identity);
 int digit_project_security_ready(const char *root, const char *organization,
                                   const char *project);
 
