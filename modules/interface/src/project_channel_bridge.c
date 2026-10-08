@@ -111,3 +111,25 @@ end:
     if(dir>=0)close(dir);
     return ok;
 }
+
+/* [AI:GPT-6 | 2026-10-08] Qualified internal module-host entry point.
+ * Callback context is only a trusted module host; all actor authorization
+ * stays in digit_project_bind_security. Never exposed as an HTTP route.
+ */
+static int project_host_invoke(const char *service,const void *request,
+    size_t request_size,void *response,size_t response_size,
+    size_t *response_used,void *context)
+{
+    const stnlabz_module_host_t *host=context;
+    if(!host || !host->invoke_service)return 0;
+    return host->invoke_service(service,request,request_size,
+                               response,response_size,response_used)==STNLABZ_MODULE_OK;
+}
+int digit_project_bind_security_host(const char *root,const char *organization,
+    const char *project,const char *actor,const char *sa_registry,
+    const stnlabz_module_host_t *host)
+{
+    if(!host||!host->invoke_service)return 0;
+    return digit_project_bind_security(root,organization,project,actor,
+                                       sa_registry,project_host_invoke,(void *)host);
+}
