@@ -72,6 +72,14 @@ int main(void) {
         if(fclose(m)!=0)return 1;
         check(calls==1,"missing membership never invokes Core");
     }
+    sa_file=fopen(registry,"w");if(!sa_file)return 1;
+    fputs("sysadmin\tstn-labz\tSA\t1\t0\t1\n",sa_file);
+    if(fclose(sa_file)!=0)return 1;
+    check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"revoked SA cannot create Core channel");
+    check(calls==1,"revoked SA cannot invoke Core");
+    sa_file=fopen(registry,"w");if(!sa_file)return 1;
+    fputs("sysadmin\tstn-labz\tSA\t1\t1\t1\n",sa_file);
+    if(fclose(sa_file)!=0)return 1;
     check(digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"successful Core binding");
     check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) && strcmp(id,"channel-123-1")==0,"Core channel ID persisted and resolved");
     check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"duplicate bound channel rejected");
