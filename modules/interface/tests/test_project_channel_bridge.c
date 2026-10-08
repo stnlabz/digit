@@ -4,6 +4,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include "project_provision.h"
 #include "project_channel_bridge.h"
 
@@ -102,6 +104,17 @@ int main(void) {
     sa_file=fopen(registry,"w");if(!sa_file)return 1;
     fputs("sysadmin\tstn-labz\tSA\t1\t1\t1\n",sa_file);
     if(fclose(sa_file)!=0)return 1;
+    {
+        int lockfd=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+        int prior=calls;
+        check(lockfd>=0 && flock(lockfd,LOCK_EX|LOCK_NB)==0,
+              "project inventory lock acquired by competing process");
+        check(!digit_project_bind_security(root,"stn-labz","second",
+              "sysadmin",registry,mock,NULL),
+              "concurrent project binding denied while root lock held");
+        check(calls==prior,"contended binding never invokes Core");
+        if(lockfd>=0)close(lockfd);
+    }
     check(digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"successful Core binding");
     check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) && strcmp(id,"channel-123-1")==0,"Core channel ID persisted and resolved");
     check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"duplicate bound channel rejected");
