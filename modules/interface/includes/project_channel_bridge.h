@@ -27,6 +27,15 @@ int digit_project_bind_security_host(const char *root,const char *organization,
     const char *project,const char *actor,const char *sa_registry,
     const stnlabz_module_host_t *host);
 
+/* Lookup of a protected Core channel in the trusted project inventory.
+ * Return 1 for one exact owner, 0 for no protected binding, -1 on
+ * ambiguous/corrupt inventory. A caller may not borrow another project's
+ * #security Core ID through an unrelated ACL scope.
+ */
+int digit_project_security_owner(const char *root,const char *channel_id,
+    char *organization,size_t org_capacity,
+    char *project,size_t project_capacity);
+
 int digit_project_security_channel_id(const char *root,const char *organization,
     const char *project,char *channel_id,size_t capacity);
 
