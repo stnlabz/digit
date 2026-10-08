@@ -19,7 +19,7 @@ int main(void)
     stnlabz_module_qualification_result_t qualification;
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "interface") == 0, "module identity is interface");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 2 && descriptor->version_patch == 5, "internal version is 1.2.5");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 2 && descriptor->version_patch == 6, "internal version is 1.2.6");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
