@@ -92,7 +92,16 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     memset(&intent_request,0,sizeof(intent_request));memset(&intent_result,0,sizeof(intent_result));
     snprintf(intent_request.text,sizeof(intent_request.text),"%s",interpreted_request);
     intent_sr=dispatcher_host->invoke_service(DIGIT_INTENT_SERVICE,&intent_request,sizeof(intent_request),&intent_result,sizeof(intent_result),&intent_used);
-    if(intent_sr!=STNLABZ_MODULE_OK||intent_used!=sizeof(intent_result)){out.answered=1;snprintf(out.answer,sizeof(out.answer),"I couldn't interpret that request because my Intent service is unavailable.");}
+    if(intent_sr!=STNLABZ_MODULE_OK||intent_used!=sizeof(intent_result)){
+        char diagnostic[256];
+        out.answered=1;
+        if(intent_sr!=STNLABZ_MODULE_OK)
+            snprintf(out.answer,sizeof(out.answer),"Intent service invocation failed (status %d).",(int)intent_sr);
+        else
+            snprintf(out.answer,sizeof(out.answer),"Intent service returned an invalid response size (%zu; expected %zu).",intent_used,sizeof(intent_result));
+        snprintf(diagnostic,sizeof(diagnostic),"[DISPATCHER] intent.interpret failure: status=%d returned=%zu expected=%zu",(int)intent_sr,intent_used,sizeof(intent_result));
+        if(dispatcher_host->send_message!=NULL)(void)dispatcher_host->send_message(diagnostic);
+    }
     else if(lesson_action(in->request,&out)){}
     else if(intent_result.intent==DIGIT_INTENT_ACTION)dispatch_response(in->request,&out);
     else if(source_action(interpreted_request))source_scan(interpreted_request,&out);
@@ -105,5 +114,5 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,2,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,2,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
