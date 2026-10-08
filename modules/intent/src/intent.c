@@ -10,6 +10,7 @@
 /* [AI:GPT-5.6 Sol | 2026-10-07T00:52:00Z] Knowledge operations are recognized inside conversational framing instead of requiring the operation verb to be the first token. Subject extraction begins after the established operation. */
 /* [AI:GPT-5.6 Sol | 2026-10-07T01:50:00Z] COMPARE now carries its established comparison subject expression in the Intent envelope so downstream retrieval does not rank the operation word as evidence. */
 
+/* [AI:GPT-6 | 2026-10-08] Require exact learned-definition subject before " means " to prevent unrelated Corpus text from rewriting requests. */
 static const stnlabz_module_host_t *intent_host = NULL;
 
 static int word_equal_ci(const char *start, size_t length, const char *word)
@@ -89,8 +90,14 @@ static int learned_word(const char *word,char *out,size_t cap)
     if(intent_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&q,sizeof(q),&r,sizeof(r),&used)!=STNLABZ_MODULE_OK||used!=sizeof(r))return 0;
     for(i=0;i<r.count&&i<DIGIT_CORPUS_SEARCH_MAX;i++){
         const char *p,*m; size_t n=0;
-        if(strcmp(r.records[i].category,"OPERATOR_LEARNED")!=0||!has_word(r.records[i].text,word))continue;
-        m=strstr(r.records[i].text," means "); if(!m)continue; p=m+7;
+        const char *start=r.records[i].text; size_t prefix_length;
+        if(strcmp(r.records[i].category,"OPERATOR_LEARNED")!=0)continue;
+        m=strstr(start," means "); if(!m)continue;
+        while(start<m&&isspace((unsigned char)*start))++start;
+        prefix_length=(size_t)(m-start);
+        while(prefix_length>0&&isspace((unsigned char)start[prefix_length-1]))--prefix_length;
+        if(!word_equal_ci(start,prefix_length,word))continue;
+        p=m+7;
         while(*p&&(!isalnum((unsigned char)*p)&&*p!='_'&&*p!='-'))p++;
         while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-')&&n+1<cap)n++;
         if(n){memcpy(out,p,n);out[n]=0;return 1;}
@@ -281,7 +288,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 0, 9,
+    "intent", "Digit Intent", 1, 1, 0,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
