@@ -4,6 +4,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "channel_acl.h"
+#include "project_channel_bridge.h"
+#include "project_provision.h"
+#include "security_sa.h"
 
 /* [AI:GPT-6 | 2026-10-08] Protected, bounded ACL snapshot.
  * Every record must parse correctly; conflicting duplicate scopes deny.
@@ -25,7 +28,8 @@ static int acl_flag(const char *s)
 {
     return strcmp(s,"0")==0 || strcmp(s,"1")==0;
 }
-int digit_channel_acl_check_file(const char *path, const char *verified_user,
+int digit_channel_acl_check_scoped(const char *path,const char *project_root,
+                                  const char *sa_registry,const char *verified_user,
                                   const char *channel_id)
 {
     FILE *file;
@@ -75,9 +79,27 @@ int digit_channel_acl_check_file(const char *path, const char *verified_user,
                 strcmp(fields[7],"1")==0
             };
             ok=digit_access_evaluate(&principal,&resource)==DIGIT_ACCESS_ELIGIBLE;
+            if(ok) {
+                char security_id[DIGIT_CHANNEL_ID_MAX];
+                /* [AI:GPT-6 | 2026-10-08] ACL alone cannot authorize a
+                 * restricted security workspace. Even an admin with a
+                 * mistaken general grant must hold current SA status. */
+                if(digit_project_security_channel_id(project_root,fields[1],
+                     fields[2],security_id,sizeof(security_id)) &&
+                   strcmp(security_id,channel_id)==0 &&
+                   !digit_security_sa_verify(sa_registry,fields[1],verified_user))
+                    ok=0;
+            }
         }
     }
     if(ferror(file))malformed=1;
     fclose(file);
     return !malformed && matched==1 && ok;
+}
+
+int digit_channel_acl_check_file(const char *path,const char *verified_user,
+                                  const char *channel_id)
+{
+    return digit_channel_acl_check_scoped(path,DIGIT_PROJECT_ROOT,
+           DIGIT_SECURITY_SA_REGISTRY,verified_user,channel_id);
 }
