@@ -60,6 +60,57 @@ end:
     if(base>=0)close(base);
     return good;
 }
+/* [AI:GPT-6 | 2026-10-08] Membership is an authoritative private
+ * project record. Fail closed on every malformed or duplicate entry.
+ * A regular administrator never receives implied membership.
+ */
+int digit_project_security_member(const char *root,const char *org,
+                                  const char *project,const char *identity)
+{
+    int base=-1,o=-1,p=-1,fd=-1,found=0,invalid=0;
+    FILE *file=NULL;
+    struct stat st;
+    char line[256];
+    if(!project_name(org)||!project_name(project)||!project_name(identity)||
+       !digit_project_security_ready(root,org,project))return 0;
+    base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+    if(!private_dir(base))goto done;
+    o=open_private(base,org);if(o<0)goto done;
+    p=open_private(o,project);if(p<0)goto done;
+    fd=openat(p,"security.tsv",O_RDONLY|O_NOFOLLOW);
+    if(fd<0||fstat(fd,&st)!=0||!S_ISREG(st.st_mode)||
+       (st.st_mode&077)!=0||
+       (st.st_uid!=0&&st.st_uid!=geteuid()))goto done;
+    file=fdopen(fd,"r");
+    if(!file)goto done;
+    fd=-1;
+    while(fgets(line,sizeof(line),file)){
+        char *tab1,*tab2;
+        size_t n=strlen(line);
+        if(!n||line[n-1]!='\\n'){invalid=1;break;}
+        line[n-1]='\\0';
+        tab1=strchr(line,'\\t');
+        if(!tab1){invalid=1;break;}
+        *tab1++='\\0';
+        tab2=strchr(tab1,'\\t');
+        if(!tab2){invalid=1;break;}
+        *tab2++='\\0';
+        if(strchr(tab2,'\\t')||strcmp(line,"security")!=0||
+           strcmp(tab1,"restricted")!=0||!project_name(tab2)){
+            invalid=1;break;
+        }
+        if(strcmp(tab2,identity)==0 && ++found>1){invalid=1;break;}
+    }
+    if(ferror(file))invalid=1;
+done:
+    if(file)fclose(file);
+    if(fd>=0)close(fd);
+    if(p>=0)close(p);
+    if(o>=0)close(o);
+    if(base>=0)close(base);
+    return !invalid&&found==1;
+}
+
 int digit_project_provision(const char *root,const char *org,
                              const char *project,const char *admin,
                              const char *security_sa,const char *sa_registry) {
