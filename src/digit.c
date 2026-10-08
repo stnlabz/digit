@@ -23,12 +23,13 @@ static int digit_send_message(const char *message)
 
 static const stnlabz_module_host_t digit_host =
 {
-    digit_send_message,
-    NULL,
-    NULL,
-    digit_service_register,
-    digit_service_unregister,
-    digit_service_invoke
+    .send_message = digit_send_message,
+    .send_private_message = NULL,
+    .register_command = NULL,
+    .unregister_command = NULL,
+    .register_service = digit_service_register,
+    .unregister_service = digit_service_unregister,
+    .invoke_service = digit_service_invoke
 };
 
 static void digit_raise_core_alert(digit_alert_severity_t severity, const char *summary, const char *detail, const char *state)
