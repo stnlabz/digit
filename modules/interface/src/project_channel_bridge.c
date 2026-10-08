@@ -239,6 +239,7 @@ end:
     /* Preserve incomplete reservation if Core was called: no repeat creates
      * potentially conflicting channels until an operator resolves it. */
     if(dir>=0)close(dir);
+    if(lockfd>=0)close(lockfd);
     return ok;
 }
 
