@@ -58,7 +58,11 @@ int digit_project_security_channel_id(const char *root,const char *org,
     if(dir<0)return 0;
     fd=openat(dir,"security_channel.id",O_RDONLY|O_NOFOLLOW);
     if(fd<0)goto end;
-    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) || (st.st_mode&077)!=0)goto end;
+    /* [AI:GPT-6 | 2026-10-08] A binding must be privately owned by
+     * root or the runtime and must not have another hard-link alias. */
+    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) ||
+       (st.st_mode&077)!=0 || st.st_nlink!=1 ||
+       (st.st_uid!=0 && st.st_uid!=geteuid()))goto end;
     n=read(fd,text,sizeof(text));
     if(n<2 || n>=(ssize_t)sizeof(text) || text[n-1]!='\n')goto end;
     text[n-1]='\0';
