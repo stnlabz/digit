@@ -18,6 +18,7 @@
 #include "channel_acl.h"
 #include "project_channel_bridge.h"
 #include "message_origin.h"
+#include "project_admin_route.h"
 #include "channel_acl.h"
 #include "core_services.h"
 
@@ -148,6 +149,22 @@ if(strncmp(request,"POST /session/logout ",21)==0){
        !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
+}
+/* [AI:GPT-6 | 2026-10-08] Authenticated, SA-only project binding.
+ * The actor is always the resolved active account, never request data.
+ * The trusted bridge rechecks assignment and security membership before
+ * calling Core. No ACL grants or additional membership are manufactured.
+ */
+if(strncmp(request,"POST /projects/",15)==0){
+    char organization[DIGIT_PROJECT_ID_MAX],project[DIGIT_PROJECT_ID_MAX];
+    if(!digit_project_bind_route(request,organization,sizeof(organization),
+                                  project,sizeof(project)) ||
+       !interface_host ||
+       !digit_project_bind_security_host(DIGIT_PROJECT_ROOT,organization,
+              project,identity,DIGIT_SECURITY_SA_REGISTRY,interface_host)){
+        interface_reply(client,404,"{\\"error\\":\\"not found\\"}\\n");return;
+    }
+    interface_reply(client,200,"{\\"bound\\":true}\\n");return;
 }
 /* [AI:GPT-6 | 2026-10-08] Route-independent channel scope check. */
 if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",15)==0){
