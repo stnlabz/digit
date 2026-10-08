@@ -9,9 +9,11 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #include "interface.h"
 #include "session_store.h"
+#include "http_auth.h"
 #include "core_services.h"
 
 #define INTERFACE_BUFFER_MAX 65536
@@ -48,7 +50,7 @@ static const char *interface_relevance_string(interface_relevance_t v){switch(v)
 static const char *interface_category_string(interface_context_category_t v){switch(v){case DIGIT_CONTEXT_CONVERSATION:return "CONVERSATION";case DIGIT_CONTEXT_ENGINEERING:return "ENGINEERING";case DIGIT_CONTEXT_RULE:return "RULE";case DIGIT_CONTEXT_DECISION:return "DECISION";case DIGIT_CONTEXT_OBSERVATION:return "OBSERVATION";case DIGIT_CONTEXT_HYPOTHESIS:return "HYPOTHESIS";default:return "UNKNOWN";}}
 static const char *interface_alert_severity_string(digit_alert_severity_t v){switch(v){case DIGIT_ALERT_INFO:return "INFO";case DIGIT_ALERT_WARNING:return "WARNING";case DIGIT_ALERT_ERROR:return "ERROR";case DIGIT_ALERT_CRITICAL:return "CRITICAL";default:return "UNKNOWN";}}
 static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
-static void interface_reply(int c,int status,const char *body){char h[512];const char *s=status==200?"OK":status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";int w=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",status,s,strlen(body));if(w>0&&(size_t)w<sizeof(h)){(void)send(c,h,(size_t)w,0);(void)send(c,body,strlen(body),0);}}
+static void interface_reply(int c,int status,const char *body){char h[512];const char *s=status==200?"OK":status==401?"Unauthorized":status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";int w=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",status,s,strlen(body));if(w>0&&(size_t)w<sizeof(h)){(void)send(c,h,(size_t)w,0);(void)send(c,body,strlen(body),0);}}
 static int interface_record_json(const interface_corpus_record_t *r,char *out,size_t n){char id[160],cat[160],src[600],text[8192];int w;interface_json_escape(r->id,id,sizeof(id));interface_json_escape(r->category,cat,sizeof(cat));interface_json_escape(r->source,src,sizeof(src));interface_json_escape(r->text,text,sizeof(text));w=snprintf(out,n,"{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}",id,cat,src,text);return w>0&&(size_t)w<n;}
 static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){char id[160],name[300];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->name,name,sizeof(name));w=snprintf(out,n,"{\"id\":\"%s\",\"name\":\"%s\",\"created_at\":%llu,\"last_activity_at\":%llu,\"active\":%s}",id,name,v->created_at,v->last_activity_at,v->active?"true":"false");return w>0&&(size_t)w<n;}
 static int interface_message_json(const digit_channel_message_t *v,char *out,size_t n){char id[160],cid[160],origin[100],body[8192];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->channel_id,cid,sizeof(cid));interface_json_escape(v->origin,origin,sizeof(origin));interface_json_escape(v->body,body,sizeof(body));w=snprintf(out,n,"{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"%s\",\"body\":\"%s\"}",id,cid,v->created_at,origin,body);return w>0&&(size_t)w<n;}
@@ -77,6 +79,29 @@ static void interface_alert_ack(int client,const char *id){digit_alert_acknowled
 
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
+if(strncmp(request,"GET /session ",13)==0){
+    char identity[DIGIT_SESSION_ID_SIZE],escaped[2*DIGIT_SESSION_ID_SIZE],json[256];
+    /* [AI:GPT-6 | 2026-10-08] Only server-issued sessions identify an operator. */
+    if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity))){
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+    }
+    interface_json_escape(identity,escaped,sizeof(escaped));
+    snprintf(json,sizeof(json),"{\"authenticated\":true,\"identity\":\"%s\"}\\n",escaped);
+    interface_reply(client,200,json);return;
+}
+if(strncmp(request,"POST /session/logout ",21)==0){
+    char identity[DIGIT_SESSION_ID_SIZE],token[DIGIT_SESSION_TOKEN_SIZE];
+    if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
+       !digit_http_bearer_token(request,token)){
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+    }
+    if(!digit_session_revoke(&interface_sessions,token)){
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+    }
+    memset(token,0,sizeof(token));
+    interface_reply(client,200,"{\"logged_out\":true}\\n");return;
+}
+
 if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client);return;}if(strncmp(request,"POST /channels ",15)==0){interface_channel_create(client,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
