@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <unistd.h>
 #include "project_provision.h"
 #include "project_channel_bridge.h"
@@ -69,6 +70,7 @@ int digit_project_security_channel_id(const char *root,const char *org,
 end:
     if(fd>=0)close(fd);
     if(dir>=0)close(dir);
+    if(lockfd>=0)close(lockfd);
     return ok;
 }
 /* [AI:GPT-6 | 2026-10-08] Resolve a protected Core ID to its unique
@@ -184,20 +186,31 @@ int digit_project_bind_security(const char *root,const char *org,
     char existing[DIGIT_CHANNEL_ID_MAX],entry[DIGIT_CHANNEL_ID_MAX+2];
     char owner_org[DIGIT_PROJECT_ID_MAX],owner_project[DIGIT_PROJECT_ID_MAX];
     size_t used=0;
-    int dir=-1,fd=-1,ok=0;
+    int dir=-1,fd=-1,lockfd=-1,ok=0;
     int length;
+    struct stat root_stat;
     /* [AI:GPT-6 | 2026-10-08] No service call or reservation is allowed
      * without independently verified current SA + project membership. */
     if(!invoke||!digit_project_security_ready(root,org,project)||
        !digit_security_sa_verify(sa_registry,org,actor)||
        !digit_project_security_member(root,org,project,actor))return 0;
+    /* [AI:GPT-6 | 2026-10-08] Serialize all project bindings using the
+     * protected project root itself: no extra inventory files or lock
+     * cleanup, including across independent Interface processes.
+     * Non-blocking failure denies creation without invoking Core.
+     */
+    lockfd=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+    if(lockfd<0)return 0;
+    if(fstat(lockfd,&root_stat)!=0 || !S_ISDIR(root_stat.st_mode) ||
+       (root_stat.st_mode&077)!=0 || flock(lockfd,LOCK_EX|LOCK_NB)!=0)
+        goto end;
     if(digit_project_security_channel_id(root,org,project,existing,sizeof(existing)))
-        return 0;
+        goto end;
     /* Refuse new creation while protected inventory is inconsistent. */
     if(digit_project_security_owner(root,"channel-probe",owner_org,sizeof(owner_org),
-                                   owner_project,sizeof(owner_project))<0)return 0;
+                                   owner_project,sizeof(owner_project))<0)goto end;
     dir=project_open(root,org,project);
-    if(dir<0)return 0;
+    if(dir<0)goto end;
     /* Reserve binding name before Core creation. Incomplete reservations
      * remain fail-closed and require operator reconciliation. */
     fd=openat(dir,"security_channel.id",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
