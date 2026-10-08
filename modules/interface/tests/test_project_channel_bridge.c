@@ -17,13 +17,22 @@ static int mock(const char *service,const void *request,size_t request_size,
     ++calls;
     if(fail_call || strcmp(service,DIGIT_CHANNEL_SERVICE_CREATE)!=0 ||
        request_size!=sizeof(*in) || response_size<sizeof(*out) ||
-       strcmp(in->name,"security-stn-labz-second")!=0)return 0;
+       (strcmp(in->name,"security-stn-labz-second")!=0 &&
+        strcmp(in->name,"security-stn-labz-third")!=0))return 0;
     memset(out,0,sizeof(*out));
     out->created=1;
     strcpy(out->channel.id,"channel-123-1");
     strcpy(out->channel.name,in->name);
     *used=sizeof(*out);
     return 1;
+}
+/* [AI:GPT-6 | 2026-10-08] Trusted Core host mock. */
+static stnlabz_module_result_t mock_host_service(const char *service,
+    const void *request,size_t request_size,void *response,
+    size_t response_size,size_t *used)
+{
+    return mock(service,request,request_size,response,response_size,
+                used,NULL)?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
 static unsigned int count=0,failures=0;
 static void check(int ok,const char *name) {
@@ -86,6 +95,27 @@ int main(void) {
     check(!digit_project_security_channel_id(root,"other-org","second",id,sizeof(id)),"organization scope required");
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,1),"small output rejected");
     check(!digit_project_security_channel_id(root,"stn-labz","../second",id,sizeof(id)),"traversal rejected");
+    {
+        stnlabz_module_host_t host={0};
+        int previous=calls;
+        check(digit_project_provision(root,"stn-labz","third","poe","sysadmin",registry),
+              "third project provisioned for trusted host");
+        check(!digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,NULL),
+              "null host rejected");
+        check(calls==previous,"null host never calls Core");
+        check(!digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,&host),
+              "host without service callback denied");
+        host.invoke_service=mock_host_service;
+        check(!digit_project_bind_security_host(root,"stn-labz","third","poe",registry,&host),
+              "regular admin rejected by trusted host adapter");
+        check(calls==previous,"unauthorized host requests never reach Core");
+        check(digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,&host),
+              "qualified SA binds security through trusted host");
+        check(digit_project_security_channel_id(root,"stn-labz","third",id,sizeof(id)) &&
+              strcmp(id,"channel-123-1")==0,"host Core response durably bound");
+        check(!digit_project_bind_security_host(root,"stn-labz","third","sysadmin",registry,&host),
+              "host adapter denies duplicate binding");
+    }
     printf("\nProject Core bridge tests: %u executed, %u failed\n",count,failures);
     return failures?1:0;
 }
