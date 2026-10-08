@@ -96,8 +96,10 @@ int digit_project_security_owner(const char *root,const char *channel_id,
     organizations=fdopendir(rootfd);
     if(!organizations)goto failure;
     rootfd=-1;
-    errno=0;
-    while((o=readdir(organizations))!=NULL){
+    for(;;){
+        errno=0;
+        o=readdir(organizations);
+        if(!o){if(errno!=0)goto failure;break;}
         struct stat st;
         if(o->d_name[0]=='.' && (!o->d_name[1] ||
            (o->d_name[1]=='.'&&!o->d_name[2])))continue;
@@ -109,8 +111,10 @@ int digit_project_security_owner(const char *root,const char *channel_id,
         projects=fdopendir(orgfd);
         if(!projects)goto failure;
         orgfd=-1;
-        errno=0;
-        while((p=readdir(projects))!=NULL){
+        for(;;){
+            errno=0;
+            p=readdir(projects);
+            if(!p){if(errno!=0)goto failure;break;}
             if(p->d_name[0]=='.' && (!p->d_name[1] ||
                (p->d_name[1]=='.'&&!p->d_name[2])))continue;
             if(!project_component(p->d_name))goto failure;
@@ -142,11 +146,8 @@ int digit_project_security_owner(const char *root,const char *channel_id,
                 }
             }
         }
-        if(errno!=0)goto failure;
         closedir(projects);projects=NULL;
-        errno=0;
     }
-    if(errno!=0)goto failure;
     closedir(organizations);
     return found;
 failure:
