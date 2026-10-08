@@ -33,6 +33,7 @@ int main(void) {
     check(!digit_project_provision(root,"bad/name","digit","poe","sysadmin",registry),"invalid organization denied");
     check(!digit_project_provision(root,"stn-labz","../bad","poe","sysadmin",registry),"path traversal denied");
     check(!digit_project_provision(root,"stn-labz","digit","bad/user","sysadmin",registry),"invalid founder denied");
+    check(!digit_project_provision(root,"stn-labz","digit","poe","poe",registry),"ordinary admin cannot serve as SA");
     check(digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"project provision succeeds");
     check(digit_project_security_ready(root,"stn-labz","digit"),"restricted security record published");
     check(!digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"duplicate project denied");
@@ -40,15 +41,18 @@ int main(void) {
     f=fopen(security,"r");
     check(f!=NULL,"security membership file exists");
     if(f) {
-        int digit=0,founder=0;
+        int digit=0,founder=0,regular=0;
         while(fgets(line,sizeof(line),f)) {
             if(strcmp(line,"security\trestricted\tdigit\n")==0)digit=1;
             if(strcmp(line,"security\trestricted\tsysadmin\n")==0)founder=1;
+            if(strcmp(line,"security\trestricted\tpoe\n")==0)regular=1;
         }
         fclose(f);
         check(digit,"Digit initially assigned to restricted security");
         check(founder,"verified SA initially assigned");
+        check(!regular,"ordinary founding admin excluded from security");
     }
+    check(!digit_project_provision(root,"stn-labz","other","poe","unknown",registry),"unknown SA denied");
     check(!digit_project_security_ready(root,"stn-labz","bad/name"),"unsafe channel path denied");
     check(!digit_project_security_ready(root,"elsewhere","digit"),"organization isolation");
     check(!digit_project_provision(NULL,"stn-labz","other","poe","sysadmin",registry),"null root denied");
