@@ -131,6 +131,24 @@ int main(void) {
         write_acl(path,"sysadmin\tstn-labz\tdigit\tchannel-123-1\t1\t1\t1\t1\n");
         check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
               "legitimate owner scope remains accessible");
+        {
+            char marker[448];
+            snprintf(marker,sizeof(marker),"%s/READY",other);
+            if(chmod(marker,0644)!=0)return 1;
+            check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "invalid unrelated project readiness denies all protected access");
+            if(chmod(marker,0600)!=0)return 1;
+            check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "restored project readiness permits verified owner access");
+            if(unlink(marker)!=0)return 1;
+            check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "missing unrelated READY marker cannot be ignored");
+            if(!write_acl(marker,"security-initialized\n")||
+               chmod(marker,0600)!=0)return 1;
+            check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "repaired READY marker restores authorization");
+        }
+
         snprintf(otherfile,sizeof(otherfile),"%s/security_channel.id",other);
         if(!write_acl(otherfile,"channel-123-1\n")||chmod(otherfile,0600)!=0)return 1;
         check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
