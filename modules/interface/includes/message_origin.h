@@ -13,7 +13,8 @@ static inline int digit_message_origin_from_identity(const char *identity,
 {
     size_t n,i;
     if(!identity||!out||capacity<DIGIT_CHANNEL_ORIGIN_MAX)return 0;
-    n=strnlen(identity,DIGIT_CHANNEL_ORIGIN_MAX);
+    n=0;
+    while(n<DIGIT_CHANNEL_ORIGIN_MAX && identity[n]!=0)n++;
     if(n==0||n>=DIGIT_CHANNEL_ORIGIN_MAX)return 0;
     for(i=0;i<n;i++){
         char c=identity[i];
