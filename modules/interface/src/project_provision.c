@@ -42,19 +42,35 @@ static int record(int dir,const char *name,const char *value) {
     if(close(fd)!=0)good=0;
     return good;
 }
+/* [AI:GPT-6 | 2026-10-08] READY alone is not sufficient:
+ * both private records must be regular files belonging to the runtime.
+ * The expected completion marker must be intact.
+ */
+static int private_regular(int dir,const char *name) {
+    struct stat st;
+    return fstatat(dir,name,&st,AT_SYMLINK_NOFOLLOW)==0 &&
+           S_ISREG(st.st_mode) && (st.st_mode&077)==0 &&
+           (st.st_uid==0 || st.st_uid==geteuid());
+}
 int digit_project_security_ready(const char *root,const char *org,const char *project) {
-    int base=-1,o=-1,p=-1,good=0;
-    struct stat marker,security;
+    int base=-1,o=-1,p=-1,markerfd=-1,good=0;
+    char marker[32];
+    ssize_t n;
+    static const char expected[]="security-initialized\n";
     if(!root||!project_name(org)||!project_name(project))return 0;
     base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
     if(!private_dir(base))goto end;
     o=open_private(base,org);if(o<0)goto end;
     p=open_private(o,project);if(p<0)goto end;
-    good=fstatat(p,"READY",&marker,AT_SYMLINK_NOFOLLOW)==0 &&
-         S_ISREG(marker.st_mode) &&
-         fstatat(p,"security.tsv",&security,AT_SYMLINK_NOFOLLOW)==0 &&
-         S_ISREG(security.st_mode);
+    if(!private_regular(p,"READY")||!private_regular(p,"security.tsv")||
+       !private_regular(p,"project.tsv"))goto end;
+    markerfd=openat(p,"READY",O_RDONLY|O_NOFOLLOW);
+    if(markerfd<0)goto end;
+    n=read(markerfd,marker,sizeof(marker));
+    good=n==(ssize_t)(sizeof(expected)-1) &&
+         memcmp(marker,expected,sizeof(expected)-1)==0;
 end:
+    if(markerfd>=0)close(markerfd);
     if(p>=0)close(p);
     if(o>=0)close(o);
     if(base>=0)close(base);
