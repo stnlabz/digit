@@ -16,7 +16,7 @@ ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
 PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
-SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c
+SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
