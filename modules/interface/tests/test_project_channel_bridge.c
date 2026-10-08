@@ -59,6 +59,19 @@ int main(void) {
     check(!digit_project_bind_security(root,"stn-labz","second","missing",registry,mock,NULL),"unassigned identity cannot invoke Core binding");
     check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",NULL,mock,NULL),"missing SA roster denies Core binding");
     check(calls==1,"denied actors never invoke Core");
+    {
+        char membership[300];
+        FILE *m;
+        snprintf(membership,sizeof(membership),"%s/stn-labz/second/security.tsv",root);
+        m=fopen(membership,"w");if(!m)return 1;
+        fputs("security\trestricted\tdigit\n",m);
+        if(fclose(m)!=0)return 1;
+        check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"SA without project security membership denied");
+        m=fopen(membership,"w");if(!m)return 1;
+        fputs("security\trestricted\tdigit\nsecurity\trestricted\tsysadmin\n",m);
+        if(fclose(m)!=0)return 1;
+        check(calls==1,"missing membership never invokes Core");
+    }
     check(digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"successful Core binding");
     check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) && strcmp(id,"channel-123-1")==0,"Core channel ID persisted and resolved");
     check(!digit_project_bind_security(root,"stn-labz","second","sysadmin",registry,mock,NULL),"duplicate bound channel rejected");
