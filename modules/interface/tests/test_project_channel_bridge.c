@@ -1,0 +1,58 @@
+#define _POSIX_C_SOURCE 200809L
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "project_provision.h"
+#include "project_channel_bridge.h"
+
+/* [AI:GPT-6 | 2026-10-08] Mock Core service, no production registry writes. */
+static int calls=0,fail_call=0;
+static int mock(const char *service,const void *request,size_t request_size,
+                void *response,size_t response_size,size_t *used,void *unused) {
+    const digit_channel_create_request_t *in=request;
+    digit_channel_create_response_t *out=response;
+    (void)unused;
+    ++calls;
+    if(fail_call || strcmp(service,DIGIT_CHANNEL_SERVICE_CREATE)!=0 ||
+       request_size!=sizeof(*in) || response_size<sizeof(*out) ||
+       strcmp(in->name,"security-stn-labz-digit")!=0)return 0;
+    memset(out,0,sizeof(*out));
+    out->created=1;
+    strcpy(out->channel.id,"channel-123-1");
+    strcpy(out->channel.name,in->name);
+    *used=sizeof(*out);
+    return 1;
+}
+static unsigned int count=0,failures=0;
+static void check(int ok,const char *name) {
+    ++count;
+    if(ok)printf("PASS %02u - %s\n",count,name);
+    else {++failures;printf("FAIL %02u - %s\n",count,name);}
+}
+int main(void) {
+    char root[]="/tmp/digit-bridge-XXXXXX";
+    char id[DIGIT_CHANNEL_ID_MAX],path[256];
+    if(!mkdtemp(root))return 1;
+    check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"no unprovisioned binding");
+    check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"unprovisioned Core creation denied");
+    check(!digit_project_bind_security(root,"stn-labz","digit",NULL,NULL),"missing callback denied");
+    check(digit_project_provision(root,"stn-labz","digit","poe"),"restricted project initialized");
+    check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"security binding not inferred");
+    fail_call=1;
+    check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"Core service failure denied");
+    check(!digit_project_security_channel_id(root,"stn-labz","digit",id,sizeof(id)),"failed reservation not published");
+    check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"failed reservation blocks duplicate creation");
+    check(calls==1,"failed Core call not repeated");
+    check(digit_project_provision(root,"stn-labz","second","poe"),"another project initialized");
+    /* Separate mock contract permits success only for digit; test successful
+       binding by placing another independently provisioned project tree. */
+    snprintf(path,sizeof(path),"%s/stn-labz/second/security_channel.id",root);
+    check(!digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)),"second project starts without Core binding");
+    check(!digit_project_security_channel_id(root,"other-org","second",id,sizeof(id)),"organization scope required");
+    check(!digit_project_security_channel_id(root,"stn-labz","second",id,1),"small output rejected");
+    check(!digit_project_security_channel_id(root,"stn-labz","../second",id,sizeof(id)),"traversal rejected");
+    printf("\nProject Core bridge tests: %u executed, %u failed\n",count,failures);
+    return failures?1:0;
+}
