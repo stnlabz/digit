@@ -9,6 +9,7 @@ LDLIBS ?= -pthread
 
 TARGET := bin/interface.so
 TEST_TARGET := bin/test_interface
+ACCESS_TEST_TARGET := bin/test_access_policy
 SOURCE := src/interface.c
 TEST_SOURCE := tests/test_interface.c
 
@@ -30,8 +31,12 @@ $(TARGET): $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
 $(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@ $(LDLIBS)
 
-test: check-abi $(TEST_TARGET)
+$(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_access_policy.c -o $@
+
+test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET)
 	./$(TEST_TARGET)
+	./$(ACCESS_TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
