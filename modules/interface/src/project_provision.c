@@ -61,7 +61,7 @@ end:
 }
 int digit_project_provision(const char *root,const char *org,
                              const char *project,const char *admin) {
-    int base=-1,o=-1,p=-1,good=0;
+    int base=-1,o=-1,p=-1,good=0,created=0;
     char metadata[256],security[256];
     if(!root||!project_name(org)||!project_name(project)||
        !project_name(admin)||strcmp(admin,"digit")==0)return 0;
@@ -70,6 +70,7 @@ int digit_project_provision(const char *root,const char *org,
     if(mkdirat(base,org,0700)!=0 && errno!=EEXIST)goto end;
     o=open_private(base,org);if(o<0)goto end;
     if(mkdirat(o,project,0700)!=0)goto end;
+    created=1;
     p=open_private(o,project);if(p<0)goto end;
     if(snprintf(metadata,sizeof(metadata),"%s\t%s\t%s\n",org,project,admin)<0)goto end;
     if(snprintf(security,sizeof(security),"security\trestricted\tdigit\nsecurity\trestricted\t%s\n",admin)<0)goto end;
@@ -78,7 +79,13 @@ int digit_project_provision(const char *root,const char *org,
        !record(p,"READY","security-initialized\n"))goto end;
     good=fsync(p)==0;
 end:
+    if(!good && created && p>=0){
+        (void)unlinkat(p,"READY",0);
+        (void)unlinkat(p,"security.tsv",0);
+        (void)unlinkat(p,"project.tsv",0);
+    }
     if(p>=0)close(p);
+    if(!good && created && o>=0)(void)unlinkat(o,project,AT_REMOVEDIR);
     if(o>=0)close(o);
     if(base>=0)close(base);
     return good;
