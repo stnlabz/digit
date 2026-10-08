@@ -14,7 +14,8 @@ SESSION_TEST_TARGET := bin/test_session_store
 HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
-SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c
+PROJECT_TEST_TARGET := bin/test_project_provision
+SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -50,18 +51,22 @@ $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includ
 $(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c includes/channel_acl.h includes/access_policy.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c -o $@
 
-test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET)
+$(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c includes/project_provision.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c -o $@
+
+test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(ACCESS_TEST_TARGET)
 	./$(SESSION_TEST_TARGET)
 	./$(HTTP_AUTH_TEST_TARGET)
 	./$(ACCOUNT_AUTH_TEST_TARGET)
 	./$(CHANNEL_ACL_TEST_TARGET)
+	./$(PROJECT_TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
 	install -d -o digit -g digit $(INSTALL_DIR) $(INSTALL_BIN)
-	install -d -o digit -g digit -m 0700 $(DIGIT_PREFIX)/state/auth
+	install -d -o digit -g digit -m 0700 $(DIGIT_PREFIX)/state/auth $(DIGIT_PREFIX)/state/projects
 	install -m 0755 $(TARGET) $(INSTALL_BIN)/interface.so
 	install -m 0644 module.conf $(INSTALL_DIR)/module.conf
 	install -m 0644 interface.conf $(INSTALL_DIR)/interface.conf
