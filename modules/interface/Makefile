@@ -34,7 +34,7 @@ check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h includes/project_admin_route.h includes/message_origin.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
 $(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
@@ -52,13 +52,13 @@ $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_sto
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
 
-$(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h | bin
+$(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h includes/project_channel_bridge.h includes/project_provision.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c -o $@
 
 $(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c includes/project_provision.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c src/security_sa.c -o $@
 
-$(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h | bin
+$(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
 
 $(PROJECT_ADMIN_ROUTE_TEST_TARGET): tests/test_project_admin_route.c includes/project_admin_route.h | bin
