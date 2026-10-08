@@ -122,7 +122,12 @@ static int security_owner_scan(const char *root,const char *channel_id,
             if(!project_component(p->d_name))goto failure;
             if(fstatat(dirfd(projects),p->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0||
                !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)goto failure;
-            if(!digit_project_security_ready(root,o->d_name,p->d_name))continue;
+            /* [AI:GPT-6 | 2026-10-08] Incomplete or corrupted project
+             * records cannot be ignored during ownership discovery.
+             * An omitted owner could otherwise permit access through
+             * a different ACL scope. Fail closed for the whole scan. */
+            if(!digit_project_security_ready(root,o->d_name,p->d_name))
+                goto failure;
             if(digit_project_security_channel_id(root,o->d_name,p->d_name,
                     candidate,sizeof(candidate))){
                 if(strcmp(candidate,channel_id)==0){
