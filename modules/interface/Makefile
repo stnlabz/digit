@@ -13,7 +13,8 @@ ACCESS_TEST_TARGET := bin/test_access_policy
 SESSION_TEST_TARGET := bin/test_session_store
 HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
-SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c
+CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
+SOURCE := src/interface.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -28,10 +29,10 @@ check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@ $(LDLIBS)
 
 $(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
@@ -46,12 +47,16 @@ $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_sto
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
 
-test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET)
+$(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c includes/channel_acl.h includes/access_policy.h | bin
+	$(CC) -Iincludes $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c -o $@
+
+test: check-abi $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(ACCESS_TEST_TARGET)
 	./$(SESSION_TEST_TARGET)
 	./$(HTTP_AUTH_TEST_TARGET)
 	./$(ACCOUNT_AUTH_TEST_TARGET)
+	./$(CHANNEL_ACL_TEST_TARGET)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
