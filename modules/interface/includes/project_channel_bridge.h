@@ -13,8 +13,11 @@ typedef int (*digit_project_core_invoke_t)(const char *service,
     const void *request,size_t request_size,void *response,
     size_t response_size,size_t *response_used,void *context);
 
+/* Internal trusted operation: verified SA and project #security membership
+ * are required before any Core service is invoked. No HTTP route is exposed. */
 int digit_project_bind_security(const char *root,const char *organization,
-    const char *project,digit_project_core_invoke_t invoke,void *context);
+    const char *project,const char *actor,const char *sa_registry,
+    digit_project_core_invoke_t invoke,void *context);
 
 int digit_project_security_channel_id(const char *root,const char *organization,
     const char *project,char *channel_id,size_t capacity);
