@@ -81,6 +81,33 @@ int main(void) {
     if(chmod(file,0600)!=0)return 1;
 
     check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"verified SA with grant accesses bound security channel");
+    {
+        char other[384],otherfile[448];
+        snprintf(other,sizeof(other),"%s/other",org);
+        if(mkdir(other,0700)!=0)return 1;
+        snprintf(otherfile,sizeof(otherfile),"%s/READY",other);
+        if(!write_acl(otherfile,"security-initialized\\n")||chmod(otherfile,0600)!=0)return 1;
+        snprintf(otherfile,sizeof(otherfile),"%s/project.tsv",other);
+        if(!write_acl(otherfile,"stn-labz\\tother\\tregular\\n")||chmod(otherfile,0600)!=0)return 1;
+        snprintf(otherfile,sizeof(otherfile),"%s/security.tsv",other);
+        if(!write_acl(otherfile,"security\\trestricted\\tdigit\\n")||chmod(otherfile,0600)!=0)return 1;
+        write_acl(path,"regular\\tstn-labz\\tother\\tchannel-123-1\\t1\\t1\\t1\\t1\\n");
+        check(!digit_channel_acl_check_scoped(path,root,sa,"regular","channel-123-1"),
+              "grant scoped to another project cannot borrow security channel ID");
+        write_acl(path,"sysadmin\\tstn-labz\\tother\\tchannel-123-1\\t1\\t1\\t1\\t1\\n");
+        check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+              "qualified SA cannot borrow another project security channel");
+        write_acl(path,"sysadmin\\tstn-labz\\tdigit\\tchannel-123-1\\t1\\t1\\t1\\t1\\n");
+        check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+              "legitimate owner scope remains accessible");
+        snprintf(otherfile,sizeof(otherfile),"%s/security_channel.id",other);
+        if(!write_acl(otherfile,"channel-123-1\\n")||chmod(otherfile,0600)!=0)return 1;
+        check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+              "duplicate protected Core channel ID fails closed");
+        if(unlink(otherfile)!=0)return 1;
+        check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+              "unique protected Core channel ownership restores access");
+    }
     write_acl(file,"security\trestricted\tdigit\n");
     check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"removed project membership denies active SA");
     write_acl(file,"security\trestricted\tdigit\nsecurity\trestricted\tsysadmin\n");
