@@ -75,8 +75,9 @@ end:
  * project owner. Corrupt or unreadable inventory fails closed. A missing
  * root means no project registry has been provisioned yet.
  */
-int digit_project_security_owner(const char *root,const char *channel_id,
-    char *organization,size_t org_capacity,char *project,size_t project_capacity)
+static int security_owner_scan(const char *root,const char *channel_id,
+    char *organization,size_t org_capacity,char *project,size_t project_capacity,
+    const char *reserved_org,const char *reserved_project)
 {
     DIR *organizations=NULL,*projects=NULL;
     struct dirent *o,*p;
@@ -139,7 +140,16 @@ int digit_project_security_owner(const char *root,const char *channel_id,
                                   O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
                     if(pd<0)goto failure;
                     if(fstatat(pd,"security_channel.id",&st,AT_SYMLINK_NOFOLLOW)==0){
-                        close(pd);goto failure;
+                        /* Only this invocation's new empty reservation is
+                         * exempt. All ordinary ACL scans remain fail-closed. */
+                        int own_reservation=reserved_org&&reserved_project&&
+                            strcmp(o->d_name,reserved_org)==0&&
+                            strcmp(p->d_name,reserved_project)==0&&
+                            S_ISREG(st.st_mode)&&st.st_size==0&&
+                            (st.st_mode&077)==0;
+                        close(pd);
+                        if(!own_reservation)goto failure;
+                        continue;
                     }
                     if(errno!=ENOENT){close(pd);goto failure;}
                     close(pd);
@@ -157,6 +167,13 @@ failure:
     if(rootfd>=0)close(rootfd);
     organization[0]=0;project[0]=0;
     return -1;
+}
+
+int digit_project_security_owner(const char *root,const char *channel_id,
+    char *organization,size_t org_capacity,char *project,size_t project_capacity)
+{
+    return security_owner_scan(root,channel_id,organization,org_capacity,
+                               project,project_capacity,NULL,NULL);
 }
 
 int digit_project_bind_security(const char *root,const char *org,
@@ -195,8 +212,9 @@ int digit_project_bind_security(const char *root,const char *org,
        !project_component(result.channel.id))goto end;
     /* [AI:GPT-6 | 2026-10-08] A Core-issued channel ID is not proof
      * of unique ownership. Never publish a duplicate protected binding. */
-    if(digit_project_security_owner(root,result.channel.id,
-           owner_org,sizeof(owner_org),owner_project,sizeof(owner_project))!=0)
+    if(security_owner_scan(root,result.channel.id,
+           owner_org,sizeof(owner_org),owner_project,sizeof(owner_project),
+           org,project)!=0)
         goto end;
     length=snprintf(entry,sizeof(entry),"%s\n",result.channel.id);
     if(length<=0 || (size_t)length>=sizeof(entry))goto end;
