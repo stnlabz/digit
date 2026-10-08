@@ -110,6 +110,16 @@ int main(void) {
         if(unlink(otherfile)!=0)return 1;
         check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
               "unique protected Core channel ownership restores access");
+        {
+            char unexpected[400];
+            snprintf(unexpected,sizeof(unexpected),"%s/unexpected.tsv",root);
+            if(!write_acl(unexpected,"not-a-project\n"))return 1;
+            check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "unexpected root inventory file fails closed");
+            if(unlink(unexpected)!=0)return 1;
+            check(digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),
+                  "removing invalid inventory entry restores access");
+        }
     }
     write_acl(file,"security\trestricted\tdigit\n");
     check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"removed project membership denies active SA");
