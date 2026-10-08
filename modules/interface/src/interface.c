@@ -83,23 +83,23 @@ if(strncmp(request,"GET /session ",13)==0){
     char identity[DIGIT_SESSION_ID_SIZE],escaped[2*DIGIT_SESSION_ID_SIZE],json[256];
     /* [AI:GPT-6 | 2026-10-08] Only server-issued sessions identify an operator. */
     if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity))){
-        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
     interface_json_escape(identity,escaped,sizeof(escaped));
-    snprintf(json,sizeof(json),"{\"authenticated\":true,\"identity\":\"%s\"}\\n",escaped);
+    snprintf(json,sizeof(json),"{\"authenticated\":true,\"identity\":\"%s\"}\n",escaped);
     interface_reply(client,200,json);return;
 }
 if(strncmp(request,"POST /session/logout ",21)==0){
     char identity[DIGIT_SESSION_ID_SIZE],token[DIGIT_SESSION_TOKEN_SIZE];
     if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
        !digit_http_bearer_token(request,token)){
-        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
     if(!digit_session_revoke(&interface_sessions,token)){
-        interface_reply(client,401,"{\"error\":\"authentication required\"}\\n");return;
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
     memset(token,0,sizeof(token));
-    interface_reply(client,200,"{\"logged_out\":true}\\n");return;
+    interface_reply(client,200,"{\"logged_out\":true}\n");return;
 }
 
 if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client);return;}if(strncmp(request,"POST /channels ",15)==0){interface_channel_create(client,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
