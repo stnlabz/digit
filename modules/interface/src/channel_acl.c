@@ -79,6 +79,14 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
                 strcmp(fields[7],"1")==0
             };
             ok=digit_access_evaluate(&principal,&resource)==DIGIT_ACCESS_ELIGIBLE;
+            if(ok) {
+                char owner_org[DIGIT_PROJECT_ID_MAX],owner_project[DIGIT_PROJECT_ID_MAX];
+                int ownership=digit_project_security_owner(project_root,channel_id,
+                    owner_org,sizeof(owner_org),owner_project,sizeof(owner_project));
+                if(ownership<0 || (ownership==1 &&
+                   (strcmp(owner_org,fields[1])!=0||
+                    strcmp(owner_project,fields[2])!=0)))ok=0;
+            }
             if(ok && digit_project_security_ready(project_root,fields[1],fields[2])) {
                 char security_id[DIGIT_CHANNEL_ID_MAX];
                 /* [AI:GPT-6 | 2026-10-08] No project channel is
