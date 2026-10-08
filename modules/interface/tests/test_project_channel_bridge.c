@@ -17,7 +17,7 @@ static int mock(const char *service,const void *request,size_t request_size,
     ++calls;
     if(fail_call || strcmp(service,DIGIT_CHANNEL_SERVICE_CREATE)!=0 ||
        request_size!=sizeof(*in) || response_size<sizeof(*out) ||
-       strcmp(in->name,"security-stn-labz-digit")!=0)return 0;
+       strcmp(in->name,"security-stn-labz-second")!=0)return 0;
     memset(out,0,sizeof(*out));
     out->created=1;
     strcpy(out->channel.id,"channel-123-1");
@@ -46,10 +46,13 @@ int main(void) {
     check(!digit_project_bind_security(root,"stn-labz","digit",mock,NULL),"failed reservation blocks duplicate creation");
     check(calls==1,"failed Core call not repeated");
     check(digit_project_provision(root,"stn-labz","second","poe"),"another project initialized");
-    /* Separate mock contract permits success only for digit; test successful
-       binding by placing another independently provisioned project tree. */
+    /* Successful Core reply must be persisted before the channel is visible. */
     snprintf(path,sizeof(path),"%s/stn-labz/second/security_channel.id",root);
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)),"second project starts without Core binding");
+    fail_call=0;
+    check(digit_project_bind_security(root,"stn-labz","second",mock,NULL),"successful Core binding");
+    check(digit_project_security_channel_id(root,"stn-labz","second",id,sizeof(id)) && strcmp(id,"channel-123-1")==0,"Core channel ID persisted and resolved");
+    check(!digit_project_bind_security(root,"stn-labz","second",mock,NULL),"duplicate bound channel rejected");
     check(!digit_project_security_channel_id(root,"other-org","second",id,sizeof(id)),"organization scope required");
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,1),"small output rejected");
     check(!digit_project_security_channel_id(root,"stn-labz","../second",id,sizeof(id)),"traversal rejected");
