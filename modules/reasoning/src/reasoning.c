@@ -298,12 +298,52 @@ static stnlabz_module_result_t reasoning_compare_service(const void *request, si
 
 static stnlabz_module_result_t reasoning_qualify(stnlabz_module_qualification_result_t *result)
 {
+    digit_reasoning_result_t relevance;
+    digit_reasoning_explain_request_t explain;
+    digit_reasoning_explain_result_t explanation;
+    digit_reasoning_compare_request_t compare;
+    digit_reasoning_compare_result_t comparison;
+    size_t used = 0;
+    stnlabz_module_result_t status;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(result, 0, sizeof(*result));
-    result->tests_executed = 10;
-    result->tests_passed = 10;
-    result->negative_test_executed = 1;
-    result->negative_test_passed = 1;
+
+    ++result->tests_executed;
+    if (digit_reasoning_evaluate("Digit module qualification", &relevance) &&
+        relevance.relevance == DIGIT_RELEVANCE_RELEVANT) ++result->tests_passed;
+
+    memset(&explain, 0, sizeof(explain));
+    memset(&explanation, 0, sizeof(explanation));
+    snprintf(explain.subject, sizeof(explain.subject), "engine");
+    snprintf(explain.evidence[0], sizeof(explain.evidence[0]), "An engine is a machine.");
+    explain.evidence_count = 1;
+    status = reasoning_explain_service(&explain, sizeof(explain), &explanation,
+                                       sizeof(explanation), &used, NULL);
+    ++result->tests_executed;
+    if (status == STNLABZ_MODULE_OK && used == sizeof(explanation) &&
+        explanation.explained && explanation.evidence_used == 1 &&
+        strstr(explanation.explanation, "An engine is a machine.") != NULL)
+        ++result->tests_passed;
+
+    memset(&compare, 0, sizeof(compare));
+    memset(&comparison, 0, sizeof(comparison));
+    snprintf(compare.left, sizeof(compare.left), "alpha");
+    snprintf(compare.right, sizeof(compare.right), "beta");
+    snprintf(compare.evidence[0], sizeof(compare.evidence[0]), "alpha is a first label.");
+    snprintf(compare.evidence[1], sizeof(compare.evidence[1]), "beta is a second label.");
+    compare.evidence_count = 2;
+    used = 0;
+    status = reasoning_compare_service(&compare, sizeof(compare), &comparison,
+                                       sizeof(comparison), &used, NULL);
+    ++result->tests_executed;
+    if (status == STNLABZ_MODULE_OK && used == sizeof(comparison) &&
+        comparison.compared && comparison.left_evidence_used == 1 &&
+        comparison.right_evidence_used == 1) ++result->tests_passed;
+
+    ++result->negative_test_executed;
+    if (reasoning_explain_service(NULL, 0, &explanation,
+                                  sizeof(explanation), &used, NULL) ==
+        STNLABZ_MODULE_ERR_INVALID_ARGUMENT) ++result->negative_test_passed;
     return STNLABZ_MODULE_OK;
 }
 
@@ -332,7 +372,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 6,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
