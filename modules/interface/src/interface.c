@@ -14,6 +14,7 @@
 #include "interface.h"
 #include "session_store.h"
 #include "http_auth.h"
+#include "account_auth.h"
 #include "core_services.h"
 
 #define INTERFACE_BUFFER_MAX 65536
@@ -79,10 +80,43 @@ static void interface_alert_ack(int client,const char *id){digit_alert_acknowled
 
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
+/* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
+ * Login has no self-registration or caller-supplied privilege flags.
+ * Transport remains loopback-bound; deploy HTTPS gateway before external use.
+ */
+if(strncmp(request,"POST /session/login HTTP/1.1",28)==0){
+    char user[DIGIT_ACCOUNT_ID_MAX],password[DIGIT_ACCOUNT_PASSWORD_MAX];
+    char token[DIGIT_SESSION_TOKEN_SIZE],json[256];
+    char *sep;
+    size_t un,pn;
+    if(!body || !(sep=strchr(body,'\t')) || strchr(sep+1,'\t') ||
+       strchr(body,'\n') || strchr(body,'\r')){
+        interface_reply(client,400,"{\"error\":\"invalid credentials format\"}\n");return;
+    }
+    un=(size_t)(sep-body);pn=strlen(sep+1);
+    if(un==0 || un>=sizeof(user) || pn==0 || pn>=sizeof(password)){
+        interface_reply(client,401,"{\"error\":\"authentication failed\"}\n");return;
+    }
+    memcpy(user,body,un);user[un]='\0';
+    memcpy(password,sep+1,pn+1U);
+    if(!digit_account_verify_file(DIGIT_ACCOUNT_AUTH_PATH,user,password)){
+        memset(password,0,sizeof(password));
+        interface_reply(client,401,"{\"error\":\"authentication failed\"}\n");return;
+    }
+    memset(password,0,sizeof(password));
+    if(!digit_session_issue(&interface_sessions,user,1,time(NULL),token)){
+        interface_reply(client,503,"{\"error\":\"session unavailable\"}\n");return;
+    }
+    snprintf(json,sizeof(json),"{\"authenticated\":true,\"token\":\"%s\",\"expires_in\":%d}\n",
+             token,DIGIT_SESSION_LIFETIME);
+    memset(token,0,sizeof(token));
+    interface_reply(client,200,json);return;
+}
 if(strncmp(request,"GET /session ",13)==0){
     char identity[DIGIT_SESSION_ID_SIZE],escaped[2*DIGIT_SESSION_ID_SIZE],json[256];
     /* [AI:GPT-6 | 2026-10-08] Only server-issued sessions identify an operator. */
-    if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity))){
+    if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
+       !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
     interface_json_escape(identity,escaped,sizeof(escaped));
@@ -102,6 +136,17 @@ if(strncmp(request,"POST /session/logout ",21)==0){
     interface_reply(client,200,"{\"logged_out\":true}\n");return;
 }
 
+/* [AI:GPT-6 | 2026-10-08] No API operation beyond health/login/logout/session
+ * enters a service without authenticated current account state. Resource ACL
+ * checks remain a separate required gate before multi-tenant channel release.
+ */
+{
+    char identity[DIGIT_SESSION_ID_SIZE];
+    if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
+       !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
+        interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
+    }
+}
 if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client);return;}if(strncmp(request,"POST /channels ",15)==0){interface_channel_create(client,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
@@ -115,5 +160,5 @@ static void *interface_server(void *unused){(void)unused;while(interface_running
 static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,6,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
