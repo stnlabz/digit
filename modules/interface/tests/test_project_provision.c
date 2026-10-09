@@ -77,6 +77,19 @@ int main(void) {
         if(fclose(f)!=0)return 1;
         check(!digit_project_security_ready(root,"stn-labz","digit"),
               "multiple project metadata rows denied");
+        {
+            static const char nul_row[]="stn-labz\tdigit\tpoe\0hidden\n";
+            f=fopen(metadata,"wb");if(!f)return 1;
+            if(fwrite(nul_row,1,sizeof(nul_row)-1,f)!=sizeof(nul_row)-1 ||
+               fclose(f)!=0)return 1;
+            check(!digit_project_security_ready(root,"stn-labz","digit"),
+                  "embedded NUL project metadata denied");
+        }
+        f=fopen(metadata,"w");if(!f)return 1;
+        fputs("stn-labz\tdigit\tpoe\nextra\n",f);
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "additional complete metadata record denied");
         f=fopen(metadata,"w");if(!f)return 1;
         fputs("stn-labz\tdigit\tpoe\n",f);
         if(fclose(f)!=0)return 1;
