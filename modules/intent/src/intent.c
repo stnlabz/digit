@@ -246,6 +246,12 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if(how){set_result(result,DIGIT_INTENT_HOW,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks how something works or is done.");return;}
     if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
     if(social){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Request is conversational rather than an operational or knowledge task.");return;}
+    /* [AI:GPT-6 | 2026-10-09] First-person identity/work descriptions are\n     * conversational data, never proof of account identity or authority.\n     * Do not override recognized operational intent above this point. */
+    if(strncasecmp(text,"I am ",5)==0||strncasecmp(text,"I\x27m ",4)==0||
+       strncasecmp(text,"I work ",7)==0||strncasecmp(text,"I prefer ",9)==0){
+        set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
+                   "First-person operator context is conversation, not an authority grant.");return;
+    }
     set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established.");
 }
 
