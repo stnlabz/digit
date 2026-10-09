@@ -36,6 +36,27 @@ int main(void) {
     check(!digit_project_provision(root,"stn-labz","digit","poe","poe",registry),"ordinary admin cannot serve as SA");
     check(digit_project_provision(root,"stn-labz","digit","poe","sysadmin",registry),"project provision succeeds");
     check(digit_project_security_ready(root,"stn-labz","digit"),"restricted security record published");
+    {
+        char alias[320];
+        snprintf(alias,sizeof(alias),"%s/READY-alias",project);
+        check(link(ready,alias)==0,"READY hard-link fixture created");
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "hard-linked READY marker denied");
+        check(unlink(alias)==0,"READY alias removed");
+        check(digit_project_security_ready(root,"stn-labz","digit"),
+              "single-link READY marker restored");
+        snprintf(alias,sizeof(alias),"%s/security-alias",project);
+        check(link(security,alias)==0,"security membership hard-link fixture created");
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "hard-linked security membership record denied");
+        check(!digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "hard-linked membership cannot authorize SA");
+        check(unlink(alias)==0,"membership alias removed");
+        check(digit_project_security_ready(root,"stn-labz","digit") &&
+              digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "single-link security record restores membership");
+    }
+
     chmod(security,0644);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"readable-by-others security record denied");
     chmod(security,0600);
