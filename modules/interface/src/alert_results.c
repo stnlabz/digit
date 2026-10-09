@@ -47,3 +47,18 @@ int digit_interface_alerts_valid(const digit_alert_t *alerts,size_t count,
     }
     return 1;
 }
+
+/* [AI:GPT-6 | 2026-10-08] 1.4.9: exact lookup and
+ * acknowledgement replies cannot substitute another alert identity. */
+int digit_interface_alert_exact_valid(const digit_alert_t *alert,int present,
+                                      const char *requested_id,int require_ack)
+{
+    if(!safe_id(requested_id,DIGIT_ALERT_ID_MAX) ||
+       (present!=0 && present!=1) ||
+       (require_ack!=0 && require_ack!=1))return 0;
+    if(!present)return 1;
+    if(!alert || strcmp(alert->id,requested_id)!=0 ||
+       !digit_interface_alerts_valid(alert,1,1,0))return 0;
+    if(require_ack && !alert->acknowledged)return 0;
+    return 1;
+}
