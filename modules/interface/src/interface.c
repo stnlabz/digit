@@ -135,19 +135,19 @@ static void interface_messages_list(int client,const char *id)
     memset(&out,0,sizeof(out));
     memset(&in,0,sizeof(in));
     if(!digit_controlled_message_valid(id,"digit","x")){
-        interface_reply(client,400,"{\"error\":\"invalid channel id\"}\\n");
+        interface_reply(client,400,"{\"error\":\"invalid channel id\"}\n");
         return;
     }
     snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);
     if(!interface_invoke(DIGIT_CHANNEL_SERVICE_MESSAGE_LIST,
                          &in,sizeof(in),&out,sizeof(out),&used) ||
        used!=sizeof(out)){
-        interface_reply(client,503,"{\"error\":\"channel message service unavailable\"}\\n");
+        interface_reply(client,503,"{\"error\":\"channel message service unavailable\"}\n");
         return;
     }
     if(!digit_interface_messages_valid(out.messages,out.count,
                                        DIGIT_CORE_SERVICE_MESSAGE_LIST_MAX,id)){
-        interface_reply(client,503,"{\"error\":\"invalid channel messages\"}\\n");
+        interface_reply(client,503,"{\"error\":\"invalid channel messages\"}\n");
         return;
     }
     n=snprintf(json,sizeof(json),
@@ -161,12 +161,12 @@ static void interface_messages_list(int client,const char *id)
         if(n<0 || (size_t)n>=sizeof(json)-off)goto invalid;
         off+=(size_t)n;
     }
-    n=snprintf(json+off,sizeof(json)-off,"]}\\n");
+    n=snprintf(json+off,sizeof(json)-off,"]}\n");
     if(n<0 || (size_t)n>=sizeof(json)-off)goto invalid;
     interface_reply(client,200,json);
     return;
 invalid:
-    interface_reply(client,503,"{\"error\":\"channel message serialization failed\"}\\n");
+    interface_reply(client,503,"{\"error\":\"channel message serialization failed\"}\n");
 }
 static int interface_message_append(const char *id,const char *origin,const char *body,digit_channel_message_t *message){digit_channel_message_append_request_t in;digit_channel_message_append_response_t out;size_t used=0;if(!digit_controlled_message_valid(id,origin,body))return 0;memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);snprintf(in.origin,sizeof(in.origin),"%s",origin);snprintf(in.body,sizeof(in.body),"%s",body);if(!interface_invoke(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)||!out.appended)return 0;if(message)*message=out.message;return 1;}
 static void interface_message_post(int client,const char *id,const char *body,const char *identity){digit_channel_message_t message;char origin[DIGIT_CHANNEL_ORIGIN_MAX],item[9000],json[9300];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!interface_message_append(id,origin,body,&message)){interface_reply(client,400,"{\"error\":\"message not appended\"}\n");return;}interface_message_json(&message,item,sizeof(item));{char receipt[256];if(!digit_controlled_receipt(&message,id,origin,receipt,sizeof(receipt))){interface_reply(client,503,"{\"error\":\"Core acknowledgement inconsistent\"}\n");return;}snprintf(json,sizeof(json),"{\"appended\":true,\"receipt\":%s,\"message\":%s}\n",receipt,item);}interface_reply(client,200,json);}
