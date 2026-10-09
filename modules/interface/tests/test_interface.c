@@ -27,7 +27,7 @@ int main(void)
     check(qualification.tests_passed == qualification.tests_executed && qualification.tests_failed == 0, "required tests pass");
     check(qualification.negative_test_executed && qualification.negative_test_passed, "negative validation passes");
     check(descriptor != NULL && descriptor->start(NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT, "start rejects null host");
-    check(strcmp(DIGIT_INTERFACE_DEFAULT_HOST, "127.0.0.1") == 0 && DIGIT_INTERFACE_DEFAULT_PORT == 8081, "interface binds loopback until authenticated gateway exists");
+    check(strcmp(DIGIT_INTERFACE_DEFAULT_HOST, "0.0.0.0") == 0 && DIGIT_INTERFACE_DEFAULT_PORT == 8081, "interface TLS listener binds IPv4 wildcard on port 8081");
     printf("\nInterface module tests: %u executed, %u failed\n", executed, failed);
     return failed == 0 ? 0 : 1;
 }
