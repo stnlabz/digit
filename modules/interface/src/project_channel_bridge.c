@@ -84,6 +84,7 @@ end:
  * project owner. Corrupt or unreadable inventory fails closed. A missing
  * root means no project registry has been provisioned yet.
  */
+static int ordinary_binding_matches(int project_fd,const char *channel);
 static int security_owner_scan(const char *root,const char *channel_id,
     char *organization,size_t org_capacity,char *project,size_t project_capacity,
     const char *reserved_org,const char *reserved_project)
@@ -139,6 +140,19 @@ static int security_owner_scan(const char *root,const char *channel_id,
              * a different ACL scope. Fail closed for the whole scan. */
             if(!digit_project_security_ready(root,o->d_name,p->d_name))
                 goto failure;
+            /* An ordinary channel is owned by exactly one project too. */
+            {
+                int pd=openat(dirfd(projects),p->d_name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+                int ordinary;
+                if(pd<0)goto failure;
+                ordinary=ordinary_binding_matches(pd,channel_id);close(pd);
+                if(ordinary<0)goto failure;
+                if(ordinary==1){
+                    if(++found>1||strlen(o->d_name)>=org_capacity||
+                       strlen(p->d_name)>=project_capacity)goto failure;
+                    strcpy(organization,o->d_name);strcpy(project,p->d_name);
+                }
+            }
             if(digit_project_security_channel_id(root,o->d_name,p->d_name,
                     candidate,sizeof(candidate))){
                 if(strcmp(candidate,channel_id)==0){
@@ -186,6 +200,49 @@ failure:
     return -1;
 }
 
+/* [AI:GPT-6 | 2026-10-09] Validate a private ordinary channel binding. */
+static int ordinary_binding_read(int project_fd,const char *filename,char *out,size_t cap){
+ char value[DIGIT_CHANNEL_ID_MAX+2];struct stat st;int fd;ssize_t n;
+ if(!project_component(filename)||!out||cap<DIGIT_CHANNEL_ID_MAX)return 0;
+ fd=openat(project_fd,filename,O_RDONLY|O_NOFOLLOW);
+ if(fd<0)return 0;
+ if(fstat(fd,&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1||
+    (st.st_mode&077)||(st.st_uid!=0&&st.st_uid!=geteuid())||
+    st.st_size<2||st.st_size>(off_t)(sizeof(value)-1)){close(fd);return 0;}
+ n=read(fd,value,sizeof(value));
+ close(fd);
+ if(n!=st.st_size||value[n-1]!='\n')return 0;
+ value[n-1]=0;
+ if(!project_component(value)||strlen(value)>=cap)return 0;
+ strcpy(out,value);return 1;
+}
+static int ordinary_binding_matches(int project_fd,const char *channel){
+ DIR *entries;struct dirent *entry;int duplicate_fd,found=0;
+ char bound[DIGIT_CHANNEL_ID_MAX];
+ duplicate_fd=dup(project_fd);if(duplicate_fd<0)return -1;
+ entries=fdopendir(duplicate_fd);if(!entries){close(duplicate_fd);return -1;}
+ for(;;){
+  size_t n;errno=0;entry=readdir(entries);
+  if(!entry){if(errno)found=-1;break;}
+  n=strlen(entry->d_name);
+  if(n<12||strncmp(entry->d_name,"channel-",8)!=0||
+     strcmp(entry->d_name+n-3,".id")!=0)continue;
+  if(!ordinary_binding_read(project_fd,entry->d_name,bound,sizeof(bound))){
+   found=-1;break;
+  }
+  if(!strcmp(bound,channel))found++;
+  if(found>1){found=-1;break;}
+ }
+ closedir(entries);return found;
+}
+int digit_project_channel_match(const char *root,const char *org,
+ const char *project,const char *channel){
+ int fd,match;
+ if(!project_component(channel)||!digit_project_security_ready(root,org,project))return 0;
+ fd=project_open(root,org,project);if(fd<0)return 0;
+ match=ordinary_binding_matches(fd,channel);close(fd);
+ return match==1;
+}
 int digit_project_security_owner(const char *root,const char *channel_id,
     char *organization,size_t org_capacity,char *project,size_t project_capacity)
 {
