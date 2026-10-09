@@ -96,6 +96,31 @@ int main(void) {
         check(digit_project_security_ready(root,"stn-labz","digit"),
               "restored matching project identity accepted");
     }
+    /* [AI:GPT-6 | 2026-10-08] A valid SA must not be authorized
+     * through a binary or overlong security roster record. */
+    {
+        static const char nul_member[]=
+            "security\trestricted\tdigit\n"
+            "security\trestricted\tsysadmin\0hidden\n";
+        f=fopen(security,"wb");if(!f)return 1;
+        if(fwrite(nul_member,1,sizeof(nul_member)-1,f)!=sizeof(nul_member)-1)
+            return 1;
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "embedded NUL security membership denied");
+        f=fopen(security,"w");if(!f)return 1;
+        fputs("security\trestricted\tdigit\n"
+              "security\trestricted\tsysadmin",f);
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "unterminated security roster record denied");
+        f=fopen(security,"w");if(!f)return 1;
+        fputs("security\trestricted\tdigit\n"
+              "security\trestricted\tsysadmin\n",f);
+        if(fclose(f)!=0)return 1;
+        check(digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "restored valid security roster accepted");
+    }
     chmod(security,0644);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"readable-by-others security record denied");
     chmod(security,0600);
