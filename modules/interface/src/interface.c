@@ -459,6 +459,45 @@ if(strncmp(request,"GET /admin/access HTTP/1.1\r\n",sizeof("GET /admin/access HT
     }
     interface_reply(client,200,"{\"authorized\":true,\"scope\":\"digit-operations-read\"}\n");return;
 }
+/* [AI:GPT-6 | 2026-10-08] Interface 1.5.6: read-only SA dashboard.
+ * Identity comes exclusively from the validated session; Core rechecks SA.
+ * All operational counts are obtained from existing Core service contracts.
+ * No filesystem, process internals, or privileged controls are exposed. */
+if(strncmp(request,"GET /admin/dashboard HTTP/1.1\\r\\n",sizeof("GET /admin/dashboard HTTP/1.1\\r\\n")-1U)==0){
+    digit_admin_sa_request_t auth;
+    digit_admin_sa_response_t grant;
+    digit_channel_list_response_t *channels=NULL;
+    digit_alert_list_request_t filter={0};
+    digit_alert_list_response_t *alerts=NULL;
+    size_t used=0,open_alerts=0,i;
+    char json[320];
+    memset(&auth,0,sizeof(auth));memset(&grant,0,sizeof(grant));
+    if(strlen(identity)>=sizeof(auth.identity)){
+        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+    }
+    snprintf(auth.identity,sizeof(auth.identity),"%s",identity);
+    if(!interface_invoke(DIGIT_ADMIN_SA_SERVICE,&auth,sizeof(auth),&grant,sizeof(grant),&used)||
+       used!=sizeof(grant)||grant.authorized!=1){
+        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+    }
+    channels=calloc(1,sizeof(*channels));
+    alerts=calloc(1,sizeof(*alerts));
+    if(!channels||!alerts){free(channels);free(alerts);interface_reply(client,503,"{\\"error\\":\\"dashboard unavailable\\"}\\n");return;}
+    used=0;
+    if(!interface_invoke(DIGIT_CHANNEL_SERVICE_LIST,NULL,0,channels,sizeof(*channels),&used)||
+       used!=sizeof(*channels)||channels->count>DIGIT_CORE_SERVICE_CHANNEL_LIST_MAX){
+        free(channels);free(alerts);interface_reply(client,503,"{\\"error\\":\\"channel snapshot unavailable\\"}\\n");return;
+    }
+    used=0;
+    if(!interface_invoke(DIGIT_ALERT_SERVICE_LIST,&filter,sizeof(filter),alerts,sizeof(*alerts),&used)||
+       used!=sizeof(*alerts)||alerts->count>DIGIT_CORE_SERVICE_ALERT_LIST_MAX){
+        free(channels);free(alerts);interface_reply(client,503,"{\\"error\\":\\"alert snapshot unavailable\\"}\\n");return;
+    }
+    for(i=0;i<alerts->count;++i)if(!alerts->alerts[i].acknowledged)++open_alerts;
+    snprintf(json,sizeof(json),"{\\"authorized\\":true,\\"scope\\":\\"digit-operations-read\\",\\"channels\\":%zu,\\"alerts\\":%zu,\\"unacknowledged_alerts\\":%zu}\\n",channels->count,alerts->count,open_alerts);
+    free(channels);free(alerts);
+    interface_reply(client,200,json);return;
+}
 /* [AI:GPT-6 | 2026-10-08] Authenticated, SA-only project binding.
  * The actor is always the resolved active account, never request data.
  * The trusted bridge rechecks assignment and security membership before
@@ -693,5 +732,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
