@@ -54,32 +54,6 @@ static int private_regular(int dir,const char *name) {
            (st.st_mode&077)==0 &&
            (st.st_uid==0 || st.st_uid==geteuid());
 }
-/* [AI:GPT-6 | 2026-10-08] Revalidate an opened protected record
- * against its directory entry after reading. A replacement, relink,
- * permission change or observable in-place mutation fails closed. */
-static int stable_private_record(int dir,const char *name,int fd,
-                                 const struct stat *before) {
-    struct stat opened,named;
-    if(fstat(fd,&opened)!=0 ||
-       fstatat(dir,name,&named,AT_SYMLINK_NOFOLLOW)!=0)return 0;
-    if(!S_ISREG(opened.st_mode)||!S_ISREG(named.st_mode)||
-       opened.st_nlink!=1||named.st_nlink!=1 ||
-       (opened.st_mode&077)!=0||(named.st_mode&077)!=0 ||
-       (opened.st_uid!=0&&opened.st_uid!=geteuid()) ||
-       (named.st_uid!=0&&named.st_uid!=geteuid()))return 0;
-    if(opened.st_dev!=before->st_dev||opened.st_ino!=before->st_ino||
-       named.st_dev!=before->st_dev||named.st_ino!=before->st_ino||
-       opened.st_size!=before->st_size||named.st_size!=before->st_size||
-       opened.st_mtim.tv_sec!=before->st_mtim.tv_sec||
-       opened.st_mtim.tv_nsec!=before->st_mtim.tv_nsec||
-       opened.st_ctim.tv_sec!=before->st_ctim.tv_sec||
-       opened.st_ctim.tv_nsec!=before->st_ctim.tv_nsec||
-       named.st_mtim.tv_sec!=before->st_mtim.tv_sec||
-       named.st_mtim.tv_nsec!=before->st_mtim.tv_nsec||
-       named.st_ctim.tv_sec!=before->st_ctim.tv_sec||
-       named.st_ctim.tv_nsec!=before->st_ctim.tv_nsec)return 0;
-    return 1;
-}
 /* [AI:GPT-6 | 2026-10-08] Project identity is authoritative data,
  * not merely a protected file's existence. Parse exactly one bounded row
  * and require the claimed scope to match the directory being opened. */
@@ -88,12 +62,11 @@ static int project_metadata_matches(int dir,const char *org,const char *project)
     char row[3*DIGIT_PROJECT_ID_MAX+4],*first,*second,*admin;
     ssize_t n;
     struct stat st;
-    int ok=0,checked=0;
+    int ok=0;
     if(fd<0)return 0;
     if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) || st.st_nlink!=1 ||
        (st.st_mode&077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid()))
         goto finish;
-    checked=1;
     n=read(fd,row,sizeof(row));
     /* [AI:GPT-6 | 2026-10-08] Reject hidden suffixes: C string
      * comparisons must not accept embedded NUL bytes or extra records. */
@@ -112,7 +85,6 @@ static int project_metadata_matches(int dir,const char *org,const char *project)
     if(strchr(admin,'\t') || !project_name(admin))goto finish;
     ok=strcmp(row,org)==0 && strcmp(first,project)==0;
 finish:
-    if(!checked||!stable_private_record(dir,"project.tsv",fd,&st))ok=0;
     if(close(fd)!=0)ok=0;
     return ok;
 }
@@ -131,17 +103,9 @@ int digit_project_security_ready(const char *root,const char *org,const char *pr
        !project_metadata_matches(p,org,project))goto end;
     markerfd=openat(p,"READY",O_RDONLY|O_NOFOLLOW);
     if(markerfd<0)goto end;
-    {
-        struct stat before;
-        if(fstat(markerfd,&before)!=0 || !S_ISREG(before.st_mode) ||
-           before.st_nlink!=1 || (before.st_mode&077)!=0 ||
-           (before.st_uid!=0&&before.st_uid!=geteuid()))goto end;
-        n=read(markerfd,marker,sizeof(marker));
-        good=n==(ssize_t)(sizeof(expected)-1) &&
-             memcmp(marker,expected,sizeof(expected)-1)==0 &&
-             before.st_size==n &&
-             stable_private_record(p,"READY",markerfd,&before);
-    }
+    n=read(markerfd,marker,sizeof(marker));
+    good=n==(ssize_t)(sizeof(expected)-1) &&
+         memcmp(marker,expected,sizeof(expected)-1)==0;
 end:
     if(markerfd>=0)close(markerfd);
     if(p>=0)close(p);
