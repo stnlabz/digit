@@ -26,8 +26,8 @@ int digit_controlled_message_valid(const char *channel,const char *origin,
     if(!component(channel,DIGIT_CHANNEL_ID_MAX)||
        !digit_message_origin_from_identity(origin,attributed,sizeof(attributed))||
        !body)return 0;
-    while(length<DIGIT_CHANNEL_MESSAGE_BODY_MAX && body[length])++length;
-    return length>0 && length<DIGIT_CHANNEL_MESSAGE_BODY_MAX;
+    while(length<DIGIT_CHANNEL_MESSAGE_MAX && body[length])++length;
+    return length>0 && length<DIGIT_CHANNEL_MESSAGE_MAX;
 }
 int digit_controlled_receipt(const digit_channel_message_t *message,
                              const char *channel,const char *origin,
@@ -37,7 +37,7 @@ int digit_controlled_receipt(const digit_channel_message_t *message,
     if(!output||!capacity)return 0;
     output[0]=0;
     if(!message||!channel||!origin||
-       !component(message->id,DIGIT_CHANNEL_MESSAGE_ID_MAX)||
+       !component(message->id,DIGIT_CHANNEL_ID_MAX)||
        !component(channel,DIGIT_CHANNEL_ID_MAX)||
        !digit_controlled_message_valid(channel,origin,"x")||
        strcmp(message->channel_id,channel)!=0||
