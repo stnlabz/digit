@@ -107,6 +107,27 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        answer.answered&&strcmp(answer.answer,"2 + 2 = 4.")==0,
        "arithmetic question computes an exact answer");
  check(unexpected_services==0&&arithmetic_calls==1,"arithmetic uses shared service without Corpus or Reasoning");
+ /* [AI:GPT-6 | 2026-10-09] Name and first-person context must be handled
+  * as dialogue, without making corpus calls or persistent writes. */
+ {
+  static const struct {const char *text,*contains;} cases[]={
+   {"My Name is Poe","Poe"},
+   {"I am a PHP developer","haven't saved"},
+   {"I'm an accountant","haven't saved"},
+   {"I prefer PHP","haven't saved"}
+  };
+  size_t i;
+  for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
+   memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
+   snprintf(request.question,sizeof(request.question),
+       "INTENT: CONVERSATION\\nTARGET: SOCIAL\\nSUBJECT: \\nREQUEST: %s",cases[i].text);
+   check(response_handler(&request,sizeof(request),&answer,sizeof(answer),
+       &used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
+       answer.answered&&strstr(answer.answer,cases[i].contains)!=NULL,
+       "first-person context receives bounded acknowledgment");
+  }
+ }
+
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
  {
   static const struct {const char *question,*expected;} cases[]={
@@ -187,7 +208,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 10, "internal version is 1.7.10");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 8 && descriptor->version_patch == 0, "internal version is 1.8.0");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
