@@ -23,6 +23,7 @@ static unsigned int outbound_validations;
 static unsigned int arithmetic_calls;
 static const char *arithmetic_expected_request;
 static const char *arithmetic_expected_answer;
+static int arithmetic_available=1;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -44,6 +45,7 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
      !arithmetic_expected_request||strcmp(in->expression,arithmetic_expected_request))
    return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
   arithmetic_calls++;
+  if(!arithmetic_available)return STNLABZ_MODULE_ERR_NOT_FOUND;
   memset(out,0,sizeof(*out));
   if(!strcmp(arithmetic_expected_answer,"Division by zero is undefined."))
    out->status=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;
@@ -135,6 +137,18 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   }
  }
 
+ /* [AI:GPT-6 | 2026-10-09] A missing arithmetic provider must not
+  * fall through to Corpus and fabricate an answer. */
+ {
+  memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
+  snprintf(request.question,sizeof(request.question),"Digit what is 2 plus 2?");
+  arithmetic_expected_request="Digit what is 2 plus 2?";
+  arithmetic_available=0;
+  check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&
+   used==sizeof(answer)&&strcmp(answer.answer,"Arithmetic service is unavailable.")==0,
+   "missing arithmetic provider fails closed");
+  arithmetic_available=1;
+ }
  /* [AI:GPT-6 | 2026-10-09] A valid knowledge request with zero
   * retrieved evidence must not invoke outbound factual validation. */
  memset(&request,0,sizeof(request));
