@@ -24,6 +24,7 @@
 #include "message_origin.h"
 #include "controlled_communication.h"
 #include "message_results.h"
+#include "alert_results.h"
 #include "knowledge_query.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
@@ -171,7 +172,48 @@ invalid:
 static int interface_message_append(const char *id,const char *origin,const char *body,digit_channel_message_t *message){digit_channel_message_append_request_t in;digit_channel_message_append_response_t out;size_t used=0;if(!digit_controlled_message_valid(id,origin,body))return 0;memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);snprintf(in.origin,sizeof(in.origin),"%s",origin);snprintf(in.body,sizeof(in.body),"%s",body);if(!interface_invoke(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)||!out.appended)return 0;if(message)*message=out.message;return 1;}
 static void interface_message_post(int client,const char *id,const char *body,const char *identity){digit_channel_message_t message;char origin[DIGIT_CHANNEL_ORIGIN_MAX],item[9000],json[9300];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!interface_message_append(id,origin,body,&message)){interface_reply(client,400,"{\"error\":\"message not appended\"}\n");return;}interface_message_json(&message,item,sizeof(item));{char receipt[256];if(!digit_controlled_receipt(&message,id,origin,receipt,sizeof(receipt))){interface_reply(client,503,"{\"error\":\"Core acknowledgement inconsistent\"}\n");return;}snprintf(json,sizeof(json),"{\"appended\":true,\"receipt\":%s,\"message\":%s}\n",receipt,item);}interface_reply(client,200,json);}
 static void interface_channel_ask(int client,const char *id,const char *body,const char *identity){interface_dispatcher_result_t out;interface_builder_result_t learned;digit_channel_message_t operator_message,digit_message;char answer[768],escaped[8192],er[512],eid[160],json[11000];const char *learn;char origin[DIGIT_CHANNEL_ORIGIN_MAX];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}if(!interface_message_append(id,origin,body,&operator_message)){interface_reply(client,404,"{\"error\":\"channel unavailable\"}\n");return;}learn=interface_learn_text(body);if(learn){int result=interface_process_learn(learn,&learned,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}if(!interface_message_append(id,"digit",answer,&digit_message)){interface_reply(client,503,"{\"error\":\"learning completed but channel persistence failed\"}\n");return;}interface_json_escape(answer,escaped,sizeof(escaped));interface_json_escape(learned.reason,er,sizeof(er));interface_json_escape(learned.record_id,eid,sizeof(eid));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",id,escaped,learned.stored?"true":"false",eid,learned.category,learned.confidence,er);interface_reply(client,200,json);return;}interface_dispatch(body,&out);if(out.answer[0]&&!interface_message_append(id,"digit",out.answer,&digit_message)){snprintf(out.answer,sizeof(out.answer),"I completed the request, but I couldn't persist my response to this channel.");}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",id,out.answered?"true":"false",escaped);interface_reply(client,200,json);}
-static void interface_alerts_list(int client,int unacknowledged){digit_alert_list_request_t in;digit_alert_list_response_t out;size_t used=0,off=0,i;char json[INTERFACE_BUFFER_MAX];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));in.unacknowledged_only=unacknowledged;if(!interface_invoke(DIGIT_ALERT_SERVICE_LIST,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}off=(size_t)snprintf(json,sizeof(json),"{\"count\":%zu,\"unacknowledged_only\":%s,\"alerts\":[",out.count,unacknowledged?"true":"false");for(i=0;i<out.count;++i){char item[4000];int w;if(!interface_alert_json(&out.alerts[i],item,sizeof(item)))return;w=snprintf(json+off,sizeof(json)-off,"%s%s",i?",":"",item);if(w<=0||(size_t)w>=sizeof(json)-off)return;off+=(size_t)w;}snprintf(json+off,sizeof(json)-off,"]}\n");interface_reply(client,200,json);}
+/* [AI:GPT-6 | 2026-10-08] 1.4.8: fail closed on Core
+ * alert-list count, identity, provenance, and serialization errors. */
+static void interface_alerts_list(int client,int unacknowledged)
+{
+    digit_alert_list_request_t in;
+    digit_alert_list_response_t out;
+    size_t used=0,off=0,i;
+    char json[INTERFACE_BUFFER_MAX];
+    int written;
+    memset(&in,0,sizeof(in));
+    memset(&out,0,sizeof(out));
+    in.unacknowledged_only=unacknowledged;
+    if(!interface_invoke(DIGIT_ALERT_SERVICE_LIST,&in,sizeof(in),
+                         &out,sizeof(out),&used) || used!=sizeof(out)){
+        interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");
+        return;
+    }
+    if(!digit_interface_alerts_valid(out.alerts,out.count,
+                                     DIGIT_CORE_SERVICE_ALERT_LIST_MAX,
+                                     unacknowledged)){
+        interface_reply(client,503,"{\"error\":\"invalid alert list\"}\n");
+        return;
+    }
+    written=snprintf(json,sizeof(json),
+                     "{\"count\":%zu,\"unacknowledged_only\":%s,\"alerts\":[",
+                     out.count,unacknowledged?"true":"false");
+    if(written<0 || (size_t)written>=sizeof(json))goto invalid;
+    off=(size_t)written;
+    for(i=0;i<out.count;++i){
+        char item[4000];
+        if(!interface_alert_json(&out.alerts[i],item,sizeof(item)))goto invalid;
+        written=snprintf(json+off,sizeof(json)-off,"%s%s",i?",":"",item);
+        if(written<0 || (size_t)written>=sizeof(json)-off)goto invalid;
+        off+=(size_t)written;
+    }
+    written=snprintf(json+off,sizeof(json)-off,"]}\n");
+    if(written<0 || (size_t)written>=sizeof(json)-off)goto invalid;
+    interface_reply(client,200,json);
+    return;
+invalid:
+    interface_reply(client,503,"{\"error\":\"alert list serialization failed\"}\n");
+}
 static void interface_alert_get(int client,const char *id){digit_alert_get_request_t in;digit_alert_get_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_GET,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"found\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 static void interface_alert_ack(int client,const char *id){digit_alert_acknowledge_request_t in;digit_alert_acknowledge_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.acknowledged){interface_reply(client,404,"{\"acknowledged\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"acknowledged\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 
@@ -426,5 +468,5 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 }
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
