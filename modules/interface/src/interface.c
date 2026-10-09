@@ -603,6 +603,37 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
  * boundary. A partial failure is reported, never presented as success. */
 /* [AI:GPT-6 | 2026-10-09] Strict same-organization SA roster.
  * Role assignment requires pre-existing qualifications and current SA. */
+/* [AI:GPT-6 | 2026-10-09] SA-authorized restricted project member directory. */
+if(strncmp(request,"POST /admin/project-members HTTP/1.1\r\n",
+ sizeof("POST /admin/project-members HTTP/1.1\r\n")-1U)==0){
+ char org[64],project[64],json[16384];const char *tab;
+ size_t on,pn,i;
+ if(!body||(tab=strchr(body,'\t'))==NULL||strchr(tab+1,'\t')||
+    strchr(body,'\r')||strchr(body,'\n')){
+  interface_reply(client,400,"{\"error\":\"invalid member scope\"}\n");return;
+ }
+ on=(size_t)(tab-body);pn=strlen(tab+1);
+ if(!on||!pn||on>=sizeof(org)||pn>=sizeof(project)){
+  interface_reply(client,400,"{\"error\":\"invalid member scope\"}\n");return;
+ }
+ for(i=0;i<on+pn;i++){
+  unsigned char c=(unsigned char)(i<on?body[i]:tab[1+i-on]);
+  if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+       (c>='0'&&c<='9')||c=='-'||c=='_')){
+   interface_reply(client,400,"{\"error\":\"invalid member scope\"}\n");return;
+  }
+ }
+ memcpy(org,body,on);org[on]=0;memcpy(project,tab+1,pn);project[pn]=0;
+ if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)||
+    !digit_project_security_member(DIGIT_PROJECT_ROOT,org,project,identity)){
+  interface_reply(client,403,"{\"error\":\"project SA membership required\"}\n");return;
+ }
+ if(!digit_project_members_json(DIGIT_PROJECT_ROOT,org,project,identity,
+      DIGIT_SECURITY_SA_REGISTRY,json,sizeof(json))){
+  interface_reply(client,503,"{\"error\":\"project member directory unavailable\"}\n");return;
+ }
+ interface_reply(client,200,json);return;
+}
 if(strncmp(request,"POST /admin/sa HTTP/1.1\r\n",sizeof("POST /admin/sa HTTP/1.1\r\n")-1U)==0){
     char command[12],org[64],user[64],json[8192];
     char *one,*two;
