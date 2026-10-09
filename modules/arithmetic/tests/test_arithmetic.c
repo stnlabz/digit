@@ -44,7 +44,7 @@ int main(void){
    {"Digit what is 1 / 0.5?","1 / 0.5 = 2.",DIGIT_ARITHMETIC_OK},
    {"Digit what is 1 / 0.0?","",DIGIT_ARITHMETIC_DIVIDE_BY_ZERO},
    {"Digit what is 1 / 0.0001?","",DIGIT_ARITHMETIC_OUT_OF_RANGE},
-   {"Digit what is 2.5 + 1 + 1?","",DIGIT_ARITHMETIC_INVALID}
+   {"Digit what is 2.5 + 1 + 1?","Result = 4.5.",DIGIT_ARITHMETIC_OK}
   };
   size_t i;
   for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
