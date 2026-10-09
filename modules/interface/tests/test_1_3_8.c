@@ -39,16 +39,18 @@ int main(void){
           "unsupported HTTP version rejected");
     check(!accepts("GET /health HTTP/1.1\r\nHost localhost\r\n\r\n",65536,0),
           "malformed header denied");
-    check(!accepts(base,strlen(base)+1,0),
+    check(!accepts(base,strlen(base),0),
           "insufficient request buffer denied");
     memset(huge,'a',sizeof(huge));
     memcpy(huge,"GET /health HTTP/1.1\r\nX-Large: ",31);
-    memcpy(huge+sizeof(huge)-4,"\r\n\r\n",4);
+    memcpy(huge+sizeof(huge)-5,"\r\n\r\n",4);
+    huge[sizeof(huge)-1]=0;
     check(!accepts(huge,65536,0),"header over 8 KiB rejected");
     strcpy(nul,"GET /health HTTP/1.1\r\nHost: a\r\n\r\n");
     nul[24]=0;
     {
-        size_t len=strlen("GET /health HTTP/1.1\\r\\nHost: a\\r\\n\\r\\n")-2;\n        size_t body=0;
+        size_t len=strlen("GET /health HTTP/1.1\r\nHost: a\r\n\r\n")-2;
+        size_t body=0;
         check(!digit_http_limits_headers(nul,len,65536,&body),
               "embedded NUL header denied");
     }
