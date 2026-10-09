@@ -268,9 +268,13 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
     snprintf(output.answer,sizeof(output.answer),"Arithmetic service is unavailable.");
    }else if(arithmetic_result.status==DIGIT_ARITHMETIC_DIVIDE_BY_ZERO){
     snprintf(output.answer,sizeof(output.answer),"Division by zero is undefined.");
+   }else if(arithmetic_result.status==DIGIT_ARITHMETIC_OUT_OF_RANGE){
+    /* [AI:GPT-6 | 2026-10-09] Preserve the provider's precision boundary. */
+    snprintf(output.answer,sizeof(output.answer),
+     "I cannot represent this result within my current arithmetic precision limits.");
    }else if(arithmetic_result.status!=DIGIT_ARITHMETIC_OK){
     snprintf(output.answer,sizeof(output.answer),
-     "I cannot evaluate that arithmetic expression within the supported two-operand integer limits.");
+     "I cannot evaluate that arithmetic expression within my supported mathematical capabilities.");
    }else if(arithmetic_result.decimal_answer[0]){
     snprintf(output.answer,sizeof(output.answer),"%s",arithmetic_result.decimal_answer);
    }else if(arithmetic_result.operation=='/'&&arithmetic_result.remainder!=0){
@@ -347,5 +351,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
