@@ -132,7 +132,7 @@ $(ALERT_EXACT_TEST_TARGET): tests/test_1_4_9.c src/alert_results.c includes/aler
 $(CHANNEL_TEST_TARGET): tests/test_1_4_10.c src/channel_results.c includes/channel_results.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_10.c src/channel_results.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_5_0.c src/corpus_response.c src/knowledge_query.c includes/corpus_response.h | bin
+$(CORPUS_BASE_TEST_TARGET): tests/test_1_5_0.c src/corpus_response.c src/knowledge_query.c includes/corpus_response.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_0.c src/corpus_response.c src/knowledge_query.c -o $@
 
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
