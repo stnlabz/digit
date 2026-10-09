@@ -144,6 +144,26 @@ int main(int argc, char **argv)
         }
     }
 
+    /* [AI:GPT-6 | 2026-10-09] Verify full-size requests cannot be
+     * shortened into a different, actionable instruction. */
+    {
+        char full[DIGIT_INTENT_TEXT_MAX+16];
+        digit_intent_result_t interpreted;
+        memset(full,'x',sizeof(full));
+        memcpy(full,"build ",6);
+        full[sizeof(full)-1]='\0';
+        digit_intent_interpret(full,&interpreted);
+        if(interpreted.established||
+           interpreted.intent!=DIGIT_INTENT_UNKNOWN){
+            fprintf(stderr,"FAIL oversized command boundary\\n");++failures;
+        }
+        memset(full,'x',sizeof(full));
+        full[DIGIT_INTENT_TEXT_MAX-1]='\0';
+        digit_intent_interpret(full,&interpreted);
+        if(interpreted.established){
+            fprintf(stderr,"FAIL max-length unknown handling\\n");++failures;
+        }
+    }
     if (failures != 0)
     {
         fprintf(stderr, "Intent qualification tests failed: %d\n", failures);
