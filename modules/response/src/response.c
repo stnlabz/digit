@@ -404,7 +404,19 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
  passed+=(unsigned)!question_like_record("what is your mission?","Unrelated module build status");
  passed+=(unsigned)arithmetic_question("What is 2 plus 2?");
  passed+=(unsigned)!arithmetic_question("Compare C and Python");
- result->tests_executed=12;result->tests_passed=passed;
+ /* [AI:GPT-6 | 2026-10-09] Real extraction tests: lesson wording is
+  * interpreted as a response instruction, not echoed to the operator. */
+ {
+  corpus_record_t lesson={0};
+  snprintf(lesson.text,sizeof(lesson.text),
+    "If I was asked who I was, to say that My Name is Digit and I am the STN-LABZ Autonomous AI Agent.");
+  passed+=(unsigned)(learned_self_identity_answer("Who are you?",&lesson,answer,sizeof(answer))&&
+    strcmp(answer,"My Name is Digit and I am the STN-LABZ Autonomous AI Agent.")==0);
+  passed+=(unsigned)!learned_self_identity_answer("What is a variable?",&lesson,answer,sizeof(answer));
+  snprintf(lesson.text,sizeof(lesson.text),"A variable is an object with a name.");
+  passed+=(unsigned)!learned_self_identity_answer("Who are you?",&lesson,answer,sizeof(answer));
+ }
+ result->tests_executed=15;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
