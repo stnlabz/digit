@@ -500,8 +500,10 @@ static stnlabz_module_result_t arithmetic_qualify(stnlabz_module_qualification_r
    if(status==DIGIT_ARITHMETIC_OK &&
       strcmp(r.decimal_answer,quadratics[i].answer)==0)++passed;
   }
+  if(evaluate("solve 10000*x^2 - 0.001 = 0",&r)==DIGIT_ARITHMETIC_OUT_OF_RANGE)
+   ++passed;
  }
- qualification->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0])+4);
+ qualification->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0])+5);
  qualification->tests_passed=passed;
  qualification->tests_failed=qualification->tests_executed-passed;
  qualification->negative_test_executed=1;
