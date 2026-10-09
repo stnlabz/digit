@@ -358,7 +358,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     snprintf(record.text,sizeof(record.text),"evidence");
     tests[0]=digit_knowledge_query_valid("valid query");
     tests[1]=!digit_knowledge_query_valid("");
-    tests[2]=!digit_knowledge_query_valid("bad\\nquery");
+    tests[2]=!digit_knowledge_query_valid("bad\nquery");
     tests[3]=digit_knowledge_record_id_valid(record.id);
     tests[4]=!digit_knowledge_record_id_valid("../invalid");
     tests[5]=digit_knowledge_record_valid(&record);
