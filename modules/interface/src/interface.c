@@ -522,7 +522,7 @@ if(strncmp(request,"GET /admin/projects?organization=",
     if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)){
         interface_reply(client,403,"{\"error\":\"organization SA assignment required\"}\n");return;
     }
-    if(!digit_project_list_scoped(DIGIT_PROJECT_ROOT,org,json,sizeof(json))){
+    if(!digit_project_list_scoped(DIGIT_PROJECT_ROOT,org,identity,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"project inventory unavailable\"}\n");return;
     }
     interface_reply(client,200,json);return;
