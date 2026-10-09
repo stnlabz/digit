@@ -116,8 +116,27 @@ static stnlabz_module_result_t lesson_ingest_service(const void *request,size_t 
 
 static stnlabz_module_result_t lesson_qualify(stnlabz_module_qualification_result_t *result)
 {
+    /* [AI:GPT-6 | 2026-10-09] Execute deterministic qualification
+     * without touching production lesson files or Corpus services. */
+    static const struct { const char *name; int allowed; } cases[]={
+        {"lesson-one",1},{"unit_2",1},{"A3",1},
+        {"../unsafe",0},{"two words",0},{"",0},
+        {"lesson.txt",0},{"a/b",0},{"name\\\\other",0},
+        {"one:two",0}
+    };
+    size_t i;unsigned int passed=0;
     if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result,0,sizeof(*result));result->tests_executed=10;result->tests_passed=10;result->negative_test_executed=1;result->negative_test_passed=1;return STNLABZ_MODULE_OK;
+    memset(result,0,sizeof(*result));
+    for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i)
+        if(safe_name(cases[i].name)==cases[i].allowed)++passed;
+    result->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0]));
+    result->tests_passed=passed;
+    result->tests_failed=result->tests_executed-result->tests_passed;
+    result->negative_test_executed=1;
+    result->negative_test_passed=
+      lesson_ingest_service(NULL,0,NULL,0,NULL,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    return result->tests_failed||!result->negative_test_passed?
+      STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t lesson_start(const stnlabz_module_host_t *host)
@@ -136,5 +155,5 @@ static stnlabz_module_result_t lesson_stop(void)
     lesson_host=NULL;return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t lesson_descriptor={"lesson","Digit Lesson",1,1,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,lesson_qualify,lesson_start,lesson_stop};
+static const stnlabz_module_descriptor_t lesson_descriptor={"lesson","Digit Lesson",1,1,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,lesson_qualify,lesson_start,lesson_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &lesson_descriptor;}
