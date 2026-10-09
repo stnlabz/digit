@@ -116,20 +116,36 @@ static int learned_word(const char *word,char *out,size_t cap)
         if(n){memcpy(out,p,n);out[n]=0;return 1;}
     } return 0;
 }
-static void learned_text(const char *in,char *out,size_t cap)
+/* [AI:GPT-6 | 2026-10-09] Never classify silently truncated requests.
+ * If a learned substitution expands past the ABI boundary, fail closed. */
+static int learned_text(const char *in,char *out,size_t cap)
 {
-    const char *p=in; size_t used=0; if(!out||!cap)return; out[0]=0;
-    while(p&&*p&&used+1<cap){
-        if(isalnum((unsigned char)*p)||*p=='_'||*p=='-'){
-            const char *s=p; char w[128],r[128]; size_t n;
-            while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))p++;
-            n=(size_t)(p-s); if(n>=sizeof(w))n=sizeof(w)-1; memcpy(w,s,n);w[n]=0;
-            if(learned_word(w,r,sizeof(r))){s=r;n=strlen(r);}
-            if(n>=cap-used)n=cap-used-1;
-            memcpy(out+used,s,n);
-            used+=n;
-        }else out[used++]=*p++;
-    } out[used]=0;
+ const char *p=in;size_t used=0;
+ if(!in||!out||cap==0)return 0;
+ out[0]=0;
+ while(*p){
+  if(isalnum((unsigned char)*p)||*p=='_'||*p=='-'){
+   const char *start=p,*value;
+   char word[128],replacement[128];
+   size_t length,copy_length;
+   while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))++p;
+   length=(size_t)(p-start);
+   value=start;copy_length=length;
+   if(length<sizeof(word)){
+    memcpy(word,start,length);word[length]=0;
+    if(learned_word(word,replacement,sizeof(replacement))){
+     value=replacement;copy_length=strlen(replacement);
+    }
+   }
+   if(copy_length>=cap-used)return 0;
+   memcpy(out+used,value,copy_length);used+=copy_length;
+  }else{
+   if(used+1>=cap)return 0;
+   out[used++]=*p++;
+  }
+ }
+ out[used]=0;
+ return 1;
 }
 
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
@@ -155,7 +171,12 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if (result == NULL) return;
     memset(result, 0, sizeof(*result));
     if (text == NULL || text[0] == '\0') { set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established."); return; }
-    learned_text(text,interpreted,sizeof(interpreted));
+    if(strlen(text)>=sizeof(interpreted) ||
+       !learned_text(text,interpreted,sizeof(interpreted))){
+        set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,
+                   "Request exceeds the interpretation boundary.");
+        return;
+    }
     text=interpreted;
     action=starts_with_command(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
     status=any_word(text,status_words,sizeof(status_words)/sizeof(status_words[0]));
@@ -266,6 +287,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
         {"ingest lesson-one", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
+        {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
     };
@@ -310,7 +332,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 4,
+    "intent", "Digit Intent", 1, 1, 5,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
