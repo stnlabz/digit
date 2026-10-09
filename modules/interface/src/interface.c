@@ -9,11 +9,13 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 #include "interface.h"
 #include "session_store.h"
 #include "http_auth.h"
+#include "http_limits.h"
 #include "account_auth.h"
 #include "channel_acl.h"
 #include "project_channel_bridge.h"
@@ -62,8 +64,38 @@ static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){c
 static int interface_message_json(const digit_channel_message_t *v,char *out,size_t n){char id[160],cid[160],origin[100],body[8192];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->channel_id,cid,sizeof(cid));interface_json_escape(v->origin,origin,sizeof(origin));interface_json_escape(v->body,body,sizeof(body));w=snprintf(out,n,"{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"%s\",\"body\":\"%s\"}",id,cid,v->created_at,origin,body);return w>0&&(size_t)w<n;}
 static int interface_alert_json(const digit_alert_t *v,char *out,size_t n){char id[160],source[200],summary[600],detail[2200],state[100];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->source,source,sizeof(source));interface_json_escape(v->summary,summary,sizeof(summary));interface_json_escape(v->detail,detail,sizeof(detail));interface_json_escape(v->operational_state,state,sizeof(state));w=snprintf(out,n,"{\"id\":\"%s\",\"created_at\":%llu,\"severity\":\"%s\",\"source\":\"%s\",\"summary\":\"%s\",\"detail\":\"%s\",\"operational_state\":\"%s\",\"acknowledged\":%s,\"acknowledged_at\":%llu}",id,v->created_at,interface_alert_severity_string(v->severity),source,summary,detail,state,v->acknowledged?"true":"false",v->acknowledged_at);return w>0&&(size_t)w<n;}
 static const char *interface_learn_text(const char *text){const char *p=text;static const char command[]="learn,";size_t i;if(!p)return NULL;while(*p&&isspace((unsigned char)*p))++p;for(i=0;i<sizeof(command)-1;++i)if(tolower((unsigned char)p[i])!=(unsigned char)command[i])return NULL;p+=sizeof(command)-1;while(*p&&isspace((unsigned char)*p))++p;return *p?p:NULL;}
-static int interface_content_length(const char *request,const char *header_end,size_t *length){const char *p=request;*length=0;while(p<header_end){const char *line_end=strstr(p,"\r\n");const char *value;char *endptr;unsigned long parsed;if(!line_end||line_end>header_end)break;if(strncasecmp(p,"Content-Length:",15)==0){value=p+15;while(value<line_end&&isspace((unsigned char)*value))++value;if(value==line_end)return 0;errno=0;parsed=strtoul(value,&endptr,10);if(errno!=0||endptr==value||endptr!=line_end||parsed>=INTERFACE_BUFFER_MAX)return 0;*length=(size_t)parsed;return 1;}p=line_end+2;}return 1;}
-static ssize_t interface_receive_request(int client,char *request,size_t capacity){size_t total=0,content_length=0,header_size=0;char *header_end=NULL;while(total+1<capacity){ssize_t received=recv(client,request+total,capacity-total-1,0);if(received<=0)return received<0?-1:(ssize_t)total;total+=(size_t)received;request[total]=0;if(!header_end){header_end=strstr(request,"\r\n\r\n");if(header_end){header_size=(size_t)(header_end-request)+4;if(!interface_content_length(request,header_end,&content_length))return -2;if(header_size+content_length>=capacity)return -2;}}if(header_end&&total>=header_size+content_length)return (ssize_t)total;}return -2;}
+/* [AI:GPT-6 | 2026-10-08] 1.3.8: bounded framing and closed
+ * request lifecycle. Partial, ambiguous or timed-out input is invalid. */
+static ssize_t interface_receive_request(int client,char *request,size_t capacity)
+{
+    size_t total=0,content_length=0,required=0;
+    char *end=NULL;
+    if(!request||capacity<2)return -2;
+    request[0]=0;
+    while(total+1<capacity){
+        ssize_t got=recv(client,request+total,capacity-total-1,0);
+        if(got<=0)return total>0?-2:got;
+        if(memchr(request+total,0,(size_t)got)!=NULL)return -2;
+        total+=(size_t)got;
+        request[total]=0;
+        if(!end){
+            end=strstr(request,"\r\n\r\n");
+            if(!end){
+                if(total>DIGIT_HTTP_HEADER_MAX+4)return -2;
+                continue;
+            }
+            {
+                size_t header_length=(size_t)(end-request)+2;
+                if(!digit_http_limits_headers(request,header_length,capacity,
+                                             &content_length))return -2;
+                required=header_length+2+content_length;
+            }
+        }
+        if(total>required)return -2;
+        if(total==required)return (ssize_t)total;
+    }
+    return -2;
+}
 static int interface_path_value(const char *request,const char *prefix,char *out,size_t n){const char *start=request+strlen(prefix),*end=strchr(start,' ');size_t len;if(!end||end==start)return 0;len=(size_t)(end-start);if(len>=n)return 0;memcpy(out,start,len);out[len]=0;return 1;}
 static int interface_path_two(const char *request,const char *prefix,char *first,size_t fn,const char *suffix){const char *start=request+strlen(prefix),*slash=strchr(start,'/'),*line_end=strstr(request,"\r\n");size_t len,suffix_len;if(!slash||!line_end||slash>=line_end)return 0;suffix_len=strlen(suffix);if((size_t)(line_end-slash)!=suffix_len||strncmp(slash,suffix,suffix_len)!=0)return 0;len=(size_t)(slash-start);if(!len||len>=fn)return 0;memcpy(first,start,len);first[len]=0;return 1;}
 static int interface_invoke(const char *service,const void *in,size_t in_size,void *out,size_t out_size,size_t *used){if(!interface_host||!interface_host->invoke_service)return 0;return interface_host->invoke_service(service,in,in_size,out,out_size,used)==STNLABZ_MODULE_OK;}
@@ -189,7 +221,9 @@ if(strncmp(request,"POST /input ",12)==0){interface_builder_request_t in;interfa
 if(strncmp(request,"POST /reason ",13)==0){interface_reasoning_result_t out;size_t used=0;char er[512],json[1024];if(!body||!body[0]){interface_reply(client,400,"{\"error\":\"empty input\"}\n");return;}memset(&out,0,sizeof(out));if(!interface_invoke(REASONING_SERVICE,body,strlen(body)+1,&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"reasoning service unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));snprintf(json,sizeof(json),"{\"relevance\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",interface_relevance_string(out.relevance),interface_category_string(out.category),out.confidence,er);interface_reply(client,200,json);return;}
 interface_reply(client,404,"{\"error\":\"unknown endpoint\"}\n");}
 
-static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}interface_handle(client);close(client);}return NULL;}
+static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}{struct timeval timeout={5,0};
+        (void)setsockopt(client,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+        interface_handle(client);close(client);}}return NULL;}
 static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
