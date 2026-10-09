@@ -8,7 +8,7 @@ static int reg(const char *name,stnlabz_module_service_handler_fn fn,void *conte
  (void)context;if(strcmp(name,DIGIT_ARITHMETIC_SERVICE))return 0;handler=fn;return 1;
 }
 static int unreg(const char *name,void *context){
- (void)context;return strcmp(name,DIGIT_ARITHMETIC_SERVICE)==0?0:1;
+ (void)context;return strcmp(name,DIGIT_ARITHMETIC_SERVICE)==0?1:0;
 }
 static unsigned int checks,failures;
 static void check(int condition,const char *name){
