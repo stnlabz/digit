@@ -289,7 +289,10 @@ static polynomial_t poly_power(poly_parser_t *parser){
   if(*parser->p!='2'){parser->status=DIGIT_ARITHMETIC_INVALID;return v;}
   ++parser->p;degree=2;
   (void)degree;
-  if(v.c[2]||v.c[1]*v.c[1]>POLY_COEFF_LIMIT*DECIMAL_SCALE){
+  if(v.c[2]){
+   parser->status=DIGIT_ARITHMETIC_INVALID;return v;
+  }
+  if(v.c[1]*v.c[1]>POLY_COEFF_LIMIT*DECIMAL_SCALE){
    parser->status=DIGIT_ARITHMETIC_OUT_OF_RANGE;return v;
   }
   square.c[2]=v.c[1]*v.c[1]/DECIMAL_SCALE;
@@ -389,8 +392,13 @@ static digit_arithmetic_status_t evaluate_polynomial(const char *expression,digi
  root2=(-b+(int64_t)square_root)*DECIMAL_SCALE/(2*a);
  if(root1>root2){int64_t temp=root1;root1=root2;root2=temp;}
  fixed_text(root1,first,sizeof(first));fixed_text(root2,second,sizeof(second));
- if(root1==root2)
+ /* [AI:GPT-6 | 2026-10-09] Discriminant, not formatted
+  * root equality, determines whether a root is repeated. Two distinct
+  * roots that collapse at 0.001 precision cannot be reported as one. */
+ if(delta==0)
   snprintf(result->decimal_answer,sizeof(result->decimal_answer),"x = %s.",first);
+ else if(root1==root2)
+  return DIGIT_ARITHMETIC_OUT_OF_RANGE;
  else snprintf(result->decimal_answer,sizeof(result->decimal_answer),
   "%sx = %s and x = %s.",
   square_root*square_root==(uint64_t)delta?"":"Approximately: ",first,second);
@@ -517,7 +525,7 @@ static stnlabz_module_result_t arithmetic_stop(void){
  arithmetic_host=NULL;return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "arithmetic","Digit Arithmetic",1,3,0,
+ "arithmetic","Digit Arithmetic",1,3,1,
  STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  arithmetic_qualify,arithmetic_start,arithmetic_stop
 };
