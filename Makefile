@@ -27,6 +27,7 @@ TEST_AUTHORITY := build/test_authority
 TEST_SACRIFICIAL := build/test_sacrificial
 TEST_RUNTIME := build/test_runtime
 TEST_AUDIT := build/test_audit
+TEST_CORE_SA := build/test_core_sa
 
 PREFIX ?= /opt/digit
 BINDIR := $(PREFIX)/bin
@@ -48,7 +49,8 @@ DIGIT_SOURCES := \
 	src/service_registry.c \
 	src/channel.c \
 	src/alert.c \
-	src/core_services.c
+	src/core_services.c \
+	src/core_sa.c
 
 ABI_SOURCES := \
 	$(ABI_SRC)/abi.c \
@@ -130,10 +132,13 @@ $(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIF
 $(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
+$(TEST_CORE_SA): tests/test_core_sa.c src/core_sa.c include/core_sa.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_core_sa.c src/core_sa.c -o $@
+
 $(TEST_AUDIT): tests/test_audit.c src/audit.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_audit.c src/audit.c -o $@
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME) $(TEST_AUDIT)
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME) $(TEST_AUDIT) $(TEST_CORE_SA)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
 	./$(TEST_SERVICE_REGISTRY)
@@ -143,6 +148,7 @@ test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) 
 	./$(TEST_SACRIFICIAL)
 	./$(TEST_RUNTIME)
 	./$(TEST_AUDIT)
+	./$(TEST_CORE_SA)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
