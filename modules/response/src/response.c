@@ -67,6 +67,35 @@ static int question_like_record(const char *question,const char *record_text){ch
 static int ordinal_token_value(const char *word){static const char *ordinal[][2]={{"first","1st"},{"second","2nd"},{"third","3rd"},{"fourth","4th"},{"fifth","5th"},{"sixth","6th"},{"seventh","7th"},{"eighth","8th"},{"ninth","9th"},{"tenth","10th"}};size_t i,j;for(i=0;i<sizeof(ordinal)/sizeof(ordinal[0]);++i)for(j=0;j<2;++j)if(strcmp(word,ordinal[i][j])==0)return (int)i+1;return 0;}
 static int cardinal_token_value(const char *word){static const char *cardinal[][2]={{"one","1"},{"two","2"},{"three","3"},{"four","4"},{"five","5"},{"six","6"},{"seven","7"},{"eight","8"},{"nine","9"},{"ten","10"}};size_t i,j;for(i=0;i<sizeof(cardinal)/sizeof(cardinal[0]);++i)for(j=0;j<2;++j)if(strcmp(word,cardinal[i][j])==0)return (int)i+1;return 0;}
 static int reference_value(const char *text){char list[TERM_COUNT][TERM_MAX];size_t n,i;int value;memset(list,0,sizeof(list));n=terms(text,list);for(i=0;i<n;++i)if((value=ordinal_token_value(list[i]))>0)return value;for(i=0;i<n;++i){value=cardinal_token_value(list[i]);if(value==0)continue;if(i>0&&(strcmp(list[i-1],"number")==0||strcmp(list[i-1],"no")==0||strcmp(list[i-1],"order")==0||strcmp(list[i-1],"item")==0||strcmp(list[i-1],"rule")==0||strcmp(list[i-1],"step")==0))return value;if(i+1<n&&(strcmp(list[i+1],"number")==0||strcmp(list[i+1],"order")==0||strcmp(list[i+1],"item")==0||strcmp(list[i+1],"rule")==0||strcmp(list[i+1],"step")==0))return value;}return 0;}
+/* [AI:GPT-6 | 2026-10-09] Do not substitute unrelated retrieved arithmetic
+ * text for a calculation. No arithmetic executor is registered here. */
+static int arithmetic_question(const char *text){
+ char token[64];size_t i=0,j=0;int operands=0,operation=0;
+ if(!text)return 0;
+ for(;;){
+  unsigned char c=(unsigned char)text[i++];
+  if(isalnum(c)){if(j+1<sizeof(token))token[j++]=(char)tolower(c);}
+  else {
+   if(j){
+    token[j]=0;
+    if(!strcmp(token,"plus")||!strcmp(token,"minus")||
+       !strcmp(token,"times")||!strcmp(token,"multiply")||
+       !strcmp(token,"divided")||!strcmp(token,"add")||
+       !strcmp(token,"subtract"))operation=1;
+    if(isdigit((unsigned char)token[0])||!strcmp(token,"one")||
+       !strcmp(token,"two")||!strcmp(token,"three")||
+       !strcmp(token,"four")||!strcmp(token,"five")||
+       !strcmp(token,"six")||!strcmp(token,"seven")||
+       !strcmp(token,"eight")||!strcmp(token,"nine")||
+       !strcmp(token,"ten"))operands++;
+    j=0;
+   }
+   if(c=='+'||c=='-'||c=='*'||c=='/')operation=1;
+   if(!c)break;
+  }
+ }
+ return operation&&operands>=2;
+}
 static int conversational_greeting(const char *input,char *answer,size_t answer_size){char normalized[128];size_t i=0,o=0;const char *reply=NULL;if(input==NULL||answer==NULL||answer_size==0)return 0;while(input[i]!='\0'&&isspace((unsigned char)input[i]))++i;while(input[i]!='\0'&&o+1<sizeof(normalized)){unsigned char ch=(unsigned char)input[i++];if(isalnum(ch))normalized[o++]=(char)tolower(ch);else if(isspace(ch)&&o>0&&normalized[o-1]!=' ')normalized[o++]=' ';}while(o>0&&normalized[o-1]==' ')--o;normalized[o]='\0';if(strcmp(normalized,"good morning")==0)reply="Good morning.";else if(strcmp(normalized,"good afternoon")==0)reply="Good afternoon.";else if(strcmp(normalized,"good evening")==0)reply="Good evening.";else if(strcmp(normalized,"hello")==0||strcmp(normalized,"hi")==0||strcmp(normalized,"hey")==0||strcmp(normalized,"hello digit")==0||strcmp(normalized,"hi digit")==0||strcmp(normalized,"hey digit")==0)reply="Hello.";if(reply==NULL)return 0;snprintf(answer,answer_size,"%s",reply);return 1;}
 typedef struct { char intent[32]; char target[32]; char subject[256]; char request[DIGIT_RESPONSE_QUESTION_MAX]; int structured; } response_intent_t;
 static void trim_line(char *text){size_t n;if(text==NULL)return;n=strlen(text);while(n>0&&(text[n-1]=='\r'||text[n-1]=='\n'||isspace((unsigned char)text[n-1])))text[--n]='\0';}
@@ -212,7 +241,15 @@ static int validate_inbound(const char *raw,char *normalized,size_t normalized_s
 static void validator_evidence(ranked_record_t selected[SELECTED_MAX],size_t selected_count,char *buffer,size_t buffer_size){size_t i,offset=0;if(buffer==NULL||buffer_size==0)return;buffer[0]='\0';for(i=0;i<selected_count&&offset+1<buffer_size;++i){int written=snprintf(buffer+offset,buffer_size-offset,"%s%s",i?"\n":"",selected[i].record.text);if(written<=0||(size_t)written>=buffer_size-offset)break;offset+=(size_t)written;}}
 static int validate_outbound_evidence(const char *raw,const char *normalized,const char *candidate,const char *evidence,unsigned int attempt,validator_outbound_result_t *validation){validator_outbound_request_t request;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||candidate==NULL||validation==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(validation,0,sizeof(*validation));snprintf(request.raw,sizeof(request.raw),"%s",raw);snprintf(request.normalized,sizeof(request.normalized),"%s",normalized);snprintf(request.candidate,sizeof(request.candidate),"%s",candidate);if(evidence!=NULL)snprintf(request.evidence,sizeof(request.evidence),"%s",evidence);request.attempt=attempt;status=response_host->invoke_service(VALIDATOR_OUTBOUND_SERVICE,&request,sizeof(request),validation,sizeof(*validation),&used);return status==STNLABZ_MODULE_OK&&used==sizeof(*validation);}
 static int validate_outbound(const char *raw,const char *normalized,const char *candidate,ranked_record_t selected[SELECTED_MAX],size_t selected_count,unsigned int attempt,validator_outbound_result_t *validation){char evidence[VALIDATOR_TEXT_MAX];memset(evidence,0,sizeof(evidence));validator_evidence(selected,selected_count,evidence,sizeof(evidence));return validate_outbound_evidence(raw,normalized,candidate,evidence,attempt,validation);}
-static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}memset(&evidence,0,sizeof(evidence));memset(selected,0,sizeof(selected));query=intent.structured?retrieval_text(&intent):normalized;
+static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* Bounded refusal rather than a wrong numeric answer from lexical evidence. */
+ if(arithmetic_question(normalized)){
+  output.answered=1;
+  snprintf(output.answer,sizeof(output.answer),
+   "I cannot verify that calculation: an arithmetic capability is not available through Response.");
+  memcpy(response,&output,sizeof(output));*response_used=sizeof(output);
+  return STNLABZ_MODULE_OK;
+ }
+ memset(&evidence,0,sizeof(evidence));memset(selected,0,sizeof(selected));query=intent.structured?retrieval_text(&intent):normalized;
     /* A quoted subject in an explicit knowledge request takes precedence over
      * framing instructions such as "in your own words". */
     {
@@ -250,7 +287,9 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
  passed+=(unsigned)quoted_expression("explain 'running on fumes'",phrase,sizeof(phrase))&&strcmp(phrase,"running on fumes")==0;
  passed+=(unsigned)complete_phrase_match("running on fumes","A lesson about running on fumes today");
  passed+=(unsigned)!question_like_record("what is your mission?","Unrelated module build status");
- result->tests_executed=10;result->tests_passed=passed;
+ passed+=(unsigned)arithmetic_question("What is 2 plus 2?");
+ passed+=(unsigned)!arithmetic_question("Compare C and Python");
+ result->tests_executed=12;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -259,5 +298,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,6,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
