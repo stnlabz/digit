@@ -57,6 +57,32 @@ int main(void) {
               "single-link security record restores membership");
     }
 
+    /* [AI:GPT-6 | 2026-10-08] A protected file with the wrong project
+     * identity must not count as a ready project. */
+    {
+        char metadata[320];
+        snprintf(metadata,sizeof(metadata),"%s/project.tsv",project);
+        f=fopen(metadata,"w");if(!f)return 1;
+        fputs("stn-labz\tother\tpoe\n",f);
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "mismatched project identity denied");
+        f=fopen(metadata,"w");if(!f)return 1;
+        fputs("stn-labz\tdigit\tbad/user\n",f);
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "malformed project administrator denied");
+        f=fopen(metadata,"w");if(!f)return 1;
+        fputs("stn-labz\tdigit\tpoe\nunexpected\n",f);
+        if(fclose(f)!=0)return 1;
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "multiple project metadata rows denied");
+        f=fopen(metadata,"w");if(!f)return 1;
+        fputs("stn-labz\tdigit\tpoe\n",f);
+        if(fclose(f)!=0)return 1;
+        check(digit_project_security_ready(root,"stn-labz","digit"),
+              "restored matching project identity accepted");
+    }
     chmod(security,0644);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"readable-by-others security record denied");
     chmod(security,0600);
