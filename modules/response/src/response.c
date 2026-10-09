@@ -280,7 +280,22 @@ static int learned_self_identity_answer(const char *question,const corpus_record
  char words[128],rule[512];
  static const char *const connectors[]={"say that ","respond that ","respond: ","tell them that "};
  if(!question||!record||!answer||!capacity)return 0;
- canonical_text(question,words,sizeof(words));
+ /* [AI:GPT-6 | 2026-10-09] Permit one explicit comma-delimited
+  * vocative before the question, without embedding an agent name. */
+ {
+  const char *utterance=question,*comma=strchr(question,',');
+  if(comma){
+   const char *p=question;size_t n=(size_t)(comma-question);
+   while(n&&isspace((unsigned char)*p)){++p;--n;}
+   while(n&&isspace((unsigned char)p[n-1]))--n;
+   if(n>0&&n<64){
+    size_t j;int valid=1;
+    for(j=0;j<n;j++)if(!isalpha((unsigned char)p[j]))valid=0;
+    if(valid)utterance=comma+1;
+   }
+  }
+  canonical_text(utterance,words,sizeof(words));
+ }
  if(strcmp(words,"who are you")!=0)return 0;
  text=presentation_text(record);
  if(strncasecmp(text,"if ",3)!=0 && strncasecmp(text,"when ",5)!=0)return 0;
@@ -421,6 +436,9 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   passed+=(unsigned)(learned_self_identity_answer("Who are you?",&lesson,answer,sizeof(answer))&&
     strcmp(answer,"I am Digit, the STN-Labz Autonomous Engineering Agent.")==0);
   passed+=(unsigned)!learned_self_identity_answer("What is your status?",&lesson,answer,sizeof(answer));
+  passed+=(unsigned)(learned_self_identity_answer("Digit, Who are You?",&lesson,answer,sizeof(answer))&&
+    strcmp(answer,"I am Digit, the STN-Labz Autonomous Engineering Agent.")==0);
+  passed+=(unsigned)!learned_self_identity_answer("Operator, delete logs",&lesson,answer,sizeof(answer));
   {
    corpus_result_t sample={0};
    ranked_record_t matched[SELECTED_MAX]={{0}};
@@ -430,7 +448,7 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
    passed+=(unsigned)(select_evidence("What is a variable?",&sample,matched)==0);
   }
  }
- result->tests_executed=19;result->tests_passed=passed;
+ result->tests_executed=21;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -439,5 +457,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
