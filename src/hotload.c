@@ -42,7 +42,7 @@ static void digit_hotload_audit(const char *event, const char *module_id, const 
         snprintf(detail, sizeof(detail), "module=%s version=%u.%u.%u", module_id, result->version_major, result->version_minor, result->version_patch);
     else
         snprintf(detail, sizeof(detail), "module=%s", module_id);
-    (void)digit_audit_event("MODULE", event, detail);
+    digit_audit_lifecycle(module_id, event, detail);
 }
 
 static int digit_hotload_collect(digit_hotload_t *hotload, digit_hotload_file_t *files, size_t *count)
@@ -236,31 +236,6 @@ static void digit_report_red_candidate(digit_module_manager_t *manager, const di
     }
 }
 
-/* [AI:GPT-6 | 2026-10-08] Preserve every ABI lifecycle audit entry
- * in the persistent Core log before recycling the fixed-capacity cache.
- * Sequence numbers remain monotonic. On any write/sync error, retain
- * the original array and safely defer the replacement. */
-static int digit_hotload_checkpoint_audit(stnlabz_module_registry_t *registry)
-{
-    size_t i;
-    char detail[256];
-    if (registry == NULL || registry->audit_count > STNLABZ_MODULE_AUDIT_MAX) return 0;
-    for (i = 0; i < registry->audit_count; ++i)
-    {
-        const stnlabz_module_audit_entry_t *entry = &registry->audit[i];
-        int n = snprintf(detail, sizeof(detail),
-                         "sequence=%lu module=%s event=%d previous=%d resulting=%d result=%d",
-                         entry->sequence, entry->module_id, (int)entry->event,
-                         (int)entry->previous_state, (int)entry->resulting_state,
-                         (int)entry->result);
-        if (n < 0 || (size_t)n >= sizeof(detail) ||
-            !digit_audit_event("MODULE_ABI", "LIFECYCLE", detail)) return 0;
-    }
-    if (!digit_audit_sync()) return 0;
-    registry->audit_count = 0;
-    return 1;
-}
-
 static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_file_t *candidate)
 {
     digit_module_manager_t *manager = hotload->manager;
@@ -328,28 +303,6 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
         printf("[MODULE] Qualification restored: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
     }
     printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
-
-    /* [AI:GPT-6 | 2026-10-08] Reserve registry audit slots before
-     * touching a running incumbent. Seven normal lifecycle transitions
-     * follow: stop, unregister, discover, verify, qualify restore,
-     * authorize, activate. Keep one spare entry for a failure record. */
-    if (manager->registry.audit_count <= STNLABZ_MODULE_AUDIT_MAX &&
-        STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count < 8U)
-    {
-        if (digit_hotload_checkpoint_audit(&manager->registry))
-            digit_hotload_audit("AUDIT_CHECKPOINT_COMMITTED", candidate->module_id, NULL);
-        else
-            digit_hotload_audit("AUDIT_CHECKPOINT_FAILED", candidate->module_id, NULL);
-    }
-    if (manager->registry.audit_count > STNLABZ_MODULE_AUDIT_MAX ||
-        STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count < 8U)
-    {
-        printf("[MODULE] Replacement deferred: registry audit capacity %zu/%u -- incumbent retained\n",
-               manager->registry.audit_count, (unsigned int)STNLABZ_MODULE_AUDIT_MAX);
-        digit_hotload_audit("AUDIT_CAPACITY_DEFERRED", candidate->module_id, NULL);
-        unlink(staged);
-        return 0;
-    }
 
     /* [AI:GPT-6 | 2026-10-08] Keep the incumbent library loaded
      * until the replacement actually starts. Preserve the active record
