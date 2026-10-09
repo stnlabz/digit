@@ -52,7 +52,7 @@ int main(void)
         unsigned long lines = 0;
         int ch;
         if (in) {
-            while ((ch = fgetc(in)) != EOF) if (ch == '\\n') ++lines;
+            while ((ch = fgetc(in)) != EOF) if (ch == '\n') ++lines;
             fclose(in);
         }
         check(lines >= 8200UL, "persistent audit retains events beyond ring capacity");
