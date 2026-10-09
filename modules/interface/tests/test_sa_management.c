@@ -43,8 +43,8 @@ int main(void){
  {
   FILE *b=fopen(file,"wb");
   if(!b)return 1;
-  if(fputs("poemei\\tstn-labz\\tSA\\t1\\t1\\t1\\n"
-           "poemei\\tteam-chaos\\tADMIN\\t1\\t0\\t1\\n",b)<0){fclose(b);return 1;}
+  if(fputs("poemei\tstn-labz\tSA\t1\t1\t1\n"
+           "poemei\tteam-chaos\tADMIN\t1\t0\t1\n",b)<0){fclose(b);return 1;}
   fclose(b);if(chmod(file,0600)!=0)return 1;
  }
  check(!digit_sa_change(file,"team-chaos","other","poemei",2),"bootstrap only authenticated founder identity");
