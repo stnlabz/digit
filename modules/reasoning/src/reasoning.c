@@ -213,7 +213,8 @@ static stnlabz_module_result_t reasoning_explain_service(const void *request, si
     (void)handler_context;
     if (request == NULL || request_size != sizeof(*input) || response == NULL || response_used == NULL || response_size < sizeof(output)) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (memchr(input->subject, '\0', sizeof(input->subject)) == NULL || input->subject[0] == '\0') return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    count = input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX ? DIGIT_REASONING_EVIDENCE_MAX : input->evidence_count;
+    if (input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    count = input->evidence_count;
     memset(&output, 0, sizeof(output));
     for (i = 0; i < count; ++i)
     {
@@ -269,7 +270,8 @@ static stnlabz_module_result_t reasoning_compare_service(const void *request, si
         memchr(input->right, '\0', sizeof(input->right)) == NULL || input->right[0] == '\0')
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&output, 0, sizeof(output));
-    count = input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX ? DIGIT_REASONING_EVIDENCE_MAX : input->evidence_count;
+    if (input->evidence_count > DIGIT_REASONING_EVIDENCE_MAX) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    count = input->evidence_count;
     for (i = 0; i < count; ++i)
     {
         unsigned int rank;
@@ -285,6 +287,8 @@ static stnlabz_module_result_t reasoning_compare_service(const void *request, si
             if (rank > right_rank) { right_rank = rank; right_text = input->evidence[i]; }
         }
     }
+    /* [AI:GPT-6 | 2026-10-09] A comparison requires independently
+     * attributable evidence for both subjects, not one shared sentence. */
     if (left_text == NULL || right_text == NULL || left_text == right_text)
     {
         memcpy(response, &output, sizeof(output)); *response_used = sizeof(output); return STNLABZ_MODULE_OK;
@@ -339,6 +343,39 @@ static stnlabz_module_result_t reasoning_qualify(stnlabz_module_qualification_re
     if (status == STNLABZ_MODULE_OK && used == sizeof(comparison) &&
         comparison.compared && comparison.left_evidence_used == 1 &&
         comparison.right_evidence_used == 1) ++result->tests_passed;
+
+    /* [AI:GPT-6 | 2026-10-09] Measured negative comparison cases. */
+    memset(&compare, 0, sizeof(compare));
+    memset(&comparison, 0, sizeof(comparison));
+    snprintf(compare.left, sizeof(compare.left), "C");
+    snprintf(compare.right, sizeof(compare.right), "Python");
+    snprintf(compare.evidence[0], sizeof(compare.evidence[0]), "Python provides a runtime.");
+    compare.evidence_count = 1;
+    used = 0;
+    status = reasoning_compare_service(&compare,sizeof(compare),&comparison,
+                                       sizeof(comparison),&used,NULL);
+    ++result->tests_executed;
+    if(status==STNLABZ_MODULE_OK&&used==sizeof(comparison)&&!comparison.compared)
+        ++result->tests_passed;
+
+    memset(&compare, 0, sizeof(compare));
+    memset(&comparison, 0, sizeof(comparison));
+    snprintf(compare.left, sizeof(compare.left), "C");
+    snprintf(compare.right, sizeof(compare.right), "Python");
+    snprintf(compare.evidence[0], sizeof(compare.evidence[0]), "C and Python are programming languages.");
+    compare.evidence_count = 1;
+    used = 0;
+    status = reasoning_compare_service(&compare,sizeof(compare),&comparison,
+                                       sizeof(comparison),&used,NULL);
+    ++result->tests_executed;
+    if(status==STNLABZ_MODULE_OK&&used==sizeof(comparison)&&!comparison.compared)
+        ++result->tests_passed;
+
+    compare.evidence_count = DIGIT_REASONING_EVIDENCE_MAX+1;
+    ++result->negative_test_executed;
+    if(reasoning_compare_service(&compare,sizeof(compare),&comparison,
+                                 sizeof(comparison),&used,NULL)==
+       STNLABZ_MODULE_ERR_INVALID_ARGUMENT)++result->negative_test_passed;
 
     /* Additional measured cases satisfy the Core minimum without declared passes. */
     {
@@ -395,7 +432,7 @@ static stnlabz_module_result_t reasoning_stop(void)
 
 static const stnlabz_module_descriptor_t reasoning_descriptor =
 {
-    "reasoning", "Digit Relevance Reasoning", 1, 0, 8,
+    "reasoning", "Digit Relevance Reasoning", 1, 0, 9,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     reasoning_qualify, reasoning_start, reasoning_stop
 };
