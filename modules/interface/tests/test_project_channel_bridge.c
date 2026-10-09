@@ -132,6 +132,26 @@ int main(void) {
               "single-link protected binding restored");
     }
 
+    /* [AI:GPT-6 | 2026-10-09] Scoped member-directory negative tests. */
+    {
+        char roster[4096];
+        check(digit_project_members_json(root,"stn-labz","second","sysadmin",
+               registry,roster,sizeof(roster)) &&
+              strstr(roster,"\"user\":\"sysadmin\"")!=NULL,
+              "authorized SA reads verified restricted members");
+        check(!digit_project_members_json(root,"stn-labz","second","poe",
+               registry,roster,sizeof(roster)),
+              "ordinary project administrator cannot read SA member directory");
+        check(!digit_project_members_json(root,"team-chaos","second","sysadmin",
+               registry,roster,sizeof(roster)),
+              "cross-organization member listing denied");
+        check(!digit_project_members_json(root,"stn-labz","absent","sysadmin",
+               registry,roster,sizeof(roster)),
+              "unprovisioned project member listing denied");
+        check(!digit_project_members_json(root,"stn-labz","second","sysadmin",
+               registry,roster,12),
+              "short member-directory output rejected");
+    }
     check(!digit_project_security_channel_id(root,"other-org","second",id,sizeof(id)),"organization scope required");
     check(!digit_project_security_channel_id(root,"stn-labz","second",id,1),"small output rejected");
     check(!digit_project_security_channel_id(root,"stn-labz","../second",id,sizeof(id)),"traversal rejected");
