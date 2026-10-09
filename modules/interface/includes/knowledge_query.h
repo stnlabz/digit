@@ -13,6 +13,9 @@ typedef struct {
 } digit_knowledge_record_t;
 int digit_knowledge_query_valid(const char *query);
 int digit_knowledge_record_valid(const digit_knowledge_record_t *record);
+/* [AI:GPT-6 | 2026-10-08] 1.4.2 result-set identity consistency. */
+int digit_knowledge_results_valid(const digit_knowledge_record_t *records,
+                                  size_t count);
 int digit_knowledge_result_json(const digit_knowledge_record_t *records,
                                size_t count,char *output,size_t capacity);
 #endif
