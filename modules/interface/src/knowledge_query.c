@@ -103,3 +103,27 @@ fail:
     output[0]=0;
     return 0;
 }
+
+/* [AI:GPT-6 | 2026-10-08] 1.4.3: untrusted IDs never
+ * enter a Core lookup or JSON response without bounded validation. */
+int digit_knowledge_record_id_valid(const char *id)
+{
+    size_t i,n=bounded(id,65);
+    if(n==0 || n>=65)return 0;
+    for(i=0;i<n;++i){
+        unsigned char c=(unsigned char)id[i];
+        if(!((c>='A'&&c<='Z')||(c>='a'&&c<='z')||
+             (c>='0'&&c<='9')||c=='-'||c=='_'))return 0;
+    }
+    return 1;
+}
+int digit_knowledge_single_json(const digit_knowledge_record_t *record,
+                                int found,char *output,size_t capacity)
+{
+    if(!output || capacity==0)return 0;
+    output[0]=0;
+    if(found==0)return digit_knowledge_result_json(NULL,0,output,capacity);
+    if(found!=1 || !record || !digit_knowledge_record_id_valid(record->id) ||
+       !digit_knowledge_record_valid(record))return 0;
+    return digit_knowledge_result_json(record,1,output,capacity);
+}
