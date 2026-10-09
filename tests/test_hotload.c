@@ -128,7 +128,7 @@ static int copy_fixture(const char *source, const char *target)
 static void test_active_transition(int fail_start)
 {
     char root[] = "/tmp/digit-swap-XXXXXX";
-    char dir[512], bin[576], live[640];
+    char dir[512], bin[576], live[640], replacement[660];
     const char *updated = fail_start ?
         "build/tests/modules/sacrificial/sacrificial_fail.so" :
         "build/tests/modules/sacrificial/sacrificial_v2.so";
@@ -145,6 +145,7 @@ static void test_active_transition(int fail_start)
     snprintf(dir, sizeof(dir), "%s/sacrificial", root);
     snprintf(bin, sizeof(bin), "%s/bin", dir);
     snprintf(live, sizeof(live), "%s/sacrificial.so", bin);
+    snprintf(replacement, sizeof(replacement), "%s.new", live);
     if (mkdir(dir, 0700) || mkdir(bin, 0700) ||
         !copy_fixture("build/tests/modules/sacrificial/sacrificial.so", live))
         goto cleanup;
@@ -175,7 +176,7 @@ static void test_active_transition(int fail_start)
         goto cleanup;
     digit_hotload_init(watcher, manager);
     if (!digit_hotload_snapshot(watcher)) goto cleanup;
-    if (!copy_fixture(updated, live)) goto cleanup;
+    if (!copy_fixture(updated, replacement) || rename(replacement, live) != 0) goto cleanup;
     /* Deterministic update detection independent of filesystem timestamp resolution. */
     watcher->files[0].modified_time = 0;
     ready = 1;
@@ -199,6 +200,7 @@ cleanup:
     if (manager) stnlabz_module_loader_unload_all(&manager->loader);
     free(watcher);
     free(manager);
+    unlink(replacement);
     unlink(live);
     rmdir(bin);
     rmdir(dir);
