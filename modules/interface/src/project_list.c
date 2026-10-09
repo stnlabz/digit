@@ -27,14 +27,14 @@ static int private_dir(int fd){
     return fd>=0 && fstat(fd,&s)==0 && S_ISDIR(s.st_mode) &&
        (s.st_mode&077)==0 && digit_project_directory_owner_allowed(s.st_uid,geteuid());
 }
-int digit_project_list_scoped(const char *root,const char *organization,
+int digit_project_list_scoped(const char *root,const char *organization,const char *identity,
                              char *output,size_t capacity){
     int base=-1,org=-1,ok=0,opened=0;
     DIR *dir=NULL;
     struct dirent *entry;
     size_t count=0,off=0;
     if(output&&capacity)output[0]=0;
-    if(!root||!valid_id(organization)||!output||capacity<32)return 0;
+    if(!root||!valid_id(organization)||!valid_id(identity)||!output||capacity<32)return 0;
     base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
     if(!private_dir(base))goto done;
     org=openat(base,organization,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
@@ -48,8 +48,10 @@ int digit_project_list_scoped(const char *root,const char *organization,
     opened=1;org=-1;
     off=(size_t)snprintf(output,capacity,"{\"organization\":\"%s\",\"projects\":[",organization);
     if(off>=capacity)goto done;
-    errno=0;
-    while((entry=readdir(dir))!=NULL){
+    for(;;){
+        errno=0;
+        entry=readdir(dir);
+        if(!entry){if(errno!=0)goto done;break;}
         struct stat st;
         int n;
         if(strcmp(entry->d_name,".")==0||strcmp(entry->d_name,"..")==0)continue;
@@ -59,11 +61,11 @@ int digit_project_list_scoped(const char *root,const char *organization,
            !digit_project_directory_owner_allowed(st.st_uid,geteuid()))
             goto done;
         if(!digit_project_security_ready(root,organization,entry->d_name))goto done;
+        if(!digit_project_security_member(root,organization,entry->d_name,identity))continue;
         n=snprintf(output+off,capacity-off,"%s\"%s\"",count?",":"",entry->d_name);
         if(n<0||(size_t)n>=capacity-off)goto done;
         off+=(size_t)n;count++;
     }
-    if(errno!=0)goto done;
     if(snprintf(output+off,capacity-off,"]}\n")<0||
        strlen(output)>=capacity-1)goto done;
     ok=1;
