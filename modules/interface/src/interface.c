@@ -22,6 +22,7 @@
 #include "project_channel_bridge.h"
 #include "message_origin.h"
 #include "controlled_communication.h"
+#include "knowledge_query.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
 #include "core_services.h"
@@ -228,6 +229,32 @@ if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",
 if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,identity);return;}if(strncmp(request,"POST /channels ",15)==0){interface_reply(client,403,"{\"error\":\"channel provisioning not available\"}\n");return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
+/* [AI:GPT-6 | 2026-10-08] 1.5.0: authenticated knowledge
+ * retrieval uses existing Corpus service; responses contain only verified
+ * source-attributed records, or explicit UNKNOWN when there are no matches. */
+if(strncmp(request,"POST /knowledge/query ",22)==0){
+    interface_corpus_search_request_t in;
+    interface_corpus_search_result_t out;
+    char result[INTERFACE_BUFFER_MAX];
+    size_t used=0;
+    if(!digit_knowledge_query_valid(body)){
+        interface_reply(client,400,"{\"error\":\"invalid knowledge query\"}\n");return;
+    }
+    memset(&in,0,sizeof(in));
+    memset(&out,0,sizeof(out));
+    memcpy(in.query,body,strlen(body)+1);
+    if(!interface_invoke(CORPUS_SEARCH_SERVICE,&in,sizeof(in),
+                         &out,sizeof(out),&used) ||
+       used!=sizeof(out)){
+        interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;
+    }
+    if(out.count>CORPUS_SEARCH_MAX ||
+       !digit_knowledge_result_json((const digit_knowledge_record_t *)out.records,
+                                    out.count,result,sizeof(result))){
+        interface_reply(client,503,"{\"error\":\"corpus response invalid or oversized\"}\n");return;
+    }
+    interface_reply(client,200,result);return;
+}
 if(strncmp(request,"GET /corpus/",12)==0){char rid[65],rj[9000],json[9200];const char *start=request+12,*end=strchr(start,' ');size_t len,used=0;interface_corpus_get_result_t out;if(!end||end==start){interface_reply(client,400,"{\"error\":\"record id required\"}\n");return;}len=(size_t)(end-start);if(len>=sizeof(rid)){interface_reply(client,400,"{\"error\":\"record id too large\"}\n");return;}memcpy(rid,start,len);rid[len]=0;memset(&out,0,sizeof(out));if(!interface_invoke(CORPUS_GET_SERVICE,rid,strlen(rid)+1,&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_record_json(&out.record,rj,sizeof(rj));snprintf(json,sizeof(json),"{\"found\":true,\"record\":%s}\n",rj);interface_reply(client,200,json);return;}
 if(strncmp(request,"POST /corpus/search ",20)==0){interface_corpus_search_request_t in;interface_corpus_search_result_t out;char json[INTERFACE_BUFFER_MAX];size_t used=0,off,i;if(!body||!body[0]||strlen(body)>=sizeof(in.query)){interface_reply(client,400,"{\"error\":\"valid query required\"}\n");return;}memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.query,sizeof(in.query),"%s",body);if(!interface_invoke(CORPUS_SEARCH_SERVICE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;}off=(size_t)snprintf(json,sizeof(json),"{\"count\":%zu,\"records\":[",out.count);for(i=0;i<out.count;++i){char item[9000];int w;if(!interface_record_json(&out.records[i],item,sizeof(item)))break;w=snprintf(json+off,sizeof(json)-off,"%s%s",i?",":"",item);if(w<=0||(size_t)w>=sizeof(json)-off)break;off+=(size_t)w;}snprintf(json+off,sizeof(json)-off,"]}\n");interface_reply(client,200,json);return;}
 if(strncmp(request,"POST /input ",12)==0){interface_builder_request_t in;interface_builder_result_t out;size_t used=0;char er[512],eid[160],json[1200];if(!body||!body[0]||strlen(body)>=sizeof(in.text)){interface_reply(client,400,"{\"error\":\"empty or oversized input\"}\n");return;}memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.text,sizeof(in.text),"%s",body);snprintf(in.source,sizeof(in.source),"interface:/input");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));snprintf(json,sizeof(json),"{\"accepted\":true,\"corpus_candidate\":%s,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",out.candidate?"true":"false",out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);return;}
@@ -240,5 +267,5 @@ static void *interface_server(void *unused){(void)unused;while(interface_running
 static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
