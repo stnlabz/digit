@@ -246,6 +246,12 @@ static digit_arithmetic_status_t evaluate(const char *expression,digit_arithmeti
  const char *p=expression;int64_t a,b;
  memset(result,0,sizeof(*result));
  if(!expression||!*expression)return DIGIT_ARITHMETIC_INVALID;
+ /* Multiple symbolic operators require precedence-aware parsing. */
+ {
+  const char *scan=expression;unsigned operators=0;
+  while(*scan){if(*scan=='+'||*scan=='-'||*scan=='*'||*scan=='/')++operators;++scan;}
+  if(operators>1)return evaluate_algebra(expression,result);
+ }
  if(strchr(expression,'=')||strchr(expression,'(')||strchr(expression,')'))
   return evaluate_algebra(expression,result);
  if(strchr(expression,'.')!=NULL)return evaluate_decimal(expression,result);
