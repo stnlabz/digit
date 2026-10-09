@@ -12,6 +12,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "interface.h"
 #include "session_store.h"
 #include "http_auth.h"
@@ -34,6 +36,9 @@
 #include "core_services.h"
 
 #define INTERFACE_BUFFER_MAX 65536
+/* [AI:GPT-6 | 2026-10-08] Remote operation requires server TLS identity. */
+#define DIGIT_INTERFACE_TLS_CERT "/opt/digit/state/auth/interface-cert.pem"
+#define DIGIT_INTERFACE_TLS_KEY "/opt/digit/state/auth/interface-key.pem"
 #define REASONING_SERVICE "reasoning.evaluate"
 #define CORPUS_BUILDER_SERVICE "corpus_builder.evaluate"
 #define CORPUS_GET_SERVICE "corpus.get"
@@ -63,6 +68,8 @@ static const stnlabz_module_host_t *interface_host=NULL;
 /* [AI:GPT-6 | 2026-10-08] Single-threaded request handling owns this
  * pointer until the client request completes; never persist request text. */
 static const char *interface_audit_request=NULL;
+static SSL_CTX *interface_tls_context=NULL;
+static SSL *interface_tls_client=NULL;
 /* [AI:GPT-6 | 2026-10-08] Session store lifecycle; credential verification and HTTP gates are next integration step. */
 static digit_session_store_t interface_sessions;
 
@@ -79,7 +86,19 @@ static void interface_reply(int c,int status,const char *body){
                                     audit,sizeof(audit))){
         (void)interface_host->send_message(audit);
     }
-    (void)digit_interface_http_write(c,status,body);
+    if(interface_tls_client){
+        char header[512];
+        const char *reason=status==200?"OK":status==400?"Bad Request":
+                           status==401?"Unauthorized":status==403?"Forbidden":
+                           status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";
+        int n=snprintf(header,sizeof(header),
+          "HTTP/1.1 %d %s\\r\\nContent-Type: application/json; charset=utf-8\\r\\nContent-Length: %zu\\r\\nConnection: close\\r\\n\\r\\n",
+          status,reason,strlen(body));
+        size_t off;
+        if(n<=0||(size_t)n>=sizeof(header))return;
+        for(off=0;off<(size_t)n;){int written=SSL_write(interface_tls_client,header+off,(int)((size_t)n-off));if(written<=0)return;off+=(size_t)written;}
+        for(off=0;off<strlen(body);){int written=SSL_write(interface_tls_client,body+off,(int)(strlen(body)-off));if(written<=0)return;off+=(size_t)written;}
+    }else (void)digit_interface_http_write(c,status,body);
 }
 static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){char id[160],name[300];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->name,name,sizeof(name));w=snprintf(out,n,"{\"id\":\"%s\",\"name\":\"%s\",\"created_at\":%llu,\"last_activity_at\":%llu,\"active\":%s}",id,name,v->created_at,v->last_activity_at,v->active?"true":"false");return w>0&&(size_t)w<n;}
 static int interface_message_json(const digit_channel_message_t *v,char *out,size_t n){char id[160],cid[160],origin[100],body[8192];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->channel_id,cid,sizeof(cid));interface_json_escape(v->origin,origin,sizeof(origin));interface_json_escape(v->body,body,sizeof(body));w=snprintf(out,n,"{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"%s\",\"body\":\"%s\"}",id,cid,v->created_at,origin,body);return w>0&&(size_t)w<n;}
@@ -94,7 +113,7 @@ static ssize_t interface_receive_request(int client,char *request,size_t capacit
     if(!request||capacity<2)return -2;
     request[0]=0;
     while(total+1<capacity){
-        ssize_t got=recv(client,request+total,capacity-total-1,0);
+        ssize_t got=interface_tls_client ? SSL_read(interface_tls_client,request+total,(int)(capacity-total-1)) : recv(client,request+total,capacity-total-1,0);
         if(got<=0)return total>0?-2:got;
         if(memchr(request+total,0,(size_t)got)!=NULL)return -2;
         total+=(size_t)got;
@@ -566,7 +585,14 @@ interface_reply(client,404,"{\"error\":\"unknown endpoint\"}\n");}
 
 static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}{struct timeval timeout={5,0};
         (void)setsockopt(client,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
-        interface_handle(client);interface_audit_request=NULL;close(client);}}return NULL;}
+        if(interface_tls_context){
+            interface_tls_client=SSL_new(interface_tls_context);
+            if(interface_tls_client && SSL_set_fd(interface_tls_client,client)==1 && SSL_accept(interface_tls_client)==1)
+                interface_handle(client);
+            interface_audit_request=NULL;
+            if(interface_tls_client){SSL_shutdown(interface_tls_client);SSL_free(interface_tls_client);interface_tls_client=NULL;}
+        }else interface_handle(client);
+        interface_audit_request=NULL;close(client);}}return NULL;}
 /* [AI:GPT-6 | 2026-10-08] Interface 1.4.6: replace hardcoded
  * qualification counters with executable, side-effect-free checks.
  * These are module admission smoke checks, not end-to-end HTTP testing. */
@@ -620,8 +646,42 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
-static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
+/* [AI:GPT-6 | 2026-10-08] TLS-only remote Interface. No plaintext
+ * fallback: absent or invalid certificates prevent activation. */
+static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h)
+{
+    struct sockaddr_in a;
+    int enabled=1;
+    if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    interface_tls_context=SSL_CTX_new(TLS_server_method());
+    if(!interface_tls_context)return STNLABZ_MODULE_ERR_START_FAILED;
+    if(SSL_CTX_set_min_proto_version(interface_tls_context,TLS1_2_VERSION)!=1 ||
+       SSL_CTX_use_certificate_chain_file(interface_tls_context,DIGIT_INTERFACE_TLS_CERT)!=1 ||
+       SSL_CTX_use_PrivateKey_file(interface_tls_context,DIGIT_INTERFACE_TLS_KEY,SSL_FILETYPE_PEM)!=1 ||
+       SSL_CTX_check_private_key(interface_tls_context)!=1){
+        SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;
+        return STNLABZ_MODULE_ERR_START_FAILED;
+    }
+    digit_session_store_init(&interface_sessions);
+    interface_host=h;
+    interface_fd=socket(AF_INET,SOCK_STREAM,0);
+    if(interface_fd<0)goto failed;
+    (void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));
+    memset(&a,0,sizeof(a));a.sin_family=AF_INET;
+    a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);
+    if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1 ||
+       bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0 || listen(interface_fd,8)!=0)
+        goto failed;
+    interface_running=1;
+    if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;goto failed;}
+    if(h->send_message)(void)h->send_message("[INTERFACE] HTTPS listener active on port 8081; TLS required");
+    return STNLABZ_MODULE_OK;
+failed:
+    if(interface_fd>=0){close(interface_fd);interface_fd=-1;}
+    SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;interface_host=NULL;
+    return STNLABZ_MODULE_ERR_START_FAILED;
+}
+static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
