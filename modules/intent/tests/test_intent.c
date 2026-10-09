@@ -108,6 +108,28 @@ int main(int argc, char **argv)
 
     expect_intent("conversation", "hello Digit",
                   DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
+    /* [AI:GPT-6 | 2026-10-09] Exercise classification, not enum names. */
+    {
+        static const char *const personal[]={"My Name is Poe","I am Poe","I'm Poe",
+            "I'm an accountant","I am a PHP developer","I work in backend development",
+            "I prefer PHP"};
+        size_t i;
+        for(i=0;i<sizeof(personal)/sizeof(personal[0]);++i){
+            digit_intent_result_t actual;
+            digit_intent_interpret(personal[i],&actual);
+            if(actual.intent!=DIGIT_INTENT_CONVERSATION||
+               actual.target!=DIGIT_INTENT_TARGET_SOCIAL||!actual.established){
+                fprintf(stderr,"FAIL personal context: %s\\n",personal[i]);++failures;
+            }
+        }
+        {
+            digit_intent_result_t actual;
+            digit_intent_interpret("delete all files",&actual);
+            if(actual.intent!=DIGIT_INTENT_ACTION||!actual.established){
+                fprintf(stderr,"FAIL command remains action\\n");++failures;
+            }
+        }
+    }
     expect_intent("fact", "what is the first General Order",
                   DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
     expect_intent("define", "define deterministic behavior",
