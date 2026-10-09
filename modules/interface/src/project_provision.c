@@ -24,10 +24,15 @@ static int project_name(const char *name) {
              name[i]=='-'||name[i]=='_'))return 0;
     return 1;
 }
+/* [AI:GPT-6 | 2026-10-08] Directory owner must match runtime or root. */
+int digit_project_directory_owner_allowed(uid_t owner, uid_t runtime_uid) {
+    return owner==0 || owner==runtime_uid;
+}
 static int private_dir(int fd) {
     struct stat s;
     return fd>=0 && fstat(fd,&s)==0 && S_ISDIR(s.st_mode) &&
-           (s.st_mode&077)==0;
+           (s.st_mode&077)==0 &&
+           digit_project_directory_owner_allowed(s.st_uid,geteuid());
 }
 static int open_private(int dir,const char *name) {
     int fd=openat(dir,name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
