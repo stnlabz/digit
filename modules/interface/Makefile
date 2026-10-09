@@ -135,6 +135,9 @@ $(CHANNEL_TEST_TARGET): tests/test_1_4_10.c src/channel_results.c includes/chann
 $(CORPUS_BASE_TEST_TARGET): tests/test_1_5_0.c src/corpus_response.c src/knowledge_query.c includes/corpus_response.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_0.c src/corpus_response.c src/knowledge_query.c -o $@
 
+$(MILESTONE_TEST_TARGET): tests/test_1_5_1.c src/corpus_response.c src/knowledge_query.c includes/corpus_response.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_1.c src/corpus_response.c src/knowledge_query.c -o $@
+
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
 
