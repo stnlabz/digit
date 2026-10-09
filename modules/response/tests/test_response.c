@@ -47,7 +47,12 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
   arithmetic_calls++;
   if(!arithmetic_available)return STNLABZ_MODULE_ERR_NOT_FOUND;
   memset(out,0,sizeof(*out));
-  if(!strcmp(arithmetic_expected_answer,"Division by zero is undefined."))
+  if(strchr(arithmetic_expected_request,'.') &&
+     arithmetic_expected_answer[0] &&
+     strstr(arithmetic_expected_answer," = ")){
+   out->status=DIGIT_ARITHMETIC_OK;
+   snprintf(out->decimal_answer,sizeof(out->decimal_answer),"%s",arithmetic_expected_answer);
+  }else if(!strcmp(arithmetic_expected_answer,"Division by zero is undefined."))
    out->status=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;
   else if(sscanf(arithmetic_expected_answer,"%lld %c %lld = %lld remainder %lld%c",
         &left,&op,&right,&value,&remainder,&tail)>=5){
@@ -117,6 +122,7 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"What is 3 times 5?","3 * 5 = 15."},
    {"What is 9 divided by 3?","9 / 3 = 3."},
    {"Digit what is 8 / 2?","8 / 2 = 4."},
+   {"Digit what is 1000 / 0.5?","1000 / 0.5 = 2000."},
    {"Digit what is 8 ÷ 2?","8 / 2 = 4."},
    {"Digit what is 8 divide by 2?","8 / 2 = 4."},
    {"Digit what is 8 over 2?","8 / 2 = 4."},
@@ -175,7 +181,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 7, "internal version is 1.7.7");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 8, "internal version is 1.7.8");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
