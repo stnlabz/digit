@@ -61,13 +61,13 @@ static int parse_learned_definition(const digit_corpus_record_t *record,
     while(isspace((unsigned char)p[n]))++n;
     /* No partial-phrase substitution: a definition with multiple words
      * does not authorize replacing an input token with its first word. */
-    if(p[n]!='\\0'&&p[n]!='.')return 0;
-    if(p[n]=='.'&&p[n+1]!='\\0')return 0;
+    if(p[n]!='\0'&&p[n]!='.')return 0;
+    if(p[n]=='.'&&p[n+1]!='\0')return 0;
     n=0;
     while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-'))++n;
     if(n==0||n>=capacity)return 0;
     memcpy(out,p,n);
-    out[n]='\\0';
+    out[n]='\0';
     return 1;
 }
 
@@ -320,7 +320,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 4,
+    "interpretation", "Digit Interpretation", 1, 0, 5,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
