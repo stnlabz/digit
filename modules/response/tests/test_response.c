@@ -47,7 +47,7 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
   arithmetic_calls++;
   if(!arithmetic_available)return STNLABZ_MODULE_ERR_NOT_FOUND;
   memset(out,0,sizeof(*out));
-  if(strchr(arithmetic_expected_request,'.') &&
+  if((strchr(arithmetic_expected_request,'.') || strchr(arithmetic_expected_request,'=') || strchr(arithmetic_expected_request,'(')) &&
      arithmetic_expected_answer[0] &&
      strstr(arithmetic_expected_answer," = ")){
    out->status=DIGIT_ARITHMETIC_OK;
