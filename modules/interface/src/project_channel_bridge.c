@@ -203,7 +203,7 @@ failure:
 /* [AI:GPT-6 | 2026-10-09] Validate a private ordinary channel binding. */
 static int ordinary_binding_read(int project_fd,const char *filename,char *out,size_t cap){
  char value[DIGIT_CHANNEL_ID_MAX+2];struct stat st;int fd;ssize_t n;
- if(!project_component(filename)||!out||cap<DIGIT_CHANNEL_ID_MAX)return 0;
+ if(!filename||!out||cap<DIGIT_CHANNEL_ID_MAX)return 0;
  fd=openat(project_fd,filename,O_RDONLY|O_NOFOLLOW);
  if(fd<0)return 0;
  if(fstat(fd,&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1||
