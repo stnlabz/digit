@@ -176,6 +176,8 @@ static void test_active_transition(int fail_start)
     digit_hotload_init(watcher, manager);
     if (!digit_hotload_snapshot(watcher)) goto cleanup;
     if (!copy_fixture(updated, live)) goto cleanup;
+    /* Deterministic update detection independent of filesystem timestamp resolution. */
+    watcher->files[0].modified_time = 0;
     ready = 1;
     CHECK(ready, fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
     CHECK(digit_hotload_poll(watcher) == (fail_start ? 0 : 1),
