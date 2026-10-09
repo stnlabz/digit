@@ -1,4 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "audit.h"
 
@@ -21,10 +25,14 @@ static void check(int condition, const char *name)
 
 int main(void)
 {
+    char directory[]="/tmp/digit-audit-XXXXXX";
+    char path[sizeof(directory)+32];
+    if (mkdtemp(directory) == NULL) return 1;
+    if (snprintf(path,sizeof(path),"%s/audit.log",directory) >= (int)sizeof(path)) return 1;
     check(DIGIT_AUDIT_PATH[0] == '/', "audit path is absolute");
     check(digit_audit_event("TEST", "BEFORE_OPEN", NULL) == 0, "write before open is rejected");
-    check(digit_audit_open(), "audit log opens");
-    check(digit_audit_open(), "duplicate open is harmless");
+    check(digit_audit_open_path(path), "audit log opens");
+    check(digit_audit_open_path(path), "duplicate open is harmless");
     check(digit_audit_event("TEST", "EVENT", "detail=value"), "audit event writes");
     check(digit_audit_event("TEST", "EMPTY", ""), "empty detail writes");
     check(digit_audit_event("TEST", "NULL_DETAIL", NULL), "null detail writes");
@@ -33,6 +41,8 @@ int main(void)
     digit_audit_close();
     check(digit_audit_event("TEST", "AFTER_CLOSE", NULL) == 0, "write after close is rejected");
 
+    (void)unlink(path);
+    (void)rmdir(directory);
     printf("\nAudit tests: %u executed, %u failed\n", executed, failed);
     return failed == 0 ? 0 : 1;
 }
