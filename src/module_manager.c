@@ -5,6 +5,7 @@
 #include "authority.h"
 #include "module_manager.h"
 #include "qualification_store.h"
+#include "audit.h"
 
 #define DIGIT_RUNTIME_MODULE_PATH "/opt/digit/modules"
 
@@ -252,6 +253,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
         {
             (void)stnlabz_module_registry_fail(&manager->registry,
                                                record->descriptor.id);
+            digit_audit_lifecycle(record->descriptor.id, "START_FAILED", "source=startup");
             fprintf(stderr, "[MODULE] Start failed: %s\n",
                     record->descriptor.id);
             fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
@@ -260,6 +262,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
             continue;
         }
 
+        digit_audit_lifecycle(record->descriptor.id, "ACTIVATED", "source=startup");
         printf("[MODULE] ACTIVE: %s\n", record->descriptor.id);
     }
 
