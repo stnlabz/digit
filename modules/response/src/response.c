@@ -83,7 +83,7 @@ static int arithmetic_question(const char *text){
     if(!strcmp(token,"plus")||!strcmp(token,"minus")||
        !strcmp(token,"times")||!strcmp(token,"multiply")||
        !strcmp(token,"divided")||!strcmp(token,"add")||
-       !strcmp(token,"subtract"))operation=1;
+       !strcmp(token,"subtract")||!strcmp(token,"x"))operation=1;
     if(isdigit((unsigned char)token[0])||!strcmp(token,"one")||
        !strcmp(token,"two")||!strcmp(token,"three")||
        !strcmp(token,"four")||!strcmp(token,"five")||
@@ -142,7 +142,7 @@ static int arithmetic_calculate(const char *text,char *answer,size_t cap){
  while(isspace((unsigned char)*p))++p;
  if(*p=='+'||*p=='-'||*p=='*'||*p=='/'){operation=*p++;}else{
   static const struct {const char *word;char operation;} ops[]={
-   {"plus", '+'},{"minus",'-'},{"times",'*'},{"divided by",'/'}
+   {"plus", '+'},{"minus",'-'},{"times",'*'},{"x",'*'},{"divided by",'/'}
   };
   size_t i;
   for(i=0;i<sizeof(ops)/sizeof(ops[0]);++i){
@@ -390,5 +390,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
