@@ -41,7 +41,7 @@ int main(void)
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "corpus") == 0, "module identity is corpus");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 3 && descriptor->version_patch == 0, "internal version is 1.3.0");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 3 && descriptor->version_patch == 2, "internal version is 1.3.2");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS && qualification.tests_passed == qualification.tests_executed && qualification.negative_test_executed && qualification.negative_test_passed, "qualification requirements pass");
     check(digit_corpus_validate(&record) && digit_corpus_append(path, &record) && digit_corpus_append(path, &second) && digit_corpus_append(path, &php), "valid records append");
@@ -57,6 +57,18 @@ int main(void)
     check(count == 3 && strcmp(listed[0].id, "TEST-001") == 0 && strcmp(listed[1].id, "TEST-002") == 0 && strcmp(listed[2].id, "TEST-003") == 0, "deterministic corpus list returns complete ordered candidates");
     check(!digit_corpus_append(path, &record) && !digit_corpus_get(path, "MISSING", &fetched) && digit_corpus_search(path, "", matches, 4) == 0, "duplicate and invalid retrieval cases are rejected");
 
+    /* [AI:GPT-6 | 2026-10-09] Regress bounded ABI record validation. */
+    {
+        digit_corpus_record_t malformed=record;
+        memset(malformed.text,'A',sizeof(malformed.text));
+        check(!digit_corpus_validate(&malformed) &&
+              !digit_corpus_append(path,&malformed),
+              "unterminated text is rejected before file append");
+        malformed=record;
+        memset(malformed.id,'A',sizeof(malformed.id));
+        check(!digit_corpus_validate(&malformed),
+              "unterminated record identity is rejected");
+    }
     unlink(path);
     printf("\nCorpus module tests: %u executed, %u failed\n", executed, failed);
     return failed == 0 ? 0 : 1;
