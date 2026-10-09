@@ -506,6 +506,68 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
 }
+/* [AI:GPT-6 | 2026-10-09] Atomic authority decisions, staged
+ * resources: one SA action provisions, binds and self-grants Security.
+ * Retry continues completed stages; authorization is rechecked at every
+ * boundary. A partial failure is reported, never presented as success. */
+if(strncmp(request,"POST /admin/security/setup HTTP/1.1\r\n",
+           sizeof("POST /admin/security/setup HTTP/1.1\r\n")-1U)==0){
+    char org[DIGIT_PROJECT_ID_MAX],project[DIGIT_PROJECT_ID_MAX];
+    char channel[DIGIT_CHANNEL_ID_MAX],json[256];
+    digit_grant_request_t access;
+    const char *sep;
+    size_t on,pn,i;
+    if(!body||!(sep=strchr(body,'\t'))||strchr(sep+1,'\t')){
+        interface_reply(client,400,"{\"error\":\"expected organization TAB project\"}\n");return;
+    }
+    on=(size_t)(sep-body);pn=strlen(sep+1);
+    if(!on||!pn||on>=sizeof(org)||pn>=sizeof(project)){
+        interface_reply(client,400,"{\"error\":\"invalid scope\"}\n");return;
+    }
+    for(i=0;i<on+pn;++i){
+        unsigned char c=(unsigned char)(i<on?body[i]:sep[1+i-on]);
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+             (c>='0'&&c<='9')||c=='-'||c=='_')){
+            interface_reply(client,400,"{\"error\":\"invalid scope\"}\n");return;
+        }
+    }
+    memcpy(org,body,on);org[on]=0;
+    memcpy(project,sep+1,pn);project[pn]=0;
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)){
+        interface_reply(client,403,"{\"error\":\"organization SA assignment required\"}\n");return;
+    }
+    if(!digit_project_security_ready(DIGIT_PROJECT_ROOT,org,project) &&
+       !digit_project_provision(DIGIT_PROJECT_ROOT,org,project,identity,identity,
+                                DIGIT_SECURITY_SA_REGISTRY)){
+        interface_reply(client,503,"{\"error\":\"project setup incomplete\"}\n");return;
+    }
+    if(!digit_project_security_member(DIGIT_PROJECT_ROOT,org,project,identity)){
+        interface_reply(client,403,"{\"error\":\"project membership required\"}\n");return;
+    }
+    if(!digit_project_security_channel_id(DIGIT_PROJECT_ROOT,org,project,channel,sizeof(channel))){
+        if(!interface_host || !digit_project_bind_security_host(DIGIT_PROJECT_ROOT,
+            org,project,identity,DIGIT_SECURITY_SA_REGISTRY,interface_host) ||
+           !digit_project_security_channel_id(DIGIT_PROJECT_ROOT,org,project,channel,sizeof(channel))){
+            interface_reply(client,503,"{\"error\":\"security binding incomplete\"}\n");return;
+        }
+    }
+    if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,channel)){
+        memset(&access,0,sizeof(access));
+        snprintf(access.organization,sizeof(access.organization),"%s",org);
+        snprintf(access.project,sizeof(access.project),"%s",project);
+        snprintf(access.channel,sizeof(access.channel),"%s",channel);
+        snprintf(access.user,sizeof(access.user),"%s",identity);
+        if(!digit_grant_security_scoped(DIGIT_CHANNEL_ACL_PATH,DIGIT_PROJECT_ROOT,
+               DIGIT_SECURITY_SA_REGISTRY,identity,&access)){
+            interface_reply(client,503,"{\"error\":\"security grant incomplete\"}\n");return;
+        }
+    }
+    if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,channel)){
+        interface_reply(client,503,"{\"error\":\"security access not verified\"}\n");return;
+    }
+    snprintf(json,sizeof(json),"{\"ready\":true,\"channel_id\":\"%s\"}\n",channel);
+    interface_reply(client,200,json);return;
+}
 /* [AI:GPT-6 | 2026-10-09] Return the exact bound Security ID only
  * to a currently assigned organization SA who belongs to the project.
  * This is metadata retrieval, not a new authorization grant. */
