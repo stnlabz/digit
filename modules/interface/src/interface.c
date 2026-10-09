@@ -76,7 +76,6 @@ static void interface_reply(int c,int status,const char *body){
     }
     (void)digit_interface_http_write(c,status,body);
 }
-static int interface_record_json(const interface_corpus_record_t *r,char *out,size_t n){char id[160],cat[160],src[600],text[8192];int w;interface_json_escape(r->id,id,sizeof(id));interface_json_escape(r->category,cat,sizeof(cat));interface_json_escape(r->source,src,sizeof(src));interface_json_escape(r->text,text,sizeof(text));w=snprintf(out,n,"{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}",id,cat,src,text);return w>0&&(size_t)w<n;}
 static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){char id[160],name[300];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->name,name,sizeof(name));w=snprintf(out,n,"{\"id\":\"%s\",\"name\":\"%s\",\"created_at\":%llu,\"last_activity_at\":%llu,\"active\":%s}",id,name,v->created_at,v->last_activity_at,v->active?"true":"false");return w>0&&(size_t)w<n;}
 static int interface_message_json(const digit_channel_message_t *v,char *out,size_t n){char id[160],cid[160],origin[100],body[8192];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->channel_id,cid,sizeof(cid));interface_json_escape(v->origin,origin,sizeof(origin));interface_json_escape(v->body,body,sizeof(body));w=snprintf(out,n,"{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"%s\",\"body\":\"%s\"}",id,cid,v->created_at,origin,body);return w>0&&(size_t)w<n;}
 static int interface_alert_json(const digit_alert_t *v,char *out,size_t n){char id[160],source[200],summary[600],detail[2200],state[100];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->source,source,sizeof(source));interface_json_escape(v->summary,summary,sizeof(summary));interface_json_escape(v->detail,detail,sizeof(detail));interface_json_escape(v->operational_state,state,sizeof(state));w=snprintf(out,n,"{\"id\":\"%s\",\"created_at\":%llu,\"severity\":\"%s\",\"source\":\"%s\",\"summary\":\"%s\",\"detail\":\"%s\",\"operational_state\":\"%s\",\"acknowledged\":%s,\"acknowledged_at\":%llu}",id,v->created_at,interface_alert_severity_string(v->severity),source,summary,detail,state,v->acknowledged?"true":"false",v->acknowledged_at);return w>0&&(size_t)w<n;}
@@ -342,7 +341,44 @@ interface_reply(client,404,"{\"error\":\"unknown endpoint\"}\n");}
 static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}{struct timeval timeout={5,0};
         (void)setsockopt(client,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
         interface_handle(client);interface_audit_request=NULL;close(client);}}return NULL;}
-static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
+/* [AI:GPT-6 | 2026-10-08] Interface 1.4.6: replace hardcoded
+ * qualification counters with executable, side-effect-free checks.
+ * These are module admission smoke checks, not end-to-end HTTP testing. */
+static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r)
+{
+    digit_knowledge_record_t record={0};
+    char json[10000];
+    int tests[12];
+    size_t i;
+    if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(r,0,sizeof(*r));
+    snprintf(record.id,sizeof(record.id),"record-1");
+    snprintf(record.category,sizeof(record.category),"engineering");
+    snprintf(record.source,sizeof(record.source),"manual:1");
+    snprintf(record.text,sizeof(record.text),"evidence");
+    tests[0]=digit_knowledge_query_valid("valid query");
+    tests[1]=!digit_knowledge_query_valid("");
+    tests[2]=!digit_knowledge_query_valid("bad\\nquery");
+    tests[3]=digit_knowledge_record_id_valid(record.id);
+    tests[4]=!digit_knowledge_record_id_valid("../invalid");
+    tests[5]=digit_knowledge_record_valid(&record);
+    tests[6]=digit_knowledge_results_valid(&record,1);
+    tests[7]=digit_knowledge_result_json(&record,1,json,sizeof(json));
+    tests[8]=digit_knowledge_single_json(NULL,0,json,sizeof(json));
+    tests[9]=!digit_knowledge_result_json(NULL,1,json,sizeof(json));
+    tests[10]=!digit_interface_http_write(-1,200,"{}");
+    tests[11]=!digit_interface_http_write(-1,200,NULL);
+    for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
+        ++r->tests_executed;
+        if(tests[i])++r->tests_passed;
+        else ++r->tests_failed;
+    }
+    r->negative_test_executed=1;
+    r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
+                            tests[9] && tests[10] && tests[11];
+    return r->tests_failed==0 && r->negative_test_passed?
+           STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+}
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
 static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
