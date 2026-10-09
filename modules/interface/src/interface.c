@@ -16,6 +16,7 @@
 #include "session_store.h"
 #include "http_auth.h"
 #include "http_limits.h"
+#include "interface_audit.h"
 #include "account_auth.h"
 #include "channel_acl.h"
 #include "project_channel_bridge.h"
@@ -51,6 +52,9 @@ static int interface_fd=-1;
 static pthread_t interface_thread;
 static int interface_running=0;
 static const stnlabz_module_host_t *interface_host=NULL;
+/* [AI:GPT-6 | 2026-10-08] Single-threaded request handling owns this
+ * pointer until the client request completes; never persist request text. */
+static const char *interface_audit_request=NULL;
 /* [AI:GPT-6 | 2026-10-08] Session store lifecycle; credential verification and HTTP gates are next integration step. */
 static digit_session_store_t interface_sessions;
 
@@ -58,7 +62,15 @@ static const char *interface_relevance_string(interface_relevance_t v){switch(v)
 static const char *interface_category_string(interface_context_category_t v){switch(v){case DIGIT_CONTEXT_CONVERSATION:return "CONVERSATION";case DIGIT_CONTEXT_ENGINEERING:return "ENGINEERING";case DIGIT_CONTEXT_RULE:return "RULE";case DIGIT_CONTEXT_DECISION:return "DECISION";case DIGIT_CONTEXT_OBSERVATION:return "OBSERVATION";case DIGIT_CONTEXT_HYPOTHESIS:return "HYPOTHESIS";default:return "UNKNOWN";}}
 static const char *interface_alert_severity_string(digit_alert_severity_t v){switch(v){case DIGIT_ALERT_INFO:return "INFO";case DIGIT_ALERT_WARNING:return "WARNING";case DIGIT_ALERT_ERROR:return "ERROR";case DIGIT_ALERT_CRITICAL:return "CRITICAL";default:return "UNKNOWN";}}
 static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
-static void interface_reply(int c,int status,const char *body){char h[512];const char *s=status==200?"OK":status==401?"Unauthorized":status==403?"Forbidden":status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";int w=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",status,s,strlen(body));if(w>0&&(size_t)w<sizeof(h)){(void)send(c,h,(size_t)w,0);(void)send(c,body,strlen(body),0);}}
+static void interface_reply(int c,int status,const char *body){
+    /* [AI:GPT-6 | 2026-10-08] 1.3.9: report each HTTP outcome through
+     * the existing module-host hook. The event contains no request body,
+     * credentials, token, resource ID or untrusted URL text. */
+    char audit[160],h[512];
+    if(interface_host&&interface_host->send_message &&
+       digit_interface_audit_format(interface_audit_request,status,
+                                    audit,sizeof(audit)))
+        (void)interface_host->send_message(audit);const char *s=status==200?"OK":status==401?"Unauthorized":status==403?"Forbidden":status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";int w=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",status,s,strlen(body));if(w>0&&(size_t)w<sizeof(h)){(void)send(c,h,(size_t)w,0);(void)send(c,body,strlen(body),0);}}
 static int interface_record_json(const interface_corpus_record_t *r,char *out,size_t n){char id[160],cat[160],src[600],text[8192];int w;interface_json_escape(r->id,id,sizeof(id));interface_json_escape(r->category,cat,sizeof(cat));interface_json_escape(r->source,src,sizeof(src));interface_json_escape(r->text,text,sizeof(text));w=snprintf(out,n,"{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}",id,cat,src,text);return w>0&&(size_t)w<n;}
 static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){char id[160],name[300];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->name,name,sizeof(name));w=snprintf(out,n,"{\"id\":\"%s\",\"name\":\"%s\",\"created_at\":%llu,\"last_activity_at\":%llu,\"active\":%s}",id,name,v->created_at,v->last_activity_at,v->active?"true":"false");return w>0&&(size_t)w<n;}
 static int interface_message_json(const digit_channel_message_t *v,char *out,size_t n){char id[160],cid[160],origin[100],body[8192];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->channel_id,cid,sizeof(cid));interface_json_escape(v->origin,origin,sizeof(origin));interface_json_escape(v->body,body,sizeof(body));w=snprintf(out,n,"{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"%s\",\"body\":\"%s\"}",id,cid,v->created_at,origin,body);return w>0&&(size_t)w<n;}
@@ -114,7 +126,7 @@ static void interface_alerts_list(int client,int unacknowledged){digit_alert_lis
 static void interface_alert_get(int client,const char *id){digit_alert_get_request_t in;digit_alert_get_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_GET,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"found\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 static void interface_alert_ack(int client,const char *id){digit_alert_acknowledge_request_t in;digit_alert_acknowledge_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.acknowledged){interface_reply(client,404,"{\"acknowledged\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"acknowledged\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
 
-static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;body=strstr(request,"\r\n\r\n");if(body)body+=4;
+static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
  * Login has no self-registration or caller-supplied privilege flags.
@@ -223,7 +235,7 @@ interface_reply(client,404,"{\"error\":\"unknown endpoint\"}\n");}
 
 static void *interface_server(void *unused){(void)unused;while(interface_running){int client=accept(interface_fd,NULL,NULL);if(client<0){if(!interface_running)break;if(errno==EINTR)continue;continue;}{struct timeval timeout={5,0};
         (void)setsockopt(client,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
-        interface_handle(client);close(client);}}return NULL;}
+        interface_handle(client);interface_audit_request=NULL;close(client);}}return NULL;}
 static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_result_t *r){if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));r->tests_executed=10;r->tests_passed=10;r->negative_test_executed=1;r->negative_test_passed=1;return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
