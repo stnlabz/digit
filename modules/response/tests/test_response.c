@@ -82,6 +82,11 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"What is 7 minus 12?","7 - 12 = -5."},
    {"What is 3 times 5?","3 * 5 = 15."},
    {"What is 9 divided by 3?","9 / 3 = 3."},
+   {"Digit what is 8 / 2?","8 / 2 = 4."},
+   {"Digit what is 8 ÷ 2?","8 / 2 = 4."},
+   {"Digit what is 8 divide by 2?","8 / 2 = 4."},
+   {"Digit what is 8 over 2?","8 / 2 = 4."},
+   {"Digit what is 8 divided by zero?","Division by zero is undefined."},
    {"What is 7 divided by 2?","7 / 2 = 3 remainder 1."},
    {"What is 7 divided by 0?","Division by zero is undefined."},
    {"What is 1000000000 times 1000000000?","1000000000 * 1000000000 = 1000000000000000000."},
@@ -122,7 +127,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 4, "internal version is 1.7.4");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 5, "internal version is 1.7.5");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
