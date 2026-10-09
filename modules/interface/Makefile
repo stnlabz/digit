@@ -47,7 +47,7 @@ PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
 SA_TEST_TARGET := bin/test_security_sa
 MESSAGE_ORIGIN_TEST_TARGET := bin/test_message_origin
 PROJECT_ADMIN_ROUTE_TEST_TARGET := bin/test_project_admin_route
-SOURCE := src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
+SOURCE := src/alerts_channel.c src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -146,8 +146,8 @@ $(CORPUS_BASE_TEST_TARGET): tests/test_1_5_0.c src/corpus_response.c src/knowled
 $(PREVIOUS_CORPUS_TEST_TARGET): tests/test_1_5_1.c src/corpus_response.c src/knowledge_query.c includes/corpus_response.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_1.c src/corpus_response.c src/knowledge_query.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_6_0.c src/grant_request.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c includes/grant_request.h includes/grant_store.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_6_0.c src/grant_request.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c -o $@
+$(MILESTONE_TEST_TARGET): tests/test_1_6_0.c src/grant_request.c src/alerts_channel.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c includes/grant_request.h includes/grant_store.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_6_0.c src/grant_request.c src/alerts_channel.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c -o $@
 
 $(PROJECT_1510_REGRESSION_TARGET): tests/test_1_5_10.c src/project_list.c src/project_provision.c src/security_sa.c includes/project_list.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_10.c src/project_list.c src/project_provision.c src/security_sa.c -o $@
