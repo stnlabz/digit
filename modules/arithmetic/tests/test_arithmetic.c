@@ -22,7 +22,7 @@ int main(void){
  digit_arithmetic_request_t in={0};
  digit_arithmetic_result_t out={0};size_t used=0;
  check(d&&strcmp(d->id,"arithmetic")==0,"descriptor identity");
- check(d&&d->version_major==1&&d->version_minor==2&&d->version_patch==0,"version 1.2.0");
+ check(d&&d->version_major==1&&d->version_minor==3&&d->version_patch==0,"version 1.3.0");
  check(d&&d->qualify(&q)==STNLABZ_MODULE_OK,"qualification executes");
  check(q.tests_executed>=STNLABZ_MODULE_MIN_TESTS&&q.tests_passed==q.tests_executed&&q.tests_failed==0,"qualification counts");
  check(q.negative_test_executed&&q.negative_test_passed,"negative qualification");
@@ -80,6 +80,24 @@ int main(void){
     used==sizeof(out)&&out.status==algebra[i].status &&
     (out.status!=DIGIT_ARITHMETIC_OK||strcmp(out.decimal_answer,algebra[i].answer)==0),
     algebra[i].input);
+  }
+ }
+ /* [AI:GPT-6 | 2026-10-09] Quadratic solver regression coverage. */
+ {
+  static const struct {const char *input,*expected;} equations[]={
+   {"solve x^2 - 5*x + 6 = 0","x = 2 and x = 3."},
+   {"solve x^2 - 4*x + 4 = 0","x = 2."},
+   {"solve x^2 + 1 = 0","No real solutions."},
+   {"solve (x+1)*(x+2) = 0","x = -2 and x = -1."},
+   {"solve x^2 - 2 = 0","Approximately: x = -1.414 and x = 1.414."}
+  };
+  size_t i;
+  for(i=0;i<sizeof(equations)/sizeof(equations[0]);++i){
+   memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));used=0;
+   snprintf(in.expression,sizeof(in.expression),"%s",equations[i].input);
+   check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_OK&&
+     used==sizeof(out)&&out.status==DIGIT_ARITHMETIC_OK&&
+     strcmp(out.decimal_answer,equations[i].expected)==0,equations[i].input);
   }
  }
  memset(&in,'x',sizeof(in));
