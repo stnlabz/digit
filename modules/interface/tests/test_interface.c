@@ -20,7 +20,7 @@ int main(void)
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "interface") == 0, "module identity is interface");
     /* [AI:GPT-6 | 2026-10-08] Align historical descriptor regression with Interface 1.5.3. */
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 6 && descriptor->version_patch == 11, "internal version is 1.6.11");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 0, "internal version is 1.7.0");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
