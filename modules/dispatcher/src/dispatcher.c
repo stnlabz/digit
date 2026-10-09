@@ -161,6 +161,30 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
 }
 
+/* [AI:GPT-6 | 2026-10-09] Validated, request-local routing. */
+static stnlabz_module_result_t dispatcher_scoped_service(const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx){
+ const digit_dispatcher_scoped_request_t *in=request;
+ digit_dispatcher_request_t legacy;
+ if(!in||size!=sizeof(*in)||!response||!used||capacity<sizeof(digit_dispatcher_result_t))
+  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ if(!memchr(in->actor,0,sizeof(in->actor))||!in->actor[0]||
+    !memchr(in->request,0,sizeof(in->request))||!in->request[0])
+  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_PRIVATE){
+  if(in->organization[0]||in->project[0]||in->channel[0])
+   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ }else if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_CHANNEL){
+  if(!in->organization[0]||!in->project[0]||!in->channel[0]||
+     !memchr(in->organization,0,sizeof(in->organization))||
+     !memchr(in->project,0,sizeof(in->project))||
+     !memchr(in->channel,0,sizeof(in->channel)))
+   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ }else return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memset(&legacy,0,sizeof(legacy));
+ memcpy(legacy.request,in->request,strlen(in->request)+1);
+ return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,ctx);
+}
+
 /* [AI:GPT-6 | 2026-10-09] Executed, deterministic local qualification;
  * service integration and runtime acceptance remain separate gates. */
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){
@@ -185,7 +209,7 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
  result->negative_test_executed=1;result->negative_test_passed=negative_passed;
  return result->tests_failed||result->negative_test_passed!=result->negative_test_executed?STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
-static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;if(!host->register_service(DIGIT_DISPATCHER_SCOPED_SERVICE,dispatcher_scoped_service,NULL)){if(host->unregister_service)(void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);return STNLABZ_MODULE_ERR_START_FAILED;}dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
 static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
