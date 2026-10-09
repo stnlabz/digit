@@ -27,6 +27,7 @@
 #include "channel_results.h"
 #include "alert_results.h"
 #include "knowledge_query.h"
+#include "corpus_response.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
 #include "core_services.h"
@@ -469,7 +470,7 @@ if(strncmp(request,"GET /knowledge/record/",22)==0){
                          &out,sizeof(out),&used)||used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;
     }
-    if(out.found!=0 && out.found!=1){
+    if(!digit_interface_corpus_exact_valid(&out.record,out.found,rid)){
         interface_reply(client,503,"{\"error\":\"corpus response invalid\"}\n");return;
     }
     if(out.found && strcmp(out.record.id,id)!=0){
@@ -525,9 +526,6 @@ if(strncmp(request,"GET /corpus/",12)==0){
     if(out.found!=0 && out.found!=1){
         interface_reply(client,503,"{\"error\":\"invalid corpus result\"}\n");return;
     }
-    if(out.found && strcmp(out.record.id,rid)!=0){
-        interface_reply(client,503,"{\"error\":\"record identity mismatch\"}\n");return;
-    }
     if(!digit_knowledge_single_json(&out.record,out.found,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"invalid corpus record\"}\n");return;
     }
@@ -549,7 +547,7 @@ if(strncmp(request,"POST /corpus/search ",20)==0){
                          &out,sizeof(out),&used) || used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;
     }
-    if(out.count>CORPUS_SEARCH_MAX ||
+    if(!digit_interface_corpus_search_valid(out.records,out.count,CORPUS_SEARCH_MAX) ||
        !digit_knowledge_result_json(out.records,out.count,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"invalid corpus search result\"}\n");return;
     }
@@ -569,7 +567,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[16];
+    int tests[19];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -595,6 +593,10 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     /* [AI:GPT-6 | 2026-10-08] 1.4.10 channel boundary smoke checks. */
     tests[14]=digit_interface_channels_valid(NULL,0,0);
     tests[15]=!digit_interface_channels_valid(NULL,1,0);
+    /* [AI:GPT-6 | 2026-10-08] 1.5.0 Corpus admission checks. */
+    tests[16]=digit_interface_corpus_search_valid(NULL,0,16);
+    tests[17]=!digit_interface_corpus_search_valid(NULL,1,16);
+    tests[18]=!digit_interface_corpus_exact_valid(NULL,1,"record-1");
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -602,11 +604,12 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     }
     r->negative_test_executed=1;
     r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
-                            tests[9] && tests[10] && tests[11] && tests[13] && tests[15];
+                            tests[9] && tests[10] && tests[11] && tests[13] && tests[15] &&
+                            tests[17] && tests[18];
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
