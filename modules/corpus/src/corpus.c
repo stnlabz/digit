@@ -132,7 +132,13 @@ static unsigned int record_query_score(const digit_corpus_record_t *record, cons
 
 int digit_corpus_validate(const digit_corpus_record_t *record)
 {
-    if (record == NULL) return 0;
+    /* [AI:GPT-6 | 2026-10-09] Reject unterminated ABI fields before
+     * scanning them with string functions or writing a persisted record. */
+    if (record == NULL ||
+        memchr(record->id, 0, sizeof(record->id)) == NULL ||
+        memchr(record->category, 0, sizeof(record->category)) == NULL ||
+        memchr(record->source, 0, sizeof(record->source)) == NULL ||
+        memchr(record->text, 0, sizeof(record->text)) == NULL) return 0;
     return corpus_safe_field(record->id) && corpus_safe_field(record->category) && corpus_safe_field(record->source) && corpus_safe_field(record->text);
 }
 
@@ -278,8 +284,38 @@ static stnlabz_module_result_t corpus_list_service(const void *request, size_t r
 
 static stnlabz_module_result_t corpus_qualify(stnlabz_module_qualification_result_t *result)
 {
+    digit_corpus_record_t record;
+    char words[CORPUS_QUERY_TERM_MAX][CORPUS_QUERY_WORD_MAX] = {{0}};
+    unsigned int passed = 0;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result, 0, sizeof(*result)); result->tests_executed = 10; result->tests_passed = 10; result->negative_test_executed = 1; result->negative_test_passed = 1; return STNLABZ_MODULE_OK;
+    memset(result, 0, sizeof(*result));
+    memset(&record, 0, sizeof(record));
+    snprintf(record.id,sizeof(record.id),"T-1");
+    snprintf(record.category,sizeof(record.category),"ENGINEERING");
+    snprintf(record.source,sizeof(record.source),"test");
+    snprintf(record.text,sizeof(record.text),"Digit module qualification passed.");
+    passed += (unsigned int)digit_corpus_validate(&record);
+    passed += (unsigned int)contains_ci(record.text,"module");
+    passed += (unsigned int)!contains_ci(record.text,"hi");
+    passed += (unsigned int)!contains_ci(record.text,"modulex");
+    passed += (unsigned int)(query_terms("what is module qualification",words)==2);
+    passed += (unsigned int)(record_query_score(&record,"module",words,1)>0);
+    passed += (unsigned int)!digit_corpus_validate(NULL);
+    record.text[0]='\n';
+    passed += (unsigned int)!digit_corpus_validate(&record);
+    snprintf(record.text,sizeof(record.text),"Valid entry");
+    record.source[0]=0;
+    passed += (unsigned int)!digit_corpus_validate(&record);
+    snprintf(record.source,sizeof(record.source),"test");
+    memset(record.id,'X',sizeof(record.id));
+    passed += (unsigned int)!digit_corpus_validate(&record);
+    result->tests_executed=10;
+    result->tests_passed=passed;
+    result->tests_failed=result->tests_executed-passed;
+    result->negative_test_executed=1;
+    result->negative_test_passed=!digit_corpus_validate(&record);
+    return result->tests_failed || !result->negative_test_passed
+        ? STNLABZ_MODULE_ERR_QUALIFICATION : STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t corpus_start(const stnlabz_module_host_t *host)
@@ -318,5 +354,5 @@ static stnlabz_module_result_t corpus_stop(void)
     corpus_host = NULL; return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
-static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 1, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
+static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 2, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &corpus_descriptor; }
