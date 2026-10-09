@@ -71,6 +71,11 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
  {
   static const struct {const char *question,*expected;} cases[]={
+   {"Digit what is 2+2?","2 + 2 = 4."},
+   {"Digit what is 2 plus 2?","2 + 2 = 4."},
+   {"Digit what is two plus two?","2 + 2 = 4."},
+   {"Digit, what is 2 plus 2?","2 + 2 = 4."},
+   {"Digital what is 2 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."},
    {"What is 7 minus 12?","7 - 12 = -5."},
    {"What is 3 times 5?","3 * 5 = 15."},
    {"What is 9 divided by 3?","9 / 3 = 3."},
@@ -114,7 +119,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 2, "internal version is 1.7.2");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 3, "internal version is 1.7.3");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
