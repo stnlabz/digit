@@ -71,6 +71,11 @@ static void test_audit_capacity(void)
     CHECK(manager->registry.audit_count == STNLABZ_MODULE_AUDIT_MAX - 3,
           "failed admission consumes no ABI audit entries");
     CHECK(manager->loader.count == 0, "deferred candidate does not enter loader");
+    CHECK(hotload->count == 0, "deferred candidate is not recorded as accepted");
+    CHECK(digit_hotload_poll(hotload) == 0, "unchanged candidate is retried safely");
+    CHECK(hotload->count == 0, "second deferral remains retryable");
+    CHECK(manager->registry.audit_count == STNLABZ_MODULE_AUDIT_MAX - 3,
+          "retry preserves audit capacity and incumbent");
 cleanup:
     free(hotload);
     free(manager);
