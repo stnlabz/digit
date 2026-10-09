@@ -11,6 +11,7 @@
 #include "arithmetic.h"
 
 static stnlabz_module_service_handler_fn dispatcher_handler;
+static stnlabz_module_service_handler_fn scoped_handler;
 static unsigned response_calls;
 static digit_intent_class_t chosen_intent;
 static unsigned int chosen_established=1;
@@ -19,11 +20,12 @@ static unsigned int arithmetic_calls=0;
 
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
+ if(!strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE)){scoped_handler=fn;return 1;}
  if(strcmp(name,DIGIT_DISPATCHER_SERVICE))return 0;
  dispatcher_handler=fn;return 1;
 }
 static int unregister_dispatcher(const char *name,void *ctx){
- (void)ctx;return !strcmp(name,DIGIT_DISPATCHER_SERVICE);
+ (void)ctx;return !strcmp(name,DIGIT_DISPATCHER_SERVICE)||!strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE);
 }
 static stnlabz_module_result_t mock_invoke(const char *name,const void *input,size_t isize,
  void *output,size_t osize,size_t *used){
@@ -137,6 +139,41 @@ int main(void){
      !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
                     "without authenticated, account-bound conversation context")){
    fprintf(stderr,"Dispatcher unscoped follow-up rejection FAILED\\n");return 1;
+  }
+  /* [AI:GPT-6 | 2026-10-09] Scoped ABI acceptance and denial. */
+  {
+   digit_dispatcher_scoped_request_t in={0};
+   digit_dispatcher_result_t out={0};
+   size_t used=0;
+   snprintf(in.request,sizeof(in.request),"Who are you?");
+   snprintf(in.actor,sizeof(in.actor),"account_1");
+   in.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   chosen_intent=DIGIT_INTENT_FACT;chosen_established=1;
+   if(!scoped_handler||
+      scoped_handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+      used!=sizeof(out)||strstr(out.answer,"Bounded response")==NULL){
+    fprintf(stderr,"Dispatcher scoped private route FAILED\\n");return 1;
+   }
+   in.scope_kind=DIGIT_DISPATCHER_SCOPE_CHANNEL;
+   if(scoped_handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT){
+    fprintf(stderr,"Dispatcher incomplete channel scope accepted\\n");return 1;
+   }
+   snprintf(in.organization,sizeof(in.organization),"stn-labz");
+   snprintf(in.project,sizeof(in.project),"development");
+   snprintf(in.channel,sizeof(in.channel),"general");
+   if(scoped_handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK){
+    fprintf(stderr,"Dispatcher valid channel scope rejected\\n");return 1;
+   }
+   in.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   if(scoped_handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT){
+    fprintf(stderr,"Dispatcher contaminated private scope accepted\\n");return 1;
+   }
+   memset(&in,0,sizeof(in));
+   snprintf(in.request,sizeof(in.request),"Who are you?");
+   in.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   if(scoped_handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT){
+    fprintf(stderr,"Dispatcher anonymous private scope accepted\\n");return 1;
+   }
   }
   if(!d->stop||d->stop()!=STNLABZ_MODULE_OK){
    fprintf(stderr,"Dispatcher mock shutdown FAILED\\n");return 1;
