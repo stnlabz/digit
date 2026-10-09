@@ -88,7 +88,7 @@ $(SACRIFICIAL_CONF): tests/modules/sacrificial/module.conf | $(SACRIFICIAL_DIR)
 $(TEST_MODULE_MANAGER): tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
+$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_QUALIFICATION): tests/test_qualification.c src/qualification.c | build
