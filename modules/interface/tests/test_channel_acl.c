@@ -70,6 +70,14 @@ int main(void) {
         check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "single-link ACL registry authorization restored");
     }
+    /* [AI:GPT-6 | 2026-10-08] A protected ACL must maintain private
+     * metadata. Reinstating correct metadata restores normal parsing. */
+    check(chmod(path,0660)==0,"ACL owner-group writable fixture created");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
+          "group-writable ACL registry rejected");
+    check(chmod(path,0600)==0,"ACL private permissions restored");
+    check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
+          "restored private ACL registry authorized");
     check(!digit_channel_acl_check_scoped(path,root,sa,"poe","general"),"other user denied");
     check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","security"),"other channel denied");
     check(!digit_channel_acl_check_file(NULL,"ezra","general"),"null path denied");
