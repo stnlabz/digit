@@ -277,15 +277,15 @@ static int learned_self_identity_answer(const char *question,const corpus_record
                                        char *answer,size_t capacity){
  const char *text,*p=NULL,*end;size_t i,len;
  char words[128],rule[512];
- static const char *const connectors[]={"say that ","respond that ","tell them that "};
+ static const char *const connectors[]={"say that ","respond that ","respond: ","tell them that "};
  if(!question||!record||!answer||!capacity)return 0;
  canonical_text(question,words,sizeof(words));
  if(strcmp(words,"who are you")!=0)return 0;
  text=presentation_text(record);
- if(strncasecmp(text,"if ",3)!=0)return 0;
+ if(strncasecmp(text,"if ",3)!=0 && strncasecmp(text,"when ",5)!=0)return 0;
  canonical_text(text,rule,sizeof(rule));
  if(!strstr(rule,"asked who i was")&&!strstr(rule,"asked who i am")&&
-    !strstr(rule,"asked who you are"))return 0;
+    !strstr(rule,"asked who you are")&&!strstr(rule,"asked who are you"))return 0;
  for(i=0;i<sizeof(connectors)/sizeof(connectors[0]);i++){
   size_t j,n=strlen(connectors[i]);
   for(j=0;text[j];j++){
@@ -302,7 +302,7 @@ static int learned_self_identity_answer(const char *question,const corpus_record
  memcpy(answer,p,len);answer[len]=0;
  return 1;
 }
-static void grounded_fallback(const char *question,ranked_record_t selected[SELECTED_MAX],size_t selected_count,digit_response_result_t *output){size_t i,offset=0;int show_evidence=evidence_requested(question);output->answered=1;if(selected_count==0){snprintf(output->answer,sizeof(output->answer),"I don't have enough information to answer that.");return;}if(!show_evidence){if(learned_self_identity_answer(question,&selected[0].record,output->answer,sizeof(output->answer)))return;snprintf(output->answer,sizeof(output->answer),"%s",presentation_text(&selected[0].record));return;}snprintf(output->answer,sizeof(output->answer),"Evidence: ");offset=strlen(output->answer);for(i=0;i<selected_count&&i<3;++i){int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s[%s] %s",i?" ":"",selected[i].record.source,selected[i].record.text);else written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s%s",i?" ":"",presentation_text(&selected[i].record));if(written<=0||(size_t)written>=sizeof(output->answer)-offset)break;offset+=(size_t)written;}}
+static void grounded_fallback(const char *question,ranked_record_t selected[SELECTED_MAX],size_t selected_count,digit_response_result_t *output){size_t i,offset=0;int show_evidence=evidence_requested(question);output->answered=1;if(selected_count==0){snprintf(output->answer,sizeof(output->answer),"I don't have enough information to answer that.");return;}if(!show_evidence){for(i=0;i<selected_count;i++)if(learned_self_identity_answer(question,&selected[i].record,output->answer,sizeof(output->answer)))return;snprintf(output->answer,sizeof(output->answer),"%s",presentation_text(&selected[0].record));return;}snprintf(output->answer,sizeof(output->answer),"Evidence: ");offset=strlen(output->answer);for(i=0;i<selected_count&&i<3;++i){int written;if(strcmp(selected[i].record.category,"source")==0)written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s[%s] %s",i?" ":"",selected[i].record.source,selected[i].record.text);else written=snprintf(output->answer+offset,sizeof(output->answer)-offset,"%s%s",i?" ":"",presentation_text(&selected[i].record));if(written<=0||(size_t)written>=sizeof(output->answer)-offset)break;offset+=(size_t)written;}}
 static int validate_inbound(const char *raw,char *normalized,size_t normalized_size){validator_inbound_request_t request;validator_inbound_result_t result;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||normalized_size==0||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(&result,0,sizeof(result));snprintf(request.raw,sizeof(request.raw),"%s",raw);status=response_host->invoke_service(VALIDATOR_INBOUND_SERVICE,&request,sizeof(request),&result,sizeof(result),&used);if(status!=STNLABZ_MODULE_OK||used!=sizeof(result)||result.status!=VALIDATOR_PASS||result.normalized[0]=='\0')return 0;snprintf(normalized,normalized_size,"%s",result.normalized);return 1;}
 static void validator_evidence(ranked_record_t selected[SELECTED_MAX],size_t selected_count,char *buffer,size_t buffer_size){size_t i,offset=0;if(buffer==NULL||buffer_size==0)return;buffer[0]='\0';for(i=0;i<selected_count&&offset+1<buffer_size;++i){int written=snprintf(buffer+offset,buffer_size-offset,"%s%s",i?"\n":"",selected[i].record.text);if(written<=0||(size_t)written>=buffer_size-offset)break;offset+=(size_t)written;}}
 static int validate_outbound_evidence(const char *raw,const char *normalized,const char *candidate,const char *evidence,unsigned int attempt,validator_outbound_result_t *validation){validator_outbound_request_t request;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||candidate==NULL||validation==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(validation,0,sizeof(*validation));snprintf(request.raw,sizeof(request.raw),"%s",raw);snprintf(request.normalized,sizeof(request.normalized),"%s",normalized);snprintf(request.candidate,sizeof(request.candidate),"%s",candidate);if(evidence!=NULL)snprintf(request.evidence,sizeof(request.evidence),"%s",evidence);request.attempt=attempt;status=response_host->invoke_service(VALIDATOR_OUTBOUND_SERVICE,&request,sizeof(request),validation,sizeof(*validation),&used);return status==STNLABZ_MODULE_OK&&used==sizeof(*validation);}
@@ -415,8 +415,13 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   passed+=(unsigned)!learned_self_identity_answer("What is a variable?",&lesson,answer,sizeof(answer));
   snprintf(lesson.text,sizeof(lesson.text),"A variable is an object with a name.");
   passed+=(unsigned)!learned_self_identity_answer("Who are you?",&lesson,answer,sizeof(answer));
+  snprintf(lesson.text,sizeof(lesson.text),
+    "When asked who are you, respond: I am Digit, the STN-Labz Autonomous Engineering Agent.");
+  passed+=(unsigned)(learned_self_identity_answer("Who are you?",&lesson,answer,sizeof(answer))&&
+    strcmp(answer,"I am Digit, the STN-Labz Autonomous Engineering Agent.")==0);
+  passed+=(unsigned)!learned_self_identity_answer("What is your status?",&lesson,answer,sizeof(answer));
  }
- result->tests_executed=15;result->tests_passed=passed;
+ result->tests_executed=17;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -425,5 +430,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
