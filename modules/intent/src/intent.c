@@ -149,6 +149,27 @@ static int learned_text(const char *in,char *out,size_t cap)
  return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-09] A name introduction is conversational content,
+ * not a privileged identity claim or an account-profile update. */
+static int personal_introduction(const char *text)
+{
+    static const char *const starts[] = {"my name is ","call me ","i go by "};
+    size_t i;
+    if (!text) return 0;
+    while (isspace((unsigned char)*text)) ++text;
+    for (i=0;i<sizeof(starts)/sizeof(starts[0]);++i){
+        size_t n=strlen(starts[i]);
+        const char *p;
+        if (strncasecmp(text,starts[i],n)) continue;
+        p=text+n;
+        if (!isalpha((unsigned char)*p)) return 0;
+        while (isalpha((unsigned char)*p)||*p=='-'||*p=='\'') ++p;
+        while (isspace((unsigned char)*p)) ++p;
+        return !*p || (*p=='.' && !p[1]) || (*p=='!' && !p[1]);
+    }
+    return 0;
+}
+
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
                        digit_intent_target_t target, unsigned int established,
                        const char *reason)
@@ -179,6 +200,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         return;
     }
     text=interpreted;
+    if(personal_introduction(text)){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Operator self-introduction is conversational, not authentication.");return;}
     /* [AI:GPT-6 | 2026-10-09] A bounded solve-equation request is
      * an arithmetic knowledge query, not a privileged executable action. */
     {
@@ -358,7 +380,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 7,
+    "intent", "Digit Intent", 1, 1, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
