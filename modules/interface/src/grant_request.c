@@ -12,7 +12,7 @@ static int identifier(const char *s,size_t n){
  return 1;
 }
 int digit_grant_request_parse(const char *text,digit_grant_request_t *out){
- digit_grant_request_t value={{0}};
+ digit_grant_request_t value={0};
  char *dest[4]={value.organization,value.project,value.channel,value.user};
  const char *start,*end;
  size_t i,length;
