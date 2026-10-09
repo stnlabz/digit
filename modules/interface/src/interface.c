@@ -219,7 +219,8 @@ static int interface_private_name_recall(const char *body){
   if(!strcmp(w,"my"))my=1;
   if(!strcmp(w,"name"))name=1;
   if(!strcmp(w,"what")||!strcmp(w,"who"))question=1;
-  if(!strcmp(w,"tell")||!strcmp(w,"told")||!strcmp(w,"tel")||
+  if((!strcmp(w,"s")&&i>0&&!strcmp(words[i-1],"what"))||
+     !strcmp(w,"tell")||!strcmp(w,"told")||!strcmp(w,"tel")||
      !strcmp(w,"call")||!strcmp(w,"called")||
      !strcmp(w,"is")||!strcmp(w,"was"))recall=1;
  }
