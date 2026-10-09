@@ -15,6 +15,11 @@
 #define DIGIT_ALERT_SERVICE_LIST "alert.list"
 #define DIGIT_ALERT_SERVICE_GET "alert.get"
 #define DIGIT_ALERT_SERVICE_ACKNOWLEDGE "alert.acknowledge"
+/* [AI:GPT-6 | 2026-10-08] Interface 1.5.4: only Core evaluates
+ * authority for access to operational administration data. */
+#define DIGIT_ADMIN_SA_SERVICE "admin.sa.authorize"
+#define DIGIT_ADMIN_ORGANIZATION "stn-labz"
+#define DIGIT_ADMIN_SA_REGISTRY "/opt/digit/state/auth/security_sa.tsv"
 
 #define DIGIT_CORE_SERVICE_CHANNEL_LIST_MAX 128
 #define DIGIT_CORE_SERVICE_MESSAGE_LIST_MAX 256
@@ -38,6 +43,9 @@ typedef struct { char alert_id[DIGIT_ALERT_ID_MAX]; } digit_alert_get_request_t;
 typedef struct { int found; digit_alert_t alert; } digit_alert_get_response_t;
 typedef struct { char alert_id[DIGIT_ALERT_ID_MAX]; } digit_alert_acknowledge_request_t;
 typedef struct { int acknowledged; digit_alert_t alert; } digit_alert_acknowledge_response_t;
+
+typedef struct { char identity[64]; } digit_admin_sa_request_t;
+typedef struct { int authorized; } digit_admin_sa_response_t;
 
 int digit_core_services_register(void);
 void digit_core_services_unregister(void);
