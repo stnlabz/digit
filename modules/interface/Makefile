@@ -5,7 +5,7 @@ ABI_DIR ?= ../../../ABI
 ABI_INCLUDE := $(ABI_DIR)/includes
 DIGIT_INCLUDE := ../../include
 CPPFLAGS ?= -Iincludes -I$(DIGIT_INCLUDE) -I$(ABI_INCLUDE)
-LDLIBS ?= -pthread -lcrypt
+LDLIBS ?= -pthread -lcrypt -lssl -lcrypto
 
 TARGET := bin/interface.so
 TEST_TARGET := bin/test_interface
