@@ -421,6 +421,24 @@ if(strncmp(request,"POST /session/logout ",21)==0){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
 }
+/* [AI:GPT-6 | 2026-10-08] Interface 1.5.4: protected SA admission.
+ * Core decides authority against the current operator-controlled roster.
+ * No administration data is exposed until Core returns an exact grant. */
+if(strncmp(request,"GET /admin/access HTTP/1.1",26)==0){
+    digit_admin_sa_request_t in;
+    digit_admin_sa_response_t out;
+    size_t used=0;
+    memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));
+    if(strlen(identity)>=sizeof(in.identity)){
+        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+    }
+    snprintf(in.identity,sizeof(in.identity),"%s",identity);
+    if(!interface_invoke(DIGIT_ADMIN_SA_SERVICE,&in,sizeof(in),&out,sizeof(out),&used) ||
+       used!=sizeof(out) || out.authorized!=1){
+        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+    }
+    interface_reply(client,200,"{\\"authorized\\":true,\\"scope\\":\\"digit-operations-read\\"}\\n");return;
+}
 /* [AI:GPT-6 | 2026-10-08] Authenticated, SA-only project binding.
  * The actor is always the resolved active account, never request data.
  * The trusted bridge rechecks assignment and security membership before
@@ -605,5 +623,5 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
