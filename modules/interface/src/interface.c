@@ -147,7 +147,34 @@ static ssize_t interface_receive_request(int client,char *request,size_t capacit
 static int interface_path_value(const char *request,const char *prefix,char *out,size_t n){const char *start=request+strlen(prefix),*end=strchr(start,' ');size_t len;if(!end||end==start)return 0;len=(size_t)(end-start);if(len>=n)return 0;memcpy(out,start,len);out[len]=0;return 1;}
 static int interface_path_two(const char *request,const char *prefix,char *first,size_t fn,const char *suffix){const char *start=request+strlen(prefix),*slash=strchr(start,'/'),*line_end=strstr(request,"\r\n");size_t len,suffix_len;if(!slash||!line_end||slash>=line_end)return 0;suffix_len=strlen(suffix);if((size_t)(line_end-slash)!=suffix_len||strncmp(slash,suffix,suffix_len)!=0)return 0;len=(size_t)(slash-start);if(!len||len>=fn)return 0;memcpy(first,start,len);first[len]=0;return 1;}
 static int interface_invoke(const char *service,const void *in,size_t in_size,void *out,size_t out_size,size_t *used){if(!interface_host||!interface_host->invoke_service)return 0;return interface_host->invoke_service(service,in,in_size,out,out_size,used)==STNLABZ_MODULE_OK;}
-static void interface_dispatch(const char *body,interface_dispatcher_result_t *out){interface_dispatcher_request_t in;size_t used=0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.request,sizeof(in.request),"%s",body);if(!interface_invoke(DISPATCHER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because my dispatcher is unavailable.");if(interface_host&&interface_host->send_message)(void)interface_host->send_message("[INTERFACE] dispatcher.handle unavailable; returned conversational failure instead of HTTP 503");}}
+/* [AI:GPT-6 | 2026-10-09] Preserve operator request boundaries:
+ * an overlong message must not become a different truncated command. */
+static int interface_dispatch_request_copy(const char *body,interface_dispatcher_request_t *out){
+ size_t length;
+ if(!body||!out)return 0;
+ length=strnlen(body,sizeof(out->request));
+ if(length==0||length>=sizeof(out->request))return 0;
+ memset(out,0,sizeof(*out));
+ memcpy(out->request,body,length);
+ return 1;
+}
+static void interface_dispatch(const char *body,interface_dispatcher_result_t *out){
+ interface_dispatcher_request_t in;size_t used=0;
+ memset(out,0,sizeof(*out));
+ if(!interface_dispatch_request_copy(body,&in)){
+  out->answered=1;
+  snprintf(out->answer,sizeof(out->answer),
+   "I cannot dispatch that request because its length exceeds the supported limit.");
+  return;
+ }
+ if(!interface_invoke(DISPATCHER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)){
+  out->answered=1;
+  snprintf(out->answer,sizeof(out->answer),
+   "I couldn't complete that request because my dispatcher is unavailable.");
+  if(interface_host&&interface_host->send_message)
+   (void)interface_host->send_message("[INTERFACE] dispatcher.handle unavailable; returned conversational failure instead of HTTP 503");
+ }
+}
 
 static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)||!digit_interface_builder_result_valid(out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
 static void interface_learn(int client,const char *text){interface_builder_result_t out;char answer[768],escaped[1600],er[512],eid[160],json[3000];int result=interface_process_learn(text,&out,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));interface_json_escape(answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",escaped,out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);}
@@ -1092,7 +1119,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[22];
+    int tests[25];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -1126,6 +1153,20 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     tests[19]=digit_interface_corpus_exact_json(&record,1,"record-1",json,sizeof(json));
     tests[20]=!digit_interface_corpus_exact_json(&record,1,"wrong-id",json,sizeof(json));
     tests[21]=!digit_interface_corpus_search_json(&record,2,1,json,sizeof(json));
+    /* [AI:GPT-6 | 2026-10-09] Verify a complete bounded request passes,
+     * empty requests and exactly-capacity requests fail without truncation. */
+    {
+        interface_dispatcher_request_t dispatch_request;
+        char boundary[DISPATCHER_REQUEST_MAX+1];
+        memset(boundary,'a',sizeof(boundary));
+        boundary[DISPATCHER_REQUEST_MAX-1]='\0';
+        tests[22]=interface_dispatch_request_copy(boundary,&dispatch_request) &&
+                  strlen(dispatch_request.request)==DISPATCHER_REQUEST_MAX-1;
+        boundary[DISPATCHER_REQUEST_MAX-1]='a';
+        boundary[DISPATCHER_REQUEST_MAX]='\0';
+        tests[23]=!interface_dispatch_request_copy(boundary,&dispatch_request);
+        tests[24]=!interface_dispatch_request_copy("",&dispatch_request);
+    }
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -1134,7 +1175,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     r->negative_test_executed=1;
     r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
                             tests[9] && tests[10] && tests[11] && tests[13] && tests[15] &&
-                            tests[17] && tests[18] && tests[20] && tests[21];
+                            tests[17] && tests[18] && tests[20] && tests[21] && tests[23] && tests[24];
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
@@ -1184,5 +1225,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,6,11,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
