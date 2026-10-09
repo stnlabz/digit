@@ -84,7 +84,7 @@ static int dispatch_case(const char *request,digit_intent_class_t intent,
 int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
- if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=3||!d->qualify){
+ if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=4||!d->qualify){
   fprintf(stderr,"Dispatcher descriptor invalid\\n");return 1;
  }
  memset(&q,0,sizeof(q));
