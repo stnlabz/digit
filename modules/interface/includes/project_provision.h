@@ -27,4 +27,9 @@ int digit_project_security_member(const char *root,const char *organization,
 int digit_project_security_ready(const char *root, const char *organization,
                                   const char *project);
 
+/* Verified restricted project roster; only organization SA may request. */
+int digit_project_members_json(const char *root,const char *organization,
+ const char *project,const char *actor,const char *sa_registry,
+ char *json,size_t capacity);
+
 #endif
