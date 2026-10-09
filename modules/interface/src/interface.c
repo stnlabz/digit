@@ -521,7 +521,7 @@ if(strncmp(request,"GET /corpus/",12)==0){
                          &out,sizeof(out),&used) || used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;
     }
-    if(!digit_interface_corpus_exact_valid(&out.record,out.found,rid)){
+    if(!digit_interface_corpus_exact_json(&out.record,out.found,rid,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"invalid corpus result\"}\n");return;
     }
     if(!digit_knowledge_single_json(&out.record,out.found,json,sizeof(json))){
