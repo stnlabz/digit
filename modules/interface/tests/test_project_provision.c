@@ -121,6 +121,20 @@ int main(void) {
         check(digit_project_security_member(root,"stn-labz","digit","sysadmin"),
               "restored valid security roster accepted");
     }
+    /* [AI:GPT-6 | 2026-10-08] Protected membership paths must not
+     * redirect through an alias, even when the contents remain valid. */
+    {
+        char backup[320];
+        snprintf(backup,sizeof(backup),"%s.security-original",security);
+        check(rename(security,backup)==0,"security roster renamed for alias fixture");
+        check(symlink(backup,security)==0,"security roster symlink alias created");
+        check(!digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "symlinked security roster cannot authorize membership");
+        check(unlink(security)==0 && rename(backup,security)==0,
+              "original security roster restored from alias");
+        check(digit_project_security_member(root,"stn-labz","digit","sysadmin"),
+              "restored private roster authorizes qualified member");
+    }
     chmod(security,0644);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"readable-by-others security record denied");
     chmod(security,0600);
