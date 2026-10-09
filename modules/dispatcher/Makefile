@@ -12,7 +12,7 @@ DIGIT_PREFIX ?= /opt/digit
 INSTALL_DIR := $(DIGIT_PREFIX)/modules/dispatcher
 INSTALL_BIN := $(INSTALL_DIR)/bin
 
-.PHONY: all clean check-abi rebuild install
+.PHONY: all clean check-abi rebuild install test
 
 all: check-abi $(TARGET)
 
@@ -24,6 +24,12 @@ $(TARGET): $(SOURCE) includes/dispatcher.h ../source/includes/source.h ../respon
 
 bin:
 	mkdir -p bin
+
+bin/test_dispatcher: tests/test_dispatcher.c $(SOURCE) includes/dispatcher.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_dispatcher.c $(SOURCE) -o $@
+
+test: check-abi bin/test_dispatcher
+	./bin/test_dispatcher
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
