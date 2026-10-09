@@ -210,7 +210,7 @@ static void interface_channels_list(int client,const char *identity)
         int stn=digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,"stn-labz",identity);
         int chaos=digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,"team-chaos",identity);
         n=snprintf(json,sizeof(json),
-           "{\"count\":%zu,\"organizations\":[%s%s%s],\"channels\":[%s]}\\n",
+           "{\"count\":%zu,\"organizations\":[%s%s%s],\"channels\":[%s]}\n",
            visible,stn?"\"stn-labz\"":"",stn&&chaos?",":"",
            chaos?"\"team-chaos\"":"",items);
     }
