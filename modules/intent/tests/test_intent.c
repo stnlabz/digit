@@ -124,6 +124,18 @@ int main(int argc, char **argv)
                   DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U);
     expect_intent("action", "build a module",
                   DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U);
+    /* [AI:GPT-6 | 2026-10-09] Verify actual algebra intent gating. */
+    {
+        digit_intent_result_t r;
+        digit_intent_interpret("solve 3*x - 6 = 0",&r);
+        if(r.intent!=DIGIT_INTENT_FACT||r.target!=DIGIT_INTENT_TARGET_KNOWLEDGE||!r.established){
+            fprintf(stderr,"FAIL algebra solve classification\n");++failures;
+        }else printf("PASS algebra solve classification\n");
+        digit_intent_interpret("solve remove files = x",&r);
+        if(r.intent==DIGIT_INTENT_FACT&&r.established){
+            fprintf(stderr,"FAIL invalid solve instruction boundary\n");++failures;
+        }else printf("PASS invalid solve instruction boundary\n");
+    }
     expect_intent("negative-unknown", "flibbertigibbet",
                   DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U);
 
