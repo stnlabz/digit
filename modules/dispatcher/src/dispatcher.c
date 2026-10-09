@@ -143,6 +143,14 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
      * capabilities execute. A generic ACTION cannot enter retrieval. */
     /* [AI:GPT-6 | 2026-10-09] Require an established, target-consistent
      * Intent before executing any capability, including lesson ingestion. */
+    /* [AI:GPT-6 | 2026-10-09] An unclassified request is not an
+     * authorization failure. Preserve the capability-only action gate. */
+    else if(intent_result.intent==DIGIT_INTENT_UNKNOWN||
+            intent_result.intent==DIGIT_INTENT_AMBIGUOUS){
+        out.answered=1;
+        snprintf(out.answer,sizeof(out.answer),
+          "I can't establish what you want me to do from that request.");
+    }
     else if(!intent_result.established ||
             (intent_result.intent==DIGIT_INTENT_ACTION &&
              intent_result.target!=DIGIT_INTENT_TARGET_CAPABILITY)){
@@ -155,7 +163,6 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
         else unsupported_action(&out);
     }
     else if(intent_result.intent==DIGIT_INTENT_STATUS&&source_action(interpreted_request))source_scan(interpreted_request,&out);
-    else if(intent_result.intent==DIGIT_INTENT_UNKNOWN||intent_result.intent==DIGIT_INTENT_AMBIGUOUS){out.answered=1;snprintf(out.answer,sizeof(out.answer),"I can't establish what you want me to do from that request.");}
     else dispatch_intent_response(interpreted_request,&intent_result,&out);
     normalize_answer(out.answer);
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
@@ -211,5 +218,5 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
 }
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;if(!host->register_service(DIGIT_DISPATCHER_SCOPED_SERVICE,dispatcher_scoped_service,NULL)){if(host->unregister_service)(void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);return STNLABZ_MODULE_ERR_START_FAILED;}dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
