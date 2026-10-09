@@ -871,6 +871,58 @@ if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",
         interface_reply(client,404,"{\"error\":\"not found\"}\n");return;
     }
 }
+/* [AI:GPT-6 | 2026-10-09] Project-scoped, end-to-end ordinary channel
+ * creation. Core creation by itself is never reported as ready. */
+if(strncmp(request,"POST /admin/channels HTTP/1.1\r\n",
+ sizeof("POST /admin/channels HTTP/1.1\r\n")-1U)==0){
+ char org[64],project[64],name[64],channel[DIGIT_CHANNEL_ID_MAX],json[256];
+ char *a,*b,*parts[3];size_t i,j,n;
+ digit_grant_request_t access;
+ if(!body||(a=strchr(body,'\t'))==NULL||
+    (b=strchr(a+1,'\t'))==NULL||strchr(b+1,'\t')||
+    strchr(body,'\r')||strchr(body,'\n')){
+  interface_reply(client,400,"{\"error\":\"expected organization, project and channel name\"}\n");return;
+ }
+ parts[0]=org;parts[1]=project;parts[2]=name;
+ {const char *begins[3]={body,a+1,b+1};const char *ends[3]={a,b,body+strlen(body)};
+  for(i=0;i<3;i++){
+   n=(size_t)(ends[i]-begins[i]);
+   if(!n||n>=64||(i==2&&n>40)){
+    interface_reply(client,400,"{\"error\":\"invalid project channel scope\"}\n");return;
+   }
+   for(j=0;j<n;j++){
+    unsigned char c=(unsigned char)begins[i][j];
+    if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+         (c>='0'&&c<='9')||c=='-'||c=='_')){
+     interface_reply(client,400,"{\"error\":\"invalid channel identifier\"}\n");return;
+    }
+   }
+   memcpy(parts[i],begins[i],n);parts[i][n]=0;
+  }
+ }
+ if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)||
+    !digit_project_security_ready(DIGIT_PROJECT_ROOT,org,project)||
+    !digit_project_security_member(DIGIT_PROJECT_ROOT,org,project,identity)){
+  interface_reply(client,403,"{\"error\":\"existing project SA membership required\"}\n");return;
+ }
+ if(!interface_host||!digit_project_channel_create_host(DIGIT_PROJECT_ROOT,
+    org,project,name,identity,DIGIT_SECURITY_SA_REGISTRY,interface_host,
+    channel,sizeof(channel))){
+  interface_reply(client,503,"{\"error\":\"project channel binding incomplete\"}\n");return;
+ }
+ memset(&access,0,sizeof(access));
+ snprintf(access.organization,sizeof(access.organization),"%s",org);
+ snprintf(access.project,sizeof(access.project),"%s",project);
+ snprintf(access.channel,sizeof(access.channel),"%s",channel);
+ snprintf(access.user,sizeof(access.user),"%s",identity);
+ if(!digit_grant_project_channel_scoped(DIGIT_CHANNEL_ACL_PATH,
+    DIGIT_PROJECT_ROOT,DIGIT_SECURITY_SA_REGISTRY,identity,&access)||
+    !digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,channel)){
+  interface_reply(client,503,"{\"error\":\"project channel access incomplete\"}\n");return;
+ }
+ snprintf(json,sizeof(json),"{\"ready\":true,\"organization\":\"%s\",\"project\":\"%s\",\"name\":\"%s\"}\n",org,project,name);
+ interface_reply(client,200,json);return;
+}
 if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,identity);return;}if(strncmp(request,"POST /channels HTTP/1.1\r\n",sizeof("POST /channels HTTP/1.1\r\n")-1U)==0){
     digit_admin_sa_request_t auth;
     digit_admin_sa_response_t grant;
