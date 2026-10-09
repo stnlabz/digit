@@ -214,7 +214,9 @@ static int evidence_divergence(const char *question, const char *candidate, cons
     /* Only enforce grounding when the supplied evidence is actually about the question. */
     for (i = 0; i < qn; ++i)
         if (has_term(et, en, qt[i])) ++relevant_evidence_terms;
-    if (relevant_evidence_terms == 0) return 0;
+    /* [AI:GPT-6 | 2026-10-09] Unrelated evidence cannot support a
+     * substantive answer. Previously this condition passed silently. */
+    if (relevant_evidence_terms == 0) return 1;
 
     /*
      * Question vocabulary proves only that the candidate is on-topic. It must never
@@ -298,16 +300,45 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
     return STNLABZ_MODULE_OK;
 }
 
+/* [AI:GPT-6 | 2026-10-09] Execute deterministic qualification;
+ * a declaration of ten successes is not a qualification test. */
 static stnlabz_module_result_t validator_qualify(stnlabz_module_qualification_result_t *result)
 {
-    if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result, 0, sizeof(*result));
-    result->tests_executed = 10;
-    result->tests_passed = 10;
-    result->tests_failed = 0;
-    result->negative_test_executed = 1;
-    result->negative_test_passed = 1;
-    return STNLABZ_MODULE_OK;
+    static const struct {const char *question,*candidate,*evidence;int reject;} cases[] = {
+        {"What is the first General Order?","Remain at the assigned mission.","The first General Order is to remain at the assigned mission.",0},
+        {"What is the first General Order?","The database is offline.","The first General Order is to remain at the assigned mission.",1},
+        {"What is your mission?","The database is offline.","A bridge network was configured.",1},
+        {"Compare C and Python","C is compiled and Python is interpreted.","C is compiled. Python is interpreted.",0},
+        {"Compare C and Python","The server is operational.","C is compiled. Python is interpreted.",1},
+        {"What is your mission?","What is your mission?","Digit's mission is controlled engineering.",1},
+        {"Is authentication needed?","Authentication is never needed.","Authentication is required.",1},
+        {"What is the service state?","The service is active.","The service is active.",0},
+        {"What is the service state?","","The service is active.",1},
+        {"What is the service state?","The service is broken.","The service is active.",1}
+    };
+    size_t i;unsigned int passed=0;
+    if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(result,0,sizeof(*result));
+    for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
+        digit_validator_outbound_request_t request;
+        digit_validator_outbound_result_t response;
+        size_t used=0;
+        memset(&request,0,sizeof(request));
+        snprintf(request.normalized,sizeof(request.normalized),"%s",cases[i].question);
+        snprintf(request.candidate,sizeof(request.candidate),"%s",cases[i].candidate);
+        snprintf(request.evidence,sizeof(request.evidence),"%s",cases[i].evidence);
+        request.attempt=1;
+        if(outbound_service(&request,sizeof(request),&response,sizeof(response),&used,NULL)==STNLABZ_MODULE_OK &&
+           used==sizeof(response) &&
+           (response.status==DIGIT_VALIDATOR_FAIL)==cases[i].reject)passed++;
+    }
+    result->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0]));
+    result->tests_passed=passed;
+    result->tests_failed=result->tests_executed-passed;
+    result->negative_test_executed=1;
+    result->negative_test_passed=evidence_divergence("What is your mission?","A database is online.","Completely unrelated records.");
+    return result->tests_failed||!result->negative_test_passed?
+      STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t validator_start(const stnlabz_module_host_t *host)
@@ -337,7 +368,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 4,
+        "validator", "Validator", 1, 0, 5,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
