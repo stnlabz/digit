@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -122,7 +123,9 @@ int digit_project_security_member(const char *root,const char *org,
     int base=-1,o=-1,p=-1,fd=-1,found=0,invalid=0;
     FILE *file=NULL;
     struct stat st;
-    char line[256];
+    char *line=NULL;
+    size_t line_cap=0;
+    ssize_t line_size;
     if(!project_name(org)||!project_name(project)||!project_name(identity)||
        !digit_project_security_ready(root,org,project))return 0;
     base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
@@ -132,14 +135,18 @@ int digit_project_security_member(const char *root,const char *org,
     fd=openat(p,"security.tsv",O_RDONLY|O_NOFOLLOW);
     if(fd<0||fstat(fd,&st)!=0||!S_ISREG(st.st_mode)||
        st.st_nlink!=1||(st.st_mode&077)!=0||
-       (st.st_uid!=0&&st.st_uid!=geteuid()))goto done;
+       (st.st_uid!=0&&st.st_uid!=geteuid())||
+       st.st_size<=0||st.st_size>8*1024*1024)goto done;
     file=fdopen(fd,"r");
     if(!file)goto done;
     fd=-1;
-    while(fgets(line,sizeof(line),file)){
+    /* [AI:GPT-6 | 2026-10-08] Length-aware roster parsing rejects
+     * embedded NULs, overlong records and truncated lines. */
+    while((line_size=getline(&line,&line_cap,file))!=-1){
         char *tab1,*tab2;
-        size_t n=strlen(line);
-        if(!n||line[n-1]!='\n'){invalid=1;break;}
+        size_t n=(size_t)line_size;
+        if(n<2 || n>=256 || line[n-1]!='\n' ||
+           memchr(line,'\0',n)!=NULL){invalid=1;break;}
         line[n-1]='\0';
         tab1=strchr(line,'\t');
         if(!tab1){invalid=1;break;}
@@ -155,7 +162,8 @@ int digit_project_security_member(const char *root,const char *org,
     }
     if(ferror(file))invalid=1;
 done:
-    if(file)fclose(file);
+    free(line);
+    if(file && fclose(file)!=0)invalid=1;
     if(fd>=0)close(fd);
     if(p>=0)close(p);
     if(o>=0)close(o);
