@@ -32,6 +32,7 @@
 #include "knowledge_query.h"
 #include "corpus_response.h"
 #include "builder_response.h"
+#include "dashboard_response.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
 #include "core_services.h"
@@ -494,7 +495,10 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
         free(channels);free(alerts);interface_reply(client,503,"{\"error\":\"alert snapshot unavailable\"}\n");return;
     }
     for(i=0;i<alerts->count;++i)if(!alerts->alerts[i].acknowledged)++open_alerts;
-    snprintf(json,sizeof(json),"{\"authorized\":true,\"scope\":\"digit-operations-read\",\"channels\":%zu,\"alerts\":%zu,\"unacknowledged_alerts\":%zu}\n",channels->count,alerts->count,open_alerts);
+    if(!digit_dashboard_response(grant.authorized,channels->count,alerts->count,open_alerts,
+          DIGIT_CORE_SERVICE_CHANNEL_LIST_MAX,DIGIT_CORE_SERVICE_ALERT_LIST_MAX,json,sizeof(json))){
+        free(channels);free(alerts);interface_reply(client,503,"{\"error\":\"dashboard snapshot invalid\"}\n");return;
+    }
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
 }
