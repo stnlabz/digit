@@ -12,7 +12,7 @@ DIGIT_PREFIX ?= /opt/digit
 INSTALL_DIR := $(DIGIT_PREFIX)/modules/validator
 INSTALL_BIN := $(INSTALL_DIR)/bin
 
-.PHONY: all clean check-abi rebuild install
+.PHONY: all clean check-abi rebuild install test
 
 all: check-abi $(TARGET)
 
@@ -21,6 +21,12 @@ check-abi:
 
 $(TARGET): $(SOURCE) includes/validator.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@
+
+bin/test_validator: tests/test_validator.c $(SOURCE) includes/validator.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_validator.c $(SOURCE) -o $@
+
+test: check-abi bin/test_validator
+	./bin/test_validator
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
