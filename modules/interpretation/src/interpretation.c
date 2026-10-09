@@ -213,11 +213,30 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
 {
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(result, 0, sizeof(*result));
-    result->tests_executed = 10;
-    result->tests_passed = 10;
-    result->negative_test_executed = 1;
-    result->negative_test_passed = 1;
-    return STNLABZ_MODULE_OK;
+    /* [AI:GPT-6 | 2026-10-09] Measured offline qualification:
+     * no Corpus host required for preservation and boundary checks. */
+    {
+        static const char *samples[] = {
+            "hello Digit", "What is the build status?",
+            "compare C and Python", "write a C function",
+            "who are you?", "explain module qualification",
+            "hello, Digit", "ingest lesson-one",
+            "2 + 2", "report errors"
+        };
+        size_t i;
+        for(i=0;i<sizeof(samples)/sizeof(samples[0]);++i){
+            char output[DIGIT_INTERPRETATION_TEXT_MAX];
+            unsigned int changes=99;
+            int ok=resolve_text(samples[i],output,sizeof(output),&changes);
+            result->tests_executed++;
+            if(ok&&strcmp(output,samples[i])==0&&changes==0)result->tests_passed++;
+        }
+        result->negative_test_executed=1;
+        result->negative_test_passed=!resolve_text("oversized", (char[2]){0}, 2, NULL);
+    }
+    result->tests_failed=result->tests_executed-result->tests_passed;
+    return result->tests_failed||result->negative_test_passed!=result->negative_test_executed?
+        STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t interpretation_start(const stnlabz_module_host_t *host)
@@ -243,7 +262,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 2,
+    "interpretation", "Digit Interpretation", 1, 0, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
