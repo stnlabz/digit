@@ -32,6 +32,22 @@ int digit_knowledge_record_valid(const digit_knowledge_record_t *record)
            printable(record->source,sizeof(record->source)) &&
            printable(record->text,sizeof(record->text));
 }
+/* [AI:GPT-6 | 2026-10-08] 1.4.2: two records cannot claim
+ * the same evidence identity within a single result set. Validate
+ * the complete set before emitting any output. */
+int digit_knowledge_results_valid(const digit_knowledge_record_t *records,
+                                  size_t count)
+{
+    size_t i,j;
+    if(count>DIGIT_KNOWLEDGE_RECORD_MAX || (count && !records))return 0;
+    for(i=0;i<count;++i){
+        if(!digit_knowledge_record_valid(&records[i]))return 0;
+        for(j=0;j<i;++j){
+            if(strcmp(records[i].id,records[j].id)==0)return 0;
+        }
+    }
+    return 1;
+}
 static int append(char *out,size_t capacity,size_t *pos,const char *s)
 {
     size_t n=strlen(s);
@@ -61,7 +77,7 @@ int digit_knowledge_result_json(const digit_knowledge_record_t *records,
     char countbuf[32];
     if(!output||!capacity)return 0;
     output[0]=0;
-    if(count>DIGIT_KNOWLEDGE_RECORD_MAX || (count && !records))return 0;
+    if(!digit_knowledge_results_valid(records,count))return 0;
     if(!count)return append(output,capacity,&off,
         "{\"found\":false,\"answer\":\"UNKNOWN\",\"evidence_count\":0,\"records\":[]}\n");
     if(!append(output,capacity,&off,
