@@ -39,4 +39,10 @@ int digit_project_security_owner(const char *root,const char *channel_id,
 int digit_project_security_channel_id(const char *root,const char *organization,
     const char *project,char *channel_id,size_t capacity);
 
+int digit_project_channel_create_host(const char *root,const char *organization,
+ const char *project,const char *name,const char *actor,const char *sa_registry,
+ const stnlabz_module_host_t *host,char *channel,size_t capacity);
+int digit_project_channel_match(const char *root,const char *organization,
+ const char *project,const char *channel);
+
 #endif
