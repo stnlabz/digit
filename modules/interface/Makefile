@@ -15,12 +15,13 @@ HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
-MILESTONE_TEST_TARGET := bin/test_1_3_9
-PRIOR_MILESTONE_TEST_TARGET := bin/test_1_3_8
-EARLIER_MILESTONE_TEST_TARGET := bin/test_1_3_7
-OLDEST_MILESTONE_TEST_TARGET := bin/test_1_3_6
-FIRST_MILESTONE_TEST_TARGET := bin/test_1_3_5
-BASE_MILESTONE_TEST_TARGET := bin/test_1_3_4
+MILESTONE_TEST_TARGET := bin/test_1_3_10
+PRIOR_MILESTONE_TEST_TARGET := bin/test_1_3_9
+EARLIER_MILESTONE_TEST_TARGET := bin/test_1_3_8
+OLDEST_MILESTONE_TEST_TARGET := bin/test_1_3_7
+FIRST_MILESTONE_TEST_TARGET := bin/test_1_3_6
+BASE_MILESTONE_TEST_TARGET := bin/test_1_3_5
+ORIGINAL_MILESTONE_TEST_TARGET := bin/test_1_3_4
 PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
 SA_TEST_TARGET := bin/test_security_sa
 MESSAGE_ORIGIN_TEST_TARGET := bin/test_message_origin
@@ -64,23 +65,26 @@ $(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/secur
 $(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c includes/project_provision.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c src/security_sa.c -o $@
 
-$(BASE_MILESTONE_TEST_TARGET): tests/test_1_3_4.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
+$(ORIGINAL_MILESTONE_TEST_TARGET): tests/test_1_3_4.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_4.c src/project_provision.c src/security_sa.c -o $@
 
-$(FIRST_MILESTONE_TEST_TARGET): tests/test_1_3_5.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
+$(BASE_MILESTONE_TEST_TARGET): tests/test_1_3_5.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_5.c src/project_provision.c src/security_sa.c -o $@
 
-$(OLDEST_MILESTONE_TEST_TARGET): tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
+$(FIRST_MILESTONE_TEST_TARGET): tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
 
-$(EARLIER_MILESTONE_TEST_TARGET): tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
+$(OLDEST_MILESTONE_TEST_TARGET): tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
 
-$(PRIOR_MILESTONE_TEST_TARGET): tests/test_1_3_8.c src/http_limits.c includes/http_limits.h | bin
+$(EARLIER_MILESTONE_TEST_TARGET): tests/test_1_3_8.c src/http_limits.c includes/http_limits.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_8.c src/http_limits.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_3_9.c src/interface_audit.c includes/interface_audit.h | bin
+$(PRIOR_MILESTONE_TEST_TARGET): tests/test_1_3_9.c src/interface_audit.c includes/interface_audit.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_9.c src/interface_audit.c -o $@
+
+$(MILESTONE_TEST_TARGET): tests/test_1_3_10.c src/http_limits.c src/interface_audit.c src/security_sa.c src/project_provision.c includes/http_limits.h includes/interface_audit.h includes/security_sa.h includes/project_provision.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_10.c src/http_limits.c src/interface_audit.c src/security_sa.c src/project_provision.c -o $@
 
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
@@ -94,12 +98,12 @@ $(MESSAGE_ORIGIN_TEST_TARGET): tests/test_message_origin.c includes/message_orig
 $(SA_TEST_TARGET): tests/test_security_sa.c src/security_sa.c includes/security_sa.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_security_sa.c src/security_sa.c -o $@
 
-test: check-abi $(MILESTONE_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET)
-	@echo 'DIGIT INTERFACE 1.3.9 — MILESTONE'
+test: check-abi $(MILESTONE_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET)
+	@echo 'DIGIT INTERFACE 1.3.10 — MILESTONE'
 	./$(MILESTONE_TEST_TARGET)
 	@echo 'DIGIT INTERFACE — HISTORICAL REGRESSION'
 	@set -eu; passed=0; failed=0; \
-	for suite in $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET); do \
+	for suite in $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET); do \
 	  output=$$(mktemp); \
 	  if ./$$suite >"$$output" 2>&1; then \
 	    passed=$$((passed + 1)); \
