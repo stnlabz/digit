@@ -22,7 +22,7 @@ int main(void){
  digit_arithmetic_request_t in={0};
  digit_arithmetic_result_t out={0};size_t used=0;
  check(d&&strcmp(d->id,"arithmetic")==0,"descriptor identity");
- check(d&&d->version_major==1&&d->version_minor==0&&d->version_patch==0,"version 1.0.0");
+ check(d&&d->version_major==1&&d->version_minor==1&&d->version_patch==0,"version 1.1.0");
  check(d&&d->qualify(&q)==STNLABZ_MODULE_OK,"qualification executes");
  check(q.tests_executed>=STNLABZ_MODULE_MIN_TESTS&&q.tests_passed==q.tests_executed&&q.tests_failed==0,"qualification counts");
  check(q.negative_test_executed&&q.negative_test_passed,"negative qualification");
@@ -35,6 +35,27 @@ int main(void){
  snprintf(in.expression,sizeof(in.expression),"7 divided by zero");
  check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_OK &&
        out.status==DIGIT_ARITHMETIC_DIVIDE_BY_ZERO,"service rejects zero denominator");
+ /* [AI:GPT-6 | 2026-10-09] Decimal service ABI and fixed-point boundaries. */
+ {
+  static const struct {const char *input,*expected;digit_arithmetic_status_t status;} cases[]={
+   {"Digit what is 1000 / 0.5?","1000 / 0.5 = 2000.",DIGIT_ARITHMETIC_OK},
+   {"Digit what is 2.5 + 3.75?","2.5 + 3.75 = 6.25.",DIGIT_ARITHMETIC_OK},
+   {"Digit what is 2.5 * 2?","2.5 * 2 = 5.",DIGIT_ARITHMETIC_OK},
+   {"Digit what is 1 / 0.5?","1 / 0.5 = 2.",DIGIT_ARITHMETIC_OK},
+   {"Digit what is 1 / 0.0?","",DIGIT_ARITHMETIC_DIVIDE_BY_ZERO},
+   {"Digit what is 1 / 0.0001?","",DIGIT_ARITHMETIC_OUT_OF_RANGE},
+   {"Digit what is 2.5 + 1 + 1?","",DIGIT_ARITHMETIC_INVALID}
+  };
+  size_t i;
+  for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
+   memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));used=0;
+   snprintf(in.expression,sizeof(in.expression),"%s",cases[i].input);
+   check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_OK&&
+    used==sizeof(out)&&out.status==cases[i].status&&
+    (out.status!=DIGIT_ARITHMETIC_OK||strcmp(out.decimal_answer,cases[i].expected)==0),
+    cases[i].input);
+  }
+ }
  memset(&in,'x',sizeof(in));
  check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT,
        "service rejects unterminated expression");
