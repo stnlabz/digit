@@ -16,6 +16,7 @@
 #include "session_store.h"
 #include "http_auth.h"
 #include "http_limits.h"
+#include "http_write.h"
 #include "interface_audit.h"
 #include "account_auth.h"
 #include "channel_acl.h"
@@ -65,28 +66,15 @@ static const char *interface_category_string(interface_context_category_t v){swi
 static const char *interface_alert_severity_string(digit_alert_severity_t v){switch(v){case DIGIT_ALERT_INFO:return "INFO";case DIGIT_ALERT_WARNING:return "WARNING";case DIGIT_ALERT_ERROR:return "ERROR";case DIGIT_ALERT_CRITICAL:return "CRITICAL";default:return "UNKNOWN";}}
 static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
 static void interface_reply(int c,int status,const char *body){
-    /* [AI:GPT-6 | 2026-10-08] 1.4.5: explicit audit-hook scope
-     * avoids misleading indentation while retaining best-effort events. */
-    char audit[160],h[512];
-    const char *reason;
-    int written;
+    /* [AI:GPT-6 | 2026-10-08] 1.4.6: retain sanitized audit events,
+     * send complete HTTP reply through SIGPIPE-safe bounded writer. */
+    char audit[160];
     if(interface_host && interface_host->send_message &&
        digit_interface_audit_format(interface_audit_request,status,
                                     audit,sizeof(audit))){
         (void)interface_host->send_message(audit);
     }
-    reason=status==200?"OK":
-           status==401?"Unauthorized":
-           status==403?"Forbidden":
-           status==404?"Not Found":
-           status==503?"Service Unavailable":"Bad Request";
-    written=snprintf(h,sizeof(h),
-        "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
-        status,reason,strlen(body));
-    if(written>0 && (size_t)written<sizeof(h)){
-        (void)send(c,h,(size_t)written,0);
-        (void)send(c,body,strlen(body),0);
-    }
+    (void)digit_interface_http_write(c,status,body);
 }
 static int interface_record_json(const interface_corpus_record_t *r,char *out,size_t n){char id[160],cat[160],src[600],text[8192];int w;interface_json_escape(r->id,id,sizeof(id));interface_json_escape(r->category,cat,sizeof(cat));interface_json_escape(r->source,src,sizeof(src));interface_json_escape(r->text,text,sizeof(text));w=snprintf(out,n,"{\"id\":\"%s\",\"category\":\"%s\",\"source\":\"%s\",\"text\":\"%s\"}",id,cat,src,text);return w>0&&(size_t)w<n;}
 static int interface_channel_json(const digit_channel_t *v,char *out,size_t n){char id[160],name[300];int w;interface_json_escape(v->id,id,sizeof(id));interface_json_escape(v->name,name,sizeof(name));w=snprintf(out,n,"{\"id\":\"%s\",\"name\":\"%s\",\"created_at\":%llu,\"last_activity_at\":%llu,\"active\":%s}",id,name,v->created_at,v->last_activity_at,v->active?"true":"false");return w>0&&(size_t)w<n;}
