@@ -17,7 +17,6 @@ CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
 MILESTONE_TEST_TARGET := bin/test_1_5_9
 CHANNEL_158_REGRESSION_TARGET := bin/test_1_5_8
-ORG_POLICY_TEST_TARGET := bin/test_sa_channel_policy
 DASHBOARD_156_REGRESSION_TARGET := bin/test_1_5_6
 SA_154_REGRESSION_TARGET := bin/test_1_5_4
 PREVIOUS_BUILDER_TEST_TARGET := bin/test_1_5_3
@@ -151,11 +150,7 @@ $(MILESTONE_TEST_TARGET): tests/test_1_5_9.c src/sa_channel_policy.c includes/sa
 $(CHANNEL_158_REGRESSION_TARGET): tests/test_1_5_8.c src/channel_create_policy.c includes/channel_create_policy.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_8.c src/channel_create_policy.c -o $@
 
-$(ORG_POLICY_TEST_TARGET): tests/test_1_5_9.c src/sa_channel_policy.c includes/sa_channel_policy.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_9.c src/sa_channel_policy.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_5_8.c src/channel_create_policy.c includes/channel_create_policy.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_8.c src/channel_create_policy.c -o $@
 
 $(DASHBOARD_156_REGRESSION_TARGET): tests/test_1_5_6.c src/dashboard_response.c includes/dashboard_response.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_6.c src/dashboard_response.c -o $@
