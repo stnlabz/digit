@@ -124,7 +124,19 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
   used+=(size_t)n;
   for(i=0;i<6;i++)if(!fields[i][0])goto done;
  }
- if((bootstrap ? target_sa!=0 : active!=1)||found!=1)goto done;
+ /* [AI:GPT-6 | 2026-10-09] Founder explicitly authorized initial
+  * Team ChAoS qualification, assignment and mission qualification.
+  * Only create the exact founder entry if there is no existing record;
+  * never overwrite an established Team ChAoS SA or conflicting record. */
+ if(bootstrap){
+  int n;
+  if(target_sa!=0||found>1)goto done;
+  if(found==0){
+   n=snprintf(out+used,len+512-used,"poemei\\tteam-chaos\\tSA\\t1\\t1\\t1\\n");
+   if(n<0||(size_t)n>=len+512-used)goto done;
+   used+=(size_t)n;
+  }
+ }else if(active!=1||found!=1)goto done;
  for(seq=0;seq<16;seq++){
   snprintf(temp,sizeof(temp),".security_sa.%ld.%lu.tmp",(long)getpid(),seq);
   tmp=openat(dir,temp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
