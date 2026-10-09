@@ -3,6 +3,10 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <poll.h>
+#include <signal.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +20,7 @@
 #include "qualification_store.h"
 
 #define DIGIT_CANDIDATE_SUFFIX ".candidate.XXXXXX"
+#define DIGIT_QUALIFICATION_TIMEOUT_MS 3000
 
 typedef struct
 {
@@ -157,20 +162,21 @@ static int digit_qualify_candidate_child(const char *module_id, const char *path
     return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-08] Bound isolated candidate qualification.
+ * The child is always reaped, including timeout and malformed results. */
 static int digit_qualify_candidate_isolated(const char *module_id, const char *path, digit_candidate_result_t *result)
 {
-    int pipe_fd[2];
+    int pipe_fd[2], status = 0, ok = 0;
     pid_t child;
-    int status;
-    int received;
+    size_t received = 0;
+    struct timespec started, now;
     if (pipe(pipe_fd) != 0) return 0;
     child = fork();
     if (child < 0) { close(pipe_fd[0]); close(pipe_fd[1]); return 0; }
     if (child == 0)
     {
         digit_candidate_result_t child_result;
-        int inspected;
-        int sent;
+        int inspected, sent;
         close(pipe_fd[0]);
         inspected = digit_qualify_candidate_child(module_id, path, &child_result);
         sent = inspected && digit_write_all(pipe_fd[1], &child_result, sizeof(child_result));
@@ -178,10 +184,39 @@ static int digit_qualify_candidate_isolated(const char *module_id, const char *p
         _exit(sent ? 0 : 1);
     }
     close(pipe_fd[1]);
-    received = digit_read_all(pipe_fd[0], result, sizeof(*result));
+    if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) goto finish;
+    memset(result, 0, sizeof(*result));
+    while (received < sizeof(*result))
+    {
+        struct pollfd fd = {pipe_fd[0], POLLIN | POLLHUP, 0};
+        long elapsed, remaining;
+        int ready;
+        ssize_t n;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) goto finish;
+        elapsed = (now.tv_sec - started.tv_sec) * 1000L +
+                  (now.tv_nsec - started.tv_nsec) / 1000000L;
+        remaining = DIGIT_QUALIFICATION_TIMEOUT_MS - elapsed;
+        if (remaining <= 0) goto finish;
+        ready = poll(&fd, 1, (int)remaining);
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready <= 0 || (fd.revents & (POLLERR | POLLNVAL))) goto finish;
+        n = read(pipe_fd[0], (char *)result + received, sizeof(*result) - received);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) goto finish;
+        received += (size_t)n;
+    }
+    ok = 1;
+finish:
     close(pipe_fd[0]);
-    if (waitpid(child, &status, 0) != child) return 0;
-    return received && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (!ok) (void)kill(child, SIGKILL);
+    for (;;)
+    {
+        pid_t waited = waitpid(child, &status, 0);
+        if (waited == child) break;
+        if (waited < 0 && errno == EINTR) continue;
+        return 0;
+    }
+    return ok && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 static void digit_report_red_candidate(digit_module_manager_t *manager, const digit_candidate_result_t *result)
