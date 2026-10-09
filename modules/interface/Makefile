@@ -47,7 +47,7 @@ PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
 SA_TEST_TARGET := bin/test_security_sa
 MESSAGE_ORIGIN_TEST_TARGET := bin/test_message_origin
 PROJECT_ADMIN_ROUTE_TEST_TARGET := bin/test_project_admin_route
-SOURCE := src/alerts_channel.c src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
+SOURCE := src/alerts_channel.c src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c src/sa_management.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
