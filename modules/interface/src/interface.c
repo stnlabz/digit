@@ -174,6 +174,31 @@ static void interface_channels_list(int client,const char *identity)
         if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,
                                          identity,out.channels[i].id))continue;
         if(!interface_channel_json(&out.channels[i],item,sizeof(item)))goto invalid;
+        /* [AI:GPT-6 | 2026-10-09] Bind displayed channel scope to
+         * protected project records, never to channel-name heuristics. */
+        {
+            char owner[64]={0},project[64]={0};
+            int owner_status=digit_project_security_owner(DIGIT_PROJECT_ROOT,
+                out.channels[i].id,owner,sizeof(owner),project,sizeof(project));
+            char alert_id[DIGIT_CHANNEL_ID_MAX];
+            size_t length;
+            if(owner_status<0)goto invalid;
+            if(owner_status==0&&
+               digit_alerts_channel_lookup(DIGIT_PROJECT_ROOT,"stn-labz",
+                   "operations",alert_id,sizeof(alert_id))&&
+               strcmp(alert_id,out.channels[i].id)==0){
+                strcpy(owner,"stn-labz");strcpy(project,"operations");
+            }
+            length=strlen(item);
+            if(owner[0]){
+                int written;
+                if(!length||item[length-1]!='}')goto invalid;
+                written=snprintf(item+length-1,sizeof(item)-length+1,
+                     ",\"organization\":\"%s\",\"project\":\"%s\"}",
+                     owner,project);
+                if(written<0||(size_t)written>=sizeof(item)-length+1)goto invalid;
+            }
+        }
         n=snprintf(items+off,sizeof(items)-off,"%s%s",visible?",":"",item);
         if(n<0 || (size_t)n>=sizeof(items)-off)goto invalid;
         off+=(size_t)n;
