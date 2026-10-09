@@ -117,7 +117,6 @@ test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_QUALIFICATION) $(T
 	./$(TEST_AUTHORITY)
 	./$(TEST_SACRIFICIAL)
 	./$(TEST_RUNTIME)
-	@mkdir -p /opt/digit/logs 2>/dev/null || true
 	./$(TEST_AUDIT)
 
 install: all
