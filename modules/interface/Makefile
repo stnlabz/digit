@@ -82,22 +82,22 @@ $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includ
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
 
 $(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h includes/project_channel_bridge.h includes/project_provision.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c -o $@ -lcrypt
 
 $(PROJECT_TEST_TARGET): tests/test_project_provision.c src/project_provision.c includes/project_provision.h | bin
-	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) -Iincludes $(CFLAGS) tests/test_project_provision.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(ORIGINAL_MILESTONE_TEST_TARGET): tests/test_1_3_4.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_4.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_4.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(BASE_MILESTONE_TEST_TARGET): tests/test_1_3_5.c src/project_provision.c src/security_sa.c includes/project_provision.h includes/security_sa.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_5.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_5.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(FIRST_MILESTONE_TEST_TARGET): tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_6.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(OLDEST_MILESTONE_TEST_TARGET): tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c includes/channel_acl.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_7.c src/channel_acl.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(EARLIER_MILESTONE_TEST_TARGET): tests/test_1_3_8.c src/http_limits.c includes/http_limits.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_8.c src/http_limits.c -o $@
@@ -106,7 +106,7 @@ $(PRIOR_MILESTONE_TEST_TARGET): tests/test_1_3_9.c src/interface_audit.c include
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_9.c src/interface_audit.c -o $@
 
 $(STABILIZATION_TEST_TARGET): tests/test_1_3_10.c src/http_limits.c src/interface_audit.c src/security_sa.c src/project_provision.c includes/http_limits.h includes/interface_audit.h includes/security_sa.h includes/project_provision.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_10.c src/http_limits.c src/interface_audit.c src/security_sa.c src/project_provision.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_3_10.c src/http_limits.c src/interface_audit.c src/security_sa.c src/project_provision.c src/account_auth.c -o $@ -lcrypt
 
 $(COMMUNICATION_TEST_TARGET): tests/test_1_4_0.c src/controlled_communication.c includes/controlled_communication.h includes/message_origin.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_0.c src/controlled_communication.c -o $@
@@ -148,10 +148,10 @@ $(PREVIOUS_CORPUS_TEST_TARGET): tests/test_1_5_1.c src/corpus_response.c src/kno
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_1.c src/corpus_response.c src/knowledge_query.c -o $@
 
 $(MILESTONE_TEST_TARGET): tests/test_1_6_0.c src/grant_request.c src/alerts_channel.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c includes/grant_request.h includes/grant_store.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_6_0.c src/grant_request.c src/alerts_channel.c src/grant_store.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_6_0.c src/grant_request.c src/alerts_channel.c src/grant_store.c src/channel_acl.c src/project_provision.c src/account_auth.c src/project_channel_bridge.c src/security_sa.c -o $@ -lcrypt
 
 $(PROJECT_1510_REGRESSION_TARGET): tests/test_1_5_10.c src/project_list.c src/project_provision.c src/security_sa.c includes/project_list.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_10.c src/project_list.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_10.c src/project_list.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(ORG_159_REGRESSION_TARGET): tests/test_1_5_9.c src/sa_channel_policy.c includes/sa_channel_policy.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_9.c src/sa_channel_policy.c -o $@
@@ -174,7 +174,7 @@ $(BUILDER_PREVIOUS_TEST_TARGET): tests/test_1_5_2.c src/corpus_response.c src/kn
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_2.c src/corpus_response.c src/knowledge_query.c -o $@
 
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c src/security_sa.c -o $@ -lcrypt
 
 $(PROJECT_ADMIN_ROUTE_TEST_TARGET): tests/test_project_admin_route.c includes/project_admin_route.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_admin_route.c -o $@
