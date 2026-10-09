@@ -39,6 +39,19 @@ int main(void){
  check(digit_sa_change(file,"stn-labz","poemei","assistant",0),"revocation");
  check(!digit_security_sa_verify(file,"stn-labz","assistant"),"revocation immediate");
  check(digit_security_sa_verify(file,"team-chaos","chief"),"unrelated org unchanged");
+ check(!digit_sa_change(file,"team-chaos","poemei","poemei",2),"bootstrap denied when Team ChAoS has SA");
+ {
+  FILE *b=fopen(file,"wb");
+  if(!b)return 1;
+  if(fputs("poemei\\tstn-labz\\tSA\\t1\\t1\\t1\\n"
+           "poemei\\tteam-chaos\\tADMIN\\t1\\t0\\t1\\n",b)<0){fclose(b);return 1;}
+  fclose(b);if(chmod(file,0600)!=0)return 1;
+ }
+ check(!digit_sa_change(file,"team-chaos","other","poemei",2),"bootstrap only authenticated founder identity");
+ check(!digit_sa_change(file,"stn-labz","poemei","poemei",2),"bootstrap restricted target organization");
+ check(digit_sa_change(file,"team-chaos","poemei","poemei",2),"founder bootstraps qualified initial Team ChAoS SA");
+ check(digit_security_sa_verify(file,"team-chaos","poemei"),"Team ChAoS SA active after bootstrap");
+ check(!digit_sa_change(file,"team-chaos","poemei","poemei",2),"bootstrap nonrepeatable");
  unlink(file);rmdir(dir);
  printf("SA 1.6.5: %d passed %d failed\n",passed,failed);
  return failed!=0;
