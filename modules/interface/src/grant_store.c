@@ -22,10 +22,10 @@ int digit_grant_security_scoped(const char *path,const char *root,const char *sa
  const char *actor,const digit_grant_request_t *req){
  char binding[64],record[512],tmp[128],line[1024];
  char parent[512],*slash;
- int dir=-1,fd=-1,source=-1,target=-1,ok=0,existing=0,created=0;
+ int dir=-1,source=-1,target=-1,ok=0,existing=0,created=0;
  FILE *stream=NULL;
  struct stat st;
- size_t n;unsigned long attempts;
+ size_t n;int formatted;unsigned long attempts;
  if(!path||!root||!sa_registry||!actor||!req)return 0;
  if(!digit_security_sa_verify(sa_registry,req->organization,actor)||
     !digit_project_security_ready(root,req->organization,req->project)||
@@ -51,9 +51,10 @@ int digit_grant_security_scoped(const char *path,const char *root,const char *sa
   stream=fdopen(source,"r");if(!stream)goto finish;
   source=-1;existing=1;
  }else if(errno!=ENOENT)goto finish;
- n=(size_t)snprintf(record,sizeof(record),"%s\t%s\t%s\t%s\t1\t1\t1\t1\n",
+ formatted=snprintf(record,sizeof(record),"%s\t%s\t%s\t%s\t1\t1\t1\t1\n",
        req->user,req->organization,req->project,req->channel);
- if(n>=sizeof(record))goto finish;
+ if(formatted<=0||(size_t)formatted>=sizeof(record))goto finish;
+ n=(size_t)formatted;
  for(attempts=0;attempts<16;attempts++){
   if(snprintf(tmp,sizeof(tmp),".channel-grants-%ld-%lu.tmp",(long)getpid(),attempts)>=(int)sizeof(tmp))goto finish;
   target=openat(dir,tmp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
@@ -86,6 +87,8 @@ int digit_grant_security_scoped(const char *path,const char *root,const char *sa
    if(write(target,line,len)!=(ssize_t)len)goto finish;
   }
   if(ferror(stream))goto finish;
+  if(fstat(fileno(stream),&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1||
+     (st.st_mode&077)!=0||(st.st_uid!=0&&st.st_uid!=geteuid()))goto finish;
  }
  if(write(target,record,n)!=(ssize_t)n||fsync(target)!=0)goto finish;
  if(close(target)!=0){target=-1;goto finish;}target=-1;
