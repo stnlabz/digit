@@ -36,6 +36,8 @@
 #include "channel_create_policy.h"
 #include "project_admin_route.h"
 #include "project_list.h"
+#include "grant_request.h"
+#include "grant_store.h"
 #include "security_sa.h"
 #include "core_services.h"
 
@@ -503,6 +505,21 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
     }
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
+}
+/* [AI:GPT-6 | 2026-10-09] 1.6.0 restricted SA channel grant.
+ * The authenticated identity, not the request body, is the granting actor.
+ * No grant exists unless the project Security channel is already bound. */
+if(strncmp(request,"POST /admin/security-grants HTTP/1.1\r\n",
+           sizeof("POST /admin/security-grants HTTP/1.1\r\n")-1U)==0){
+    digit_grant_request_t grant_request;
+    if(!body||!digit_grant_request_parse(body,&grant_request)){
+        interface_reply(client,400,"{\"error\":\"invalid grant request\"}\n");return;
+    }
+    if(!digit_grant_security_scoped(DIGIT_CHANNEL_ACL_PATH,DIGIT_PROJECT_ROOT,
+          DIGIT_SECURITY_SA_REGISTRY,identity,&grant_request)){
+        interface_reply(client,403,"{\"error\":\"grant denied or registry unavailable\"}\n");return;
+    }
+    interface_reply(client,200,"{\"granted\":true,\"scope\":\"security\"}\n");return;
 }
 /* [AI:GPT-6 | 2026-10-09] 1.5.10: SA-only project inventory.
  * No cross-organization fallback: each explicit organization must be
