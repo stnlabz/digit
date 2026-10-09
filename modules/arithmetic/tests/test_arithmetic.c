@@ -22,7 +22,7 @@ int main(void){
  digit_arithmetic_request_t in={0};
  digit_arithmetic_result_t out={0};size_t used=0;
  check(d&&strcmp(d->id,"arithmetic")==0,"descriptor identity");
- check(d&&d->version_major==1&&d->version_minor==3&&d->version_patch==0,"version 1.3.0");
+ check(d&&d->version_major==1&&d->version_minor==3&&d->version_patch==1,"version 1.3.1");
  check(d&&d->qualify(&q)==STNLABZ_MODULE_OK,"qualification executes");
  check(q.tests_executed>=STNLABZ_MODULE_MIN_TESTS&&q.tests_passed==q.tests_executed&&q.tests_failed==0,"qualification counts");
  check(q.negative_test_executed&&q.negative_test_passed,"negative qualification");
@@ -100,6 +100,13 @@ int main(void){
      strcmp(out.decimal_answer,equations[i].expected)==0,equations[i].input);
   }
  }
+ /* [AI:GPT-6 | 2026-10-09] Distinct roots below output precision
+  * must never be misreported as a repeated root. */
+ memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));used=0;
+ snprintf(in.expression,sizeof(in.expression),"solve 10000*x^2 - 0.001 = 0");
+ check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_OK&&
+       used==sizeof(out)&&out.status==DIGIT_ARITHMETIC_OUT_OF_RANGE,
+       "distinct roots below fixed-point resolution rejected");
  memset(&in,'x',sizeof(in));
  check(handler(&in,sizeof(in),&out,sizeof(out),&used,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT,
        "service rejects unterminated expression");
