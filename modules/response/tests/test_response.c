@@ -61,7 +61,7 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
  check(descriptor->start(&host)==STNLABZ_MODULE_OK&&response_handler!=NULL,
        "response service registers with test host");
  snprintf(request.question,sizeof(request.question),
-  "INTENT: FACT\\nTARGET: KNOWLEDGE\\nSUBJECT: \\nREQUEST: What is 2 plus 2?");
+  "INTENT: FACT\nTARGET: KNOWLEDGE\nSUBJECT: \nREQUEST: What is 2 plus 2?");
  unexpected_services=0;
  check(response_handler&&response_handler(&request,sizeof(request),&answer,
        sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
