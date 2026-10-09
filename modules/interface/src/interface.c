@@ -500,9 +500,7 @@ if(strncmp(request,"POST /knowledge/query ",22)==0){
        used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;
     }
-    if(out.count>CORPUS_SEARCH_MAX ||
-       !digit_knowledge_result_json(out.records,
-                                    out.count,result,sizeof(result))){
+    if(!digit_interface_corpus_search_json(out.records,out.count,CORPUS_SEARCH_MAX,result,sizeof(result))){
         interface_reply(client,503,"{\"error\":\"corpus response invalid or oversized\"}\n");return;
     }
     interface_reply(client,200,result);return;
