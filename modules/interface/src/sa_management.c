@@ -50,7 +50,7 @@ static int read_safe(int fd,char **buf,size_t *length){
 }
 int digit_sa_list(const char *registry,const char *org,const char *actor,
  char *json,size_t cap){
- int fd=-1,ok=0;char *buf=NULL,*copy=NULL,*line,*save=NULL;size_t len,off=0;
+ int fd=-1,ok=0;char *buf=NULL,*copy=NULL,*line,*save=NULL;size_t len,off=0,count=0;
  if(!registry||!ident(org)||!ident(actor)||!json||cap<48||
     !digit_security_sa_verify(registry,org,actor))return 0;
  fd=open(registry,O_RDONLY|O_NOFOLLOW);if(fd<0)goto done;
@@ -65,11 +65,11 @@ int digit_sa_list(const char *registry,const char *org,const char *actor,
   if(!parse(record,fields))goto done;
   if(strcmp(fields[1],org))continue;
   n=snprintf(json+off,cap-off,"%s{\"user\":\"%s\",\"role\":\"%s\",\"qualified\":%s,\"assigned\":%s,\"mission_qualified\":%s}",
-   off>strlen(org)+33?",":"",fields[0],fields[2],
+   count?",":"",fields[0],fields[2],
    !strcmp(fields[3],"1")?"true":"false",
    !strcmp(fields[4],"1")?"true":"false",
    !strcmp(fields[5],"1")?"true":"false");
-  if(n<0||(size_t)n>=cap-off)goto done;off+=(size_t)n;
+  if(n<0||(size_t)n>=cap-off)goto done;off+=(size_t)n;++count;
  }
  if(off+4>cap)goto done;
  strcpy(json+off,"]}\n");ok=1;
