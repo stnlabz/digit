@@ -39,6 +39,19 @@ static int has_word(const char *text, const char *word)
     return 0;
 }
 
+/* [AI:GPT-6 | 2026-10-09] Command verbs embedded in knowledge
+ * questions are not operator instructions. */
+static int starts_with_command(const char *text,const char *const *words,size_t count){
+ const char *p=text;size_t i;
+ if(!p)return 0;
+ while(*p&&isspace((unsigned char)*p))++p;
+ if(strncmp(p,"please ",7)==0||strncmp(p,"Please ",7)==0)p+=7;
+ for(i=0;i<count;i++){
+  size_t n=strlen(words[i]);
+  if(word_equal_ci(p,n,words[i])&&(!p[n]||isspace((unsigned char)p[n])||p[n]==':'))return 1;
+ }
+ return 0;
+}
 static int any_word(const char *text, const char *const *words, size_t count)
 {
     size_t i;
@@ -144,7 +157,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if (text == NULL || text[0] == '\0') { set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established."); return; }
     learned_text(text,interpreted,sizeof(interpreted));
     text=interpreted;
-    action=any_word(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
+    action=starts_with_command(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
     status=any_word(text,status_words,sizeof(status_words)/sizeof(status_words[0]));
     explain=find_word(text,"explain",&after);
     define=find_word(text,"define",NULL);
@@ -154,7 +167,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     fact=has_word(text,"what")||has_word(text,"who");
     social=any_word(text,social_words,sizeof(social_words)/sizeof(social_words[0]));
     /* Question words framing an explicit knowledge operation are not conflicting intents. */
-    if(explain||define||compare){status=0;why=0;how=0;fact=0;}
+    if(explain||define||compare){status=0;why=0;how=0;fact=0;}\n    if(fact&&!action){status=0;}
     operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
     if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
     if(action){set_result(result,DIGIT_INTENT_ACTION,DIGIT_INTENT_TARGET_CAPABILITY,1U,"Request directs Digit to perform or change something.");return;}
@@ -249,7 +262,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
         {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
-        {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
+        {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},\n        {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},\n        {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},\n        {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
     };
     size_t i;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -292,7 +305,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 2,
+    "intent", "Digit Intent", 1, 1, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
