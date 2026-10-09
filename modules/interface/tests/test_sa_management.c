@@ -54,7 +54,7 @@ int main(void){
  check(!digit_sa_change(file,"team-chaos","poemei","poemei",2),"bootstrap nonrepeatable");
  { FILE *b=fopen(file,"wb");
    if(!b)return 1;
-   if(fputs("poemei\\tstn-labz\\tSA\\t1\\t1\\t1\\n",b)<0){fclose(b);return 1;}
+   if(fputs("poemei\tstn-labz\tSA\t1\t1\t1\n",b)<0){fclose(b);return 1;}
    fclose(b);if(chmod(file,0600)!=0)return 1;
  }
  check(digit_sa_change(file,"team-chaos","poemei","poemei",2),
