@@ -1214,7 +1214,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[25];
+    int tests[31];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -1262,6 +1262,13 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
         tests[23]=!interface_dispatch_request_copy(boundary,&dispatch_request);
         tests[24]=!interface_dispatch_request_copy("",&dispatch_request);
     }
+    /* [AI:GPT-6 | 2026-10-09] Live-observed name recall paraphrases. */
+    tests[25]=interface_private_name_recall("What did I tell you my name was?");
+    tests[26]=interface_private_name_recall("What did I tel yu my name was?");
+    tests[27]=interface_private_name_recall("What did I tell you what my name is?");
+    tests[28]=interface_private_name_recall("What's my name?");
+    tests[29]=!interface_private_name_recall("What is a variable name?");
+    tests[30]=!interface_private_name_recall("What is another user's name?");
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
