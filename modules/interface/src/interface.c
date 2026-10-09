@@ -555,7 +555,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[19];
+    int tests[22];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -585,6 +585,10 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     tests[16]=digit_interface_corpus_search_valid(NULL,0,16);
     tests[17]=!digit_interface_corpus_search_valid(NULL,1,16);
     tests[18]=!digit_interface_corpus_exact_valid(NULL,1,"record-1");
+    /* [AI:GPT-6 | 2026-10-08] 1.5.2 executable shared-route checks. */
+    tests[19]=digit_interface_corpus_exact_json(&record,1,"record-1",json,sizeof(json));
+    tests[20]=!digit_interface_corpus_exact_json(&record,1,"wrong-id",json,sizeof(json));
+    tests[21]=!digit_interface_corpus_search_json(&record,2,1,json,sizeof(json));
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -593,7 +597,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     r->negative_test_executed=1;
     r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
                             tests[9] && tests[10] && tests[11] && tests[13] && tests[15] &&
-                            tests[17] && tests[18];
+                            tests[17] && tests[18] && tests[20] && tests[21];
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
