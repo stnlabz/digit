@@ -51,10 +51,82 @@ static int operator_at(const char **cursor,char *out){
  }
  return 0;
 }
+/* [AI:GPT-6 | 2026-10-09] Fixed-point decimal calculations use a
+ * scale of 1000, without floating-point arithmetic. Inputs support up to
+ * three fractional digits and integer magnitude <= one million. */
+#define DECIMAL_SCALE INT64_C(1000)
+static int decimal_operand(const char **cursor,int64_t *out){
+ const char *p=*cursor;int sign=1;int64_t whole=0,frac=0;int digits=0;
+ skip_spaces(&p);
+ if(*p=='+'||*p=='-'){if(*p=='-')sign=-1;++p;}
+ if(!isdigit((unsigned char)*p)&&*p!='.')return 0;
+ while(isdigit((unsigned char)*p)){
+  int digit=*p++-'0';
+  if(whole>100000 || (whole==100000&&digit>0))return 0;
+  whole=whole*10+digit;++digits;
+ }
+ if(*p=='.'){
+  int fractional=0;
+  ++p;
+  while(isdigit((unsigned char)*p)){
+   if(fractional>=3)return 0;
+   frac=frac*10+(*p++-'0');++fractional;
+  }
+  if(fractional==0)return 0;
+  while(fractional++<3)frac*=10;
+  digits+=fractional;
+ }
+ if(digits==0)return 0;
+ *out=(whole*DECIMAL_SCALE+frac)*sign;*cursor=p;return 1;
+}
+static void fixed_text(int64_t value,char *out,size_t cap){
+ uint64_t magnitude=(uint64_t)(value<0?-value:value);
+ size_t n;
+ snprintf(out,cap,"%s%llu.%03llu",value<0?"-":"",
+  (unsigned long long)(magnitude/1000),
+  (unsigned long long)(magnitude%1000));
+ n=strlen(out);
+ while(n>0&&out[n-1]=='0')out[--n]=0;
+ if(n>0&&out[n-1]=='.')out[--n]=0;
+}
+static digit_arithmetic_status_t evaluate_decimal(const char *expression,
+ digit_arithmetic_result_t *result){
+ const char *p=expression;int64_t a,b,v;char op;
+ char left[40],right[40],value[40];
+ skip_spaces(&p);
+ if(strncasecmp(p,"digit",5)==0 &&
+    (isspace((unsigned char)p[5])||p[5]==','||p[5]==':')){
+  p+=5;if(*p==','||*p==':')++p;skip_spaces(&p);
+ }
+ if(strncasecmp(p,"what is ",8)==0)p+=8;
+ else if(strncasecmp(p,"calculate ",10)==0)p+=10;
+ else if(strncasecmp(p,"compute ",8)==0)p+=8;
+ if(!decimal_operand(&p,&a))return DIGIT_ARITHMETIC_OUT_OF_RANGE;
+ if(!operator_at(&p,&op))return DIGIT_ARITHMETIC_INVALID;
+ if(!decimal_operand(&p,&b))return DIGIT_ARITHMETIC_OUT_OF_RANGE;
+ skip_spaces(&p);if(*p=='?')++p;skip_spaces(&p);
+ if(*p)return DIGIT_ARITHMETIC_INVALID;
+ if(op=='/'&&b==0)return DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;
+ switch(op){
+ case '+':v=a+b;break;
+ case '-':v=a-b;break;
+ case '*':v=(a*b)/DECIMAL_SCALE;break;
+ case '/':v=(a*DECIMAL_SCALE)/b;break;
+ default:return DIGIT_ARITHMETIC_INVALID;
+ }
+ fixed_text(a,left,sizeof(left));
+ fixed_text(b,right,sizeof(right));
+ fixed_text(v,value,sizeof(value));
+ snprintf(result->decimal_answer,sizeof(result->decimal_answer),
+  "%s %c %s = %s.",left,op,right,value);
+ result->operation=op;
+ return DIGIT_ARITHMETIC_OK;
+}
 static digit_arithmetic_status_t evaluate(const char *expression,digit_arithmetic_result_t *result){
  const char *p=expression;int64_t a,b;
  memset(result,0,sizeof(*result));
  if(!expression||!*expression)return DIGIT_ARITHMETIC_INVALID;
+ if(strchr(expression,'.')!=NULL)return evaluate_decimal(expression,result);
  skip_spaces(&p);
  if(strncasecmp(p,"digit",5)==0 && (isspace((unsigned char)p[5])||p[5]==','||p[5]==':')){
   p+=5;if(*p==','||*p==':')++p;skip_spaces(&p);
@@ -136,7 +208,7 @@ static stnlabz_module_result_t arithmetic_stop(void){
  arithmetic_host=NULL;return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "arithmetic","Digit Arithmetic",1,0,0,
+ "arithmetic","Digit Arithmetic",1,1,0,
  STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  arithmetic_qualify,arithmetic_start,arithmetic_stop
 };
