@@ -123,6 +123,8 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"What is 9 divided by 3?","9 / 3 = 3."},
    {"Digit what is 8 / 2?","8 / 2 = 4."},
    {"Digit what is 1000 / 0.5?","1000 / 0.5 = 2000."},
+   {"Digit what is 2*x+3=11?","x = 4."},
+   {"Digit what is (2 + 3) * 4?","Result = 20."},
    {"Digit what is 8 ÷ 2?","8 / 2 = 4."},
    {"Digit what is 8 divide by 2?","8 / 2 = 4."},
    {"Digit what is 8 over 2?","8 / 2 = 4."},
