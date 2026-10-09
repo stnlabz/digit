@@ -122,7 +122,7 @@ int digit_project_security_member(const char *root,const char *org,
 {
     int base=-1,o=-1,p=-1,fd=-1,found=0,invalid=0;
     FILE *file=NULL;
-    struct stat st;
+    struct stat st,after,path_after;
     char *line=NULL;
     size_t line_cap=0;
     ssize_t line_size;
@@ -160,7 +160,27 @@ int digit_project_security_member(const char *root,const char *org,
         }
         if(strcmp(tab2,identity)==0 && ++found>1){invalid=1;break;}
     }
-    if(ferror(file))invalid=1;
+    /* [AI:GPT-6 | 2026-10-08] A roster grant is accepted only if the
+     * opened inode and its project path retain protected metadata throughout
+     * parsing. Detect in-place mutations and pathname replacements. */
+    if(ferror(file) || fstat(fileno(file),&after)!=0 ||
+       fstatat(p,"security.tsv",&path_after,AT_SYMLINK_NOFOLLOW)!=0 ||
+       !S_ISREG(after.st_mode) || !S_ISREG(path_after.st_mode) ||
+       after.st_nlink!=1 || path_after.st_nlink!=1 ||
+       (after.st_mode&077)!=0 || (path_after.st_mode&077)!=0 ||
+       (after.st_uid!=0 && after.st_uid!=geteuid()) ||
+       (path_after.st_uid!=0 && path_after.st_uid!=geteuid()) ||
+       after.st_dev!=st.st_dev || after.st_ino!=st.st_ino ||
+       path_after.st_dev!=st.st_dev || path_after.st_ino!=st.st_ino ||
+       after.st_size!=st.st_size || path_after.st_size!=st.st_size ||
+       after.st_mtim.tv_sec!=st.st_mtim.tv_sec ||
+       after.st_mtim.tv_nsec!=st.st_mtim.tv_nsec ||
+       after.st_ctim.tv_sec!=st.st_ctim.tv_sec ||
+       after.st_ctim.tv_nsec!=st.st_ctim.tv_nsec ||
+       path_after.st_mtim.tv_sec!=st.st_mtim.tv_sec ||
+       path_after.st_mtim.tv_nsec!=st.st_mtim.tv_nsec ||
+       path_after.st_ctim.tv_sec!=st.st_ctim.tv_sec ||
+       path_after.st_ctim.tv_nsec!=st.st_ctim.tv_nsec)invalid=1;
 done:
     free(line);
     if(file && fclose(file)!=0)invalid=1;
