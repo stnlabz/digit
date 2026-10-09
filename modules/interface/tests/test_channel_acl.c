@@ -25,72 +25,74 @@ int main(void) {
     int fd=mkstemp(path);
     if(fd<0)return 1;
     close(fd);chmod(path,0600);
+    /* [AI:GPT-6 | 2026-10-08] All ACL assertions use a private
+     * test inventory; never depend on installed production projects. */
+    if(!mkdtemp(root))return 1;
     check(write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\n"),"fixture installed");
-    check(digit_channel_acl_check_file(path,"ezra","general"),"eligible member");
+    check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"eligible member");
     {
         char linkpath[128];
         snprintf(linkpath,sizeof(linkpath),"%s-link",path);
         check(symlink(path,linkpath)==0,"ACL symlink fixture created");
-        check(!digit_channel_acl_check_file(linkpath,"ezra","general"),
+        check(!digit_channel_acl_check_scoped(linkpath,root,sa,"ezra","general"),
               "symlinked grant registry denied despite valid target");
         check(unlink(linkpath)==0,"ACL symlink fixture removed");
-        check(digit_channel_acl_check_file(path,"ezra","general"),
+        check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "ordinary protected grant file remains accessible");
     }
 
     {
         FILE *large;
         check(write_acl(path,""),"empty ACL fixture written");
-        check(!digit_channel_acl_check_file(path,"ezra","general"),
+        check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "empty grant registry denied");
         large=fopen(path,"w");
         if(!large)return 1;
         check(ftruncate(fileno(large),8*1024*1024+1)==0,
               "oversized ACL fixture created");
         if(fclose(large)!=0)return 1;
-        check(!digit_channel_acl_check_file(path,"ezra","general"),
+        check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "ACL registry larger than 8 MiB denied");
         check(write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\n"),
               "valid ACL fixture restored");
-        check(digit_channel_acl_check_file(path,"ezra","general"),
+        check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "valid bounded ACL remains authorized");
     }
     {
         char alias[128];
         snprintf(alias,sizeof(alias),"%s-hardlink",path);
         check(link(path,alias)==0,"ACL hard-link fixture created");
-        check(!digit_channel_acl_check_file(path,"ezra","general"),
+        check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "multiply linked original ACL registry denied");
-        check(!digit_channel_acl_check_file(alias,"ezra","general"),
+        check(!digit_channel_acl_check_scoped(alias,root,sa,"ezra","general"),
               "hard-link alias cannot authorize grants");
         check(unlink(alias)==0,"ACL hard-link alias removed");
-        check(digit_channel_acl_check_file(path,"ezra","general"),
+        check(digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),
               "single-link ACL registry authorization restored");
     }
-    check(!digit_channel_acl_check_file(path,"poe","general"),"other user denied");
-    check(!digit_channel_acl_check_file(path,"ezra","security"),"other channel denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"poe","general"),"other user denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","security"),"other channel denied");
     check(!digit_channel_acl_check_file(NULL,"ezra","general"),"null path denied");
-    check(!digit_channel_acl_check_file(path,NULL,"general"),"null identity denied");
-    check(!digit_channel_acl_check_file(path,"ezra",NULL),"null channel denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,NULL,"general"),"null identity denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra",NULL),"null channel denied");
     chmod(path,0644);
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"unsafe permission denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"unsafe permission denied");
     chmod(path,0600);
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t0\t1\t1\t1\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"qualification required");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"qualification required");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t0\t1\t1\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"assignment required");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"assignment required");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t0\t1\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"mission qualification required");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"mission qualification required");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t0\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"grant required");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"grant required");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\nezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"duplicate grants denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"duplicate grants denied");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1\nbad\trow\n");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"malformed registry denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"malformed registry denied");
     write_acl(path,"ezra\tstn-labz\tdigit\tgeneral\t1\t1\t1\t1");
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"unterminated line denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"unterminated line denied");
     /* [AI:GPT-6 | 2026-10-08] Security channels are not ordinary grants. */
-    if(!mkdtemp(root))return 1;
     snprintf(org,sizeof(org),"%s/stn-labz",root);
     snprintf(project,sizeof(project),"%s/digit",org);
     fd=mkstemp(sa);
@@ -191,7 +193,7 @@ int main(void) {
     write_acl(sa,"sysadmin\tstn-labz\tSA\t1\t0\t1\n");
     check(!digit_channel_acl_check_scoped(path,root,sa,"sysadmin","channel-123-1"),"SA assignment revoked immediately denies access");
     unlink(path);
-    check(!digit_channel_acl_check_file(path,"ezra","general"),"missing registry denied");
+    check(!digit_channel_acl_check_scoped(path,root,sa,"ezra","general"),"missing registry denied");
     printf("Channel ACL: %u executed, %u failed\n",count,failed);
     return failed?1:0;
 }
