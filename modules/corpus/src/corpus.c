@@ -122,6 +122,16 @@ static unsigned int record_query_score(const digit_corpus_record_t *record, cons
     size_t i;
     unsigned int matched = 0;
     if (record == NULL || query == NULL) return 0;
+    /* [AI:GPT-6 | 2026-10-09] Normalize only final question punctuation for
+     * phrase matching; do not modify identifiers or stored record text. */
+    if (term_count == 0) {
+        char phrase[128];size_t n=strlen(query);
+        if(n>=sizeof(phrase))return 0;
+        memcpy(phrase,query,n+1);
+        while(n>0&&(phrase[n-1]=='?'||phrase[n-1]=='!'||phrase[n-1]=='.'))phrase[--n]=0;
+        return n>=8 && strchr(phrase,' ') &&
+            contains_ci(record->text,phrase) ? 10000U : 0U;
+    }
     if (contains_ci(record->id, query) || contains_ci(record->category, query) ||
         contains_ci(record->source, query) || contains_ci(record->text, query)) return 10000U;
     for (i = 0; i < term_count; ++i)
@@ -192,7 +202,10 @@ size_t digit_corpus_search(const char *path, const char *query, digit_corpus_rec
     if (path == NULL || query == NULL || query[0] == '\0' || records == NULL || capacity == 0) return 0;
     memset(terms, 0, sizeof(terms));
     term_count = query_terms(query, terms);
-    if (term_count == 0) return 0;
+    /* [AI:GPT-6 | 2026-10-09] Exact multiword phrase retrieval remains
+     * available when all query words are stopwords (e.g., "who are you").
+     * Single stopwords still cannot produce broad corpus scans. */
+    if (term_count == 0 && (strlen(query) < 8 || strchr(query, ' ') == NULL)) return 0;
     file = fopen(path, "r");
     if (file == NULL) return 0;
     while (fgets(line, sizeof(line), file) != NULL)
@@ -309,7 +322,12 @@ static stnlabz_module_result_t corpus_qualify(stnlabz_module_qualification_resul
     snprintf(record.source,sizeof(record.source),"test");
     memset(record.id,'X',sizeof(record.id));
     passed += (unsigned int)!digit_corpus_validate(&record);
-    result->tests_executed=10;
+    snprintf(record.text,sizeof(record.text),
+      "When asked who are you, respond: I am Digit, the STN-Labz Autonomous Engineering Agent.");
+    passed += (unsigned int)(query_terms("Who are you?",words)==0);
+    passed += (unsigned int)(record_query_score(&record,"Who are you?",words,0)==10000U);
+    passed += (unsigned int)(record_query_score(&record,"Who are they?",words,0)==0U);
+    result->tests_executed=13;
     result->tests_passed=passed;
     result->tests_failed=result->tests_executed-passed;
     result->negative_test_executed=1;
@@ -354,5 +372,5 @@ static stnlabz_module_result_t corpus_stop(void)
     corpus_host = NULL; return ok ? STNLABZ_MODULE_OK : STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 
-static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 2, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
+static const stnlabz_module_descriptor_t corpus_descriptor = { "corpus", "Digit Corpus", 1, 3, 3, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, corpus_qualify, corpus_start, corpus_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &corpus_descriptor; }
