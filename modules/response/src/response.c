@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <stdint.h>
+#include <strings.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -114,7 +115,7 @@ static int arithmetic_operand(const char **cursor,int64_t *value){
  }else{
   for(i=0;i<sizeof(names)/sizeof(names[0]);++i){
    size_t n=strlen(names[i]);
-   if(strncmp(p,names[i],n)==0&&!isalnum((unsigned char)p[n])&&p[n]!='_'){
+   if(strncasecmp(p,names[i],n)==0&&!isalnum((unsigned char)p[n])&&p[n]!='_'){
     number=(int64_t)i;p+=n;break;
    }
   }
@@ -126,9 +127,9 @@ static int arithmetic_calculate(const char *text,char *answer,size_t cap){
  const char *p=text;int64_t a,b,result;char operation=0;
  if(!p||!answer||cap==0)return 0;
  while(isspace((unsigned char)*p))++p;
- if(strncmp(p,"what is ",8)==0)p+=8;
- else if(strncmp(p,"calculate ",10)==0)p+=10;
- else if(strncmp(p,"compute ",8)==0)p+=8;
+ if(strncasecmp(p,"what is ",8)==0)p+=8;
+ else if(strncasecmp(p,"calculate ",10)==0)p+=10;
+ else if(strncasecmp(p,"compute ",8)==0)p+=8;
  if(!arithmetic_operand(&p,&a))return 0;
  while(isspace((unsigned char)*p))++p;
  if(*p=='+'||*p=='-'||*p=='*'||*p=='/'){operation=*p++;}else{
@@ -138,7 +139,7 @@ static int arithmetic_calculate(const char *text,char *answer,size_t cap){
   size_t i;
   for(i=0;i<sizeof(ops)/sizeof(ops[0]);++i){
    size_t n=strlen(ops[i].word);
-   if(strncmp(p,ops[i].word,n)==0&&!isalpha((unsigned char)p[n])){
+   if(strncasecmp(p,ops[i].word,n)==0&&!isalpha((unsigned char)p[n])){
     operation=ops[i].operation;p+=n;break;
    }
   }
