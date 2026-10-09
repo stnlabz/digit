@@ -22,7 +22,7 @@ static int tests = 0;
 static void test_audit_capacity(void)
 {
     char root[] = "/tmp/digit-hotload-XXXXXX";
-    char dir[512], path[640];
+    char dir[512], bin_dir[576], path[640];
     unsigned char buffer[8192];
     FILE *src = NULL, *dst = NULL;
     size_t n;
@@ -33,8 +33,9 @@ static void test_audit_capacity(void)
 
     if (mkdtemp(root) == NULL) { CHECK(0, "audit fixture temporary directory"); return; }
     snprintf(dir, sizeof(dir), "%s/sacrificial", root);
-    snprintf(path, sizeof(path), "%s/sacrificial.so", dir);
-    if (mkdir(dir, 0700) == 0) {
+    snprintf(bin_dir, sizeof(bin_dir), "%s/bin", dir);
+    snprintf(path, sizeof(path), "%s/sacrificial.so", bin_dir);
+    if (mkdir(dir, 0700) == 0 && mkdir(bin_dir, 0700) == 0) {
         src = fopen("build/tests/modules/sacrificial/sacrificial.so", "rb");
         dst = fopen(path, "wb");
         if (src && dst) {
@@ -74,6 +75,7 @@ cleanup:
     free(hotload);
     free(manager);
     unlink(path);
+    rmdir(bin_dir);
     rmdir(dir);
     rmdir(root);
 }
