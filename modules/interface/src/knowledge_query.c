@@ -75,7 +75,10 @@ int digit_knowledge_results_valid(const digit_knowledge_record_t *records,
     size_t i,j;
     if(count>DIGIT_KNOWLEDGE_RECORD_MAX || (count && !records))return 0;
     for(i=0;i<count;++i){
-        /* [AI:GPT-6 | 2026-10-08] 1.4.5: bulk retrieval must use\n         * the same safe record-identity rule as single-record lookup. */\n        if(!digit_knowledge_record_valid(&records[i]) ||\n           !digit_knowledge_record_id_valid(records[i].id))return 0;
+        /* [AI:GPT-6 | 2026-10-08] 1.4.5: bulk retrieval uses
+         * the same safe record-identity rule as single-record lookup. */
+        if(!digit_knowledge_record_valid(&records[i]) ||
+           !digit_knowledge_record_id_valid(records[i].id))return 0;
         for(j=0;j<i;++j){
             if(strcmp(records[i].id,records[j].id)==0)return 0;
         }
