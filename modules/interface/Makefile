@@ -15,7 +15,7 @@ HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
-MILESTONE_TEST_TARGET := bin/test_1_5_0
+MILESTONE_TEST_TARGET := bin/test_1_4_1
 COMMUNICATION_TEST_TARGET := bin/test_1_4_0
 STABILIZATION_TEST_TARGET := bin/test_1_3_10
 PRIOR_MILESTONE_TEST_TARGET := bin/test_1_3_9
@@ -91,8 +91,8 @@ $(STABILIZATION_TEST_TARGET): tests/test_1_3_10.c src/http_limits.c src/interfac
 $(COMMUNICATION_TEST_TARGET): tests/test_1_4_0.c src/controlled_communication.c includes/controlled_communication.h includes/message_origin.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_0.c src/controlled_communication.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_5_0.c src/knowledge_query.c includes/knowledge_query.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_5_0.c src/knowledge_query.c -o $@
+$(MILESTONE_TEST_TARGET): tests/test_1_4_1.c src/knowledge_query.c includes/knowledge_query.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_1.c src/knowledge_query.c -o $@
 
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
@@ -107,7 +107,7 @@ $(SA_TEST_TARGET): tests/test_security_sa.c src/security_sa.c includes/security_
 	$(CC) -Iincludes $(CFLAGS) tests/test_security_sa.c src/security_sa.c -o $@
 
 test: check-abi $(MILESTONE_TEST_TARGET) $(COMMUNICATION_TEST_TARGET) $(STABILIZATION_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET)
-	@echo 'DIGIT INTERFACE 1.5.0 — MILESTONE'
+	@echo 'DIGIT INTERFACE 1.4.1 — MILESTONE'
 	./$(MILESTONE_TEST_TARGET)
 	@echo 'DIGIT INTERFACE — HISTORICAL REGRESSION'
 	@set -eu; passed=0; failed=0; \
