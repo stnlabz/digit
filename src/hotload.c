@@ -444,7 +444,16 @@ restore:
             old_copy.descriptor->start(&manager->host) != STNLABZ_MODULE_OK)
         {
             /* Do not report ACTIVE when restoration failed. */
-            (void)stnlabz_module_registry_fail(&manager->registry, candidate->module_id);
+            /* [AI:GPT-6 | 2026-10-08] An exhausted ABI audit may
+             * reject the FAIL transition. Never retain a false ACTIVE
+             * record even when the audit append fails. */
+            if (stnlabz_module_registry_fail(&manager->registry, candidate->module_id) != STNLABZ_MODULE_OK)
+            {
+                stnlabz_module_record_t *failed =
+                    (stnlabz_module_record_t *)stnlabz_module_registry_find(&manager->registry, candidate->module_id);
+                if (failed != NULL) failed->state = STNLABZ_MODULE_STATE_FAILED;
+                digit_hotload_audit("INCUMBENT_FAIL_AUDIT_UNAVAILABLE", candidate->module_id, NULL);
+            }
             digit_hotload_audit("INCUMBENT_RESTART_FAILED", candidate->module_id, NULL);
         }
         else digit_hotload_audit("INCUMBENT_RESTORED", candidate->module_id, NULL);
