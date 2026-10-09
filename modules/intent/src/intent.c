@@ -144,7 +144,7 @@ static void set_result(digit_intent_result_t *result, digit_intent_class_t inten
 
 void digit_intent_interpret(const char *text, digit_intent_result_t *result)
 {
-    static const char *const action_words[] = {"create","build","write","generate","make","implement","produce","fix","remove","delete","install","uninstall","update","patch"};
+    static const char *const action_words[] = {"create","build","write","generate","make","implement","produce","fix","remove","delete","install","uninstall","update","patch","ingest"};
     static const char *const status_words[] = {"status","errors","error","alerts","alert","broken","health","running","failures","failure"};
     static const char *const social_words[] = {"hi","hello","hey","morning","afternoon","evening","thanks","thank","sorry","ouch","paws"};
     static const char *const compare_words[] = {"compare","versus","difference","differences"};
@@ -265,6 +265,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
         {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
+        {"ingest lesson-one", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
         {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
     };
@@ -309,7 +310,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 3,
+    "intent", "Digit Intent", 1, 1, 4,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
