@@ -126,7 +126,7 @@ static int copy_fixture(const char *source, const char *target)
     return ok;
 }
 
-static void test_active_transition(int fail_start, int fail_stop)
+static void test_active_transition(int fail_start, int fail_stop, int fail_restart)
 {
     char root[] = "/tmp/digit-swap-XXXXXX";
     char dir[512], bin[576], live[640], replacement[660];
@@ -149,6 +149,7 @@ static void test_active_transition(int fail_start, int fail_stop)
     snprintf(replacement, sizeof(replacement), "%s.new", live);
     if (mkdir(dir, 0700) || mkdir(bin, 0700) ||
         !copy_fixture(fail_stop ? "build/tests/modules/sacrificial/sacrificial_stop_fail.so" :
+                      fail_restart ? "build/tests/modules/sacrificial/sacrificial_restart_fail.so" :
                       "build/tests/modules/sacrificial/sacrificial.so", live))
         goto cleanup;
 
@@ -184,17 +185,18 @@ static void test_active_transition(int fail_start, int fail_stop)
     ready = 1;
     CHECK(ready, fail_stop ? "failed-stop fixture prepared" :
           fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
-    CHECK(digit_hotload_poll(watcher) == ((fail_start || fail_stop) ? 0 : 1),
+    CHECK(digit_hotload_poll(watcher) == ((fail_start || fail_stop || fail_restart) ? 0 : 1),
           fail_stop ? "failed incumbent stop rejects replacement" :
           fail_start ? "failed candidate rejected" : "active replacement accepted");
     record = stnlabz_module_registry_find(&manager->registry, "sacrificial");
-    CHECK(record && record->state == STNLABZ_MODULE_STATE_ACTIVE,
-          "replacement preserves active module state");
-    CHECK(record && record->descriptor.version_patch == ((fail_start || fail_stop) ? 0U : 1U),
+    CHECK(record && record->state == (fail_restart ? STNLABZ_MODULE_STATE_FAILED : STNLABZ_MODULE_STATE_ACTIVE),
+          fail_restart ? "failed rollback never claims incumbent ACTIVE" :
+                         "replacement preserves active module state");
+    CHECK(record && record->descriptor.version_patch == ((fail_start || fail_stop || fail_restart) ? 0U : 1U),
           fail_start ? "incumbent version restored" : "new version active");
     loaded = stnlabz_module_loader_find(&manager->loader, "sacrificial");
     CHECK(loaded && loaded->descriptor &&
-          loaded->descriptor->version_patch == ((fail_start || fail_stop) ? 0U : 1U),
+          loaded->descriptor->version_patch == ((fail_start || fail_stop || fail_restart) ? 0U : 1U),
           "loader matches registry version");
     CHECK(manager->loader.count == 1, "single module handle retained");
     CHECK(watcher->count == (fail_start ? 1U : 1U),
@@ -290,9 +292,10 @@ int main(void)
           "watch file path capacity matches ABI");
 
     test_audit_capacity();
-    test_active_transition(0, 0);
-    test_active_transition(1, 0);
-    test_active_transition(0, 1);
+    test_active_transition(0, 0, 0);
+    test_active_transition(1, 0, 0);
+    test_active_transition(0, 1, 0);
+    test_active_transition(1, 0, 1);
     test_qualification_timeout();
 
     printf("\nHotload watcher tests: %d executed, %d failed\n", tests, failures);
