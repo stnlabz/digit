@@ -35,7 +35,25 @@ int main(void)
     check(digit_session_revoke_identity(&store,"ezra")==1,"revoke all sessions for identity");
     check(!digit_session_resolve(&store,token,now,identity,sizeof(identity)),"revoked identity denied");
     check(digit_session_resolve(&store,second,now,identity,sizeof(identity)),"other identity preserved");
+    /* [AI:GPT-6 | 2026-10-09] Preferred names belong only to a live session. */
+    {
+        size_t i;int found=0;
+        for(i=0;i<DIGIT_SESSION_CAPACITY;i++){
+            if(store.entries[i].active&&strcmp(store.entries[i].token,second)==0){
+                snprintf(store.entries[i].preferred_name,sizeof(store.entries[i].preferred_name),"Poe");
+                found=strcmp(store.entries[i].preferred_name,"Poe")==0;
+                break;
+            }
+        }
+        check(found,"preferred name stays within resolved session");
+    }
     check(digit_session_revoke(&store,second),"single session revocation");
+    {
+        size_t i;int erased=1;
+        for(i=0;i<DIGIT_SESSION_CAPACITY;i++)
+            if(strcmp(store.entries[i].preferred_name,"Poe")==0)erased=0;
+        check(erased,"revoke erases volatile preferred name");
+    }
     check(!digit_session_resolve(&store,second,now,identity,sizeof(identity)),"revoked token denied");
     check(!digit_session_revoke(&store,second),"duplicate revocation rejected");
     check(!digit_session_issue(NULL,"ezra",1,now,token),"null store denied");
