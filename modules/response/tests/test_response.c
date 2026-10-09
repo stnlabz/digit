@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "response.h"
+#include "arithmetic.h"
 
 static unsigned int executed = 0;
 static unsigned int failed = 0;
@@ -19,6 +20,9 @@ static stnlabz_module_service_handler_fn response_handler;
 static unsigned int unexpected_services;
 static unsigned int corpus_queries;
 static unsigned int outbound_validations;
+static unsigned int arithmetic_calls;
+static const char *arithmetic_expected_request;
+static const char *arithmetic_expected_answer;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -31,6 +35,30 @@ static int unregister_response(const char *name,void *ctx){
 }
 static stnlabz_module_result_t test_invoke(const char *name,const void *request,size_t request_size,
  void *response,size_t response_size,size_t *used){
+ if(!strcmp(name,DIGIT_ARITHMETIC_SERVICE)){
+  const digit_arithmetic_request_t *in=request;
+  digit_arithmetic_result_t *out=response;
+  long long left,right,value,remainder;
+  char op,tail;
+  if(request_size!=sizeof(*in)||response_size<sizeof(*out)||
+     !arithmetic_expected_request||strcmp(in->expression,arithmetic_expected_request))
+   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  arithmetic_calls++;
+  memset(out,0,sizeof(*out));
+  if(!strcmp(arithmetic_expected_answer,"Division by zero is undefined."))
+   out->status=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;
+  else if(sscanf(arithmetic_expected_answer,"%lld %c %lld = %lld remainder %lld%c",
+        &left,&op,&right,&value,&remainder,&tail)==5){
+   out->status=DIGIT_ARITHMETIC_OK;out->left=left;out->right=right;
+   out->value=value;out->remainder=remainder;out->operation=op;
+  }else if(sscanf(arithmetic_expected_answer,"%lld %c %lld = %lld.%c",
+        &left,&op,&right,&value,&tail)==4){
+   out->status=DIGIT_ARITHMETIC_OK;out->left=left;out->right=right;
+   out->value=value;out->operation=op;
+  }else out->status=DIGIT_ARITHMETIC_INVALID;
+  *used=sizeof(*out);
+  return STNLABZ_MODULE_OK;
+ }
  if(!strcmp(name,"corpus.search")){
   corpus_queries++;
   memset(response,0,response_size);
@@ -62,12 +90,13 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        "response service registers with test host");
  snprintf(request.question,sizeof(request.question),
   "INTENT: FACT\nTARGET: KNOWLEDGE\nSUBJECT: \nREQUEST: What is 2 plus 2?");
- unexpected_services=0;
+ unexpected_services=0;arithmetic_calls=0;
+ arithmetic_expected_request="What is 2 plus 2?";arithmetic_expected_answer="2 + 2 = 4.";
  check(response_handler&&response_handler(&request,sizeof(request),&answer,
        sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
        answer.answered&&strcmp(answer.answer,"2 + 2 = 4.")==0,
        "arithmetic question computes an exact answer");
- check(unexpected_services==0,"arithmetic bypasses Corpus and Reasoning");
+ check(unexpected_services==0&&arithmetic_calls==1,"arithmetic uses shared service without Corpus or Reasoning");
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
  {
   static const struct {const char *question,*expected;} cases[]={
@@ -100,6 +129,8 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
    memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
    snprintf(request.question,sizeof(request.question),"%s",cases[i].question);
+   arithmetic_expected_request=cases[i].question;
+   arithmetic_expected_answer=cases[i].expected;
    check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&strcmp(answer.answer,cases[i].expected)==0,cases[i].question);
   }
  }
@@ -130,7 +161,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 6, "internal version is 1.7.6");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 7, "internal version is 1.7.7");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
