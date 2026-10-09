@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
@@ -207,6 +208,52 @@ cleanup:
     rmdir(root);
 }
 
+/* [AI:GPT-6 | 2026-10-08] Hung qualification must not stop
+ * the running incumbent or block Core's poll indefinitely. */
+static void test_qualification_timeout(void)
+{
+    char root[] = "/tmp/digit-timeout-XXXXXX";
+    char dir[512], bin[576], live[640];
+    digit_module_manager_t *manager = NULL;
+    digit_hotload_t *watcher = NULL;
+    struct timespec before, after;
+    long elapsed = -1;
+    int ready = 0;
+    if (!mkdtemp(root)) { CHECK(0, "timeout fixture root"); return; }
+    snprintf(dir, sizeof(dir), "%s/sacrificial", root);
+    snprintf(bin, sizeof(bin), "%s/bin", dir);
+    snprintf(live, sizeof(live), "%s/sacrificial.so", bin);
+    if (mkdir(dir, 0700) || mkdir(bin, 0700) ||
+        !copy_fixture("build/tests/modules/sacrificial/sacrificial_hang.so", live))
+        goto cleanup;
+    manager = calloc(1, sizeof(*manager));
+    watcher = calloc(1, sizeof(*watcher));
+    if (!manager || !watcher) goto cleanup;
+    digit_module_manager_init(manager, NULL);
+    snprintf(manager->modules_path, sizeof(manager->modules_path), "%s", root);
+    manager->registry.count = 1;
+    strcpy(manager->registry.modules[0].descriptor.id, "sacrificial");
+    manager->registry.modules[0].state = STNLABZ_MODULE_STATE_ACTIVE;
+    digit_hotload_init(watcher, manager);
+    ready = clock_gettime(CLOCK_MONOTONIC, &before) == 0;
+    CHECK(ready, "timeout test clock available");
+    if (!ready) goto cleanup;
+    CHECK(digit_hotload_poll(watcher) == 0, "hung candidate rejected");
+    if (clock_gettime(CLOCK_MONOTONIC, &after) == 0)
+        elapsed = (after.tv_sec - before.tv_sec) * 1000L +
+                  (after.tv_nsec - before.tv_nsec) / 1000000L;
+    CHECK(elapsed >= 0 && elapsed < 6000L, "candidate timeout bounded to six seconds");
+    CHECK(manager->registry.modules[0].state == STNLABZ_MODULE_STATE_ACTIVE,
+          "hung qualification preserves incumbent ACTIVE");
+    CHECK(watcher->count == 0, "hung candidate remains retryable");
+cleanup:
+    if (!ready) CHECK(0, "timeout fixture initialized");
+    free(watcher);
+    free(manager);
+    unlink(live);
+    rmdir(bin); rmdir(dir); rmdir(root);
+}
+
 int main(void)
 {
     digit_module_manager_t manager;
@@ -241,6 +288,7 @@ int main(void)
     test_audit_capacity();
     test_active_transition(0);
     test_active_transition(1);
+    test_qualification_timeout();
 
     printf("\nHotload watcher tests: %d executed, %d failed\n", tests, failures);
     return failures == 0 ? 0 : 1;
