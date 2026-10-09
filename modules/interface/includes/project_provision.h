@@ -2,6 +2,7 @@
 #define DIGIT_PROJECT_PROVISION_H
 
 #include <stddef.h>
+#include <sys/types.h>
 
 /* [AI:GPT-6 | 2026-10-08] A project is visible only after its complete
  * restricted security workspace and verified SA membership are committed.
@@ -10,6 +11,10 @@
 #define DIGIT_PROJECT_ROOT "/opt/digit/state/projects"
 #define DIGIT_PROJECT_ID_MAX 64
 #define DIGIT_PROJECT_USER_MAX 64
+
+/* [AI:GPT-6 | 2026-10-08] Directory ownership gate shared by
+ * provisioning and authorization; rejects all unrelated UIDs. */
+int digit_project_directory_owner_allowed(uid_t owner, uid_t runtime_uid);
 
 int digit_project_provision(const char *root, const char *organization,
                             const char *project, const char *founding_admin,
