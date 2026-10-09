@@ -149,6 +149,19 @@ int main(void) {
         check(digit_project_security_ready(root,"stn-labz","digit"),
               "metadata restoration accepted");
     }
+    /* [AI:GPT-6 | 2026-10-08] READY path must reference its own file. */
+    {
+        char alias[350];
+        snprintf(alias,sizeof(alias),"%s/READY-alternate",project);
+        check(rename(ready,alias)==0,"READY move fixture");
+        check(symlink(alias,ready)==0,"READY alias fixture");
+        check(!digit_project_security_ready(root,"stn-labz","digit"),
+              "READY alias is denied");
+        check(unlink(ready)==0 && rename(alias,ready)==0,
+              "READY pathname restored");
+        check(digit_project_security_ready(root,"stn-labz","digit"),
+              "READY restoration accepted");
+    }
     chmod(security,0644);
     check(!digit_project_security_ready(root,"stn-labz","digit"),"readable-by-others security record denied");
     chmod(security,0600);
