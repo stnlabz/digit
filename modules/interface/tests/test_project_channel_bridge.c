@@ -169,6 +169,15 @@ int main(void) {
         check(!digit_project_channel_create_host(root,"stn-labz","second",
               "updates","poe",registry,&host,id,sizeof(id)),
               "ordinary user cannot create project channel");
+        check(!digit_project_channel_create_host(root,"team-chaos","second",
+              "updates","sysadmin",registry,&host,id,sizeof(id)),
+              "cross-organization ordinary channel denied");
+        check(!digit_project_channel_create_host(root,"stn-labz","second",
+              "../bad","sysadmin",registry,&host,id,sizeof(id)),
+              "ordinary channel traversal denied");
+        check(!digit_project_channel_create_host(root,"stn-labz","second",
+              "updates","sysadmin",registry,NULL,id,sizeof(id)),
+              "missing host cannot create ordinary channel");
         check(digit_project_channel_create_host(root,"stn-labz","second",
               "updates","sysadmin",registry,&host,id,sizeof(id)),
               "SA creates ordinary channel inside existing project");
