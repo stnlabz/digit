@@ -424,7 +424,7 @@ if(strncmp(request,"POST /session/logout ",21)==0){
 /* [AI:GPT-6 | 2026-10-08] Interface 1.5.4: protected SA admission.
  * Core decides authority against the current operator-controlled roster.
  * No administration data is exposed until Core returns an exact grant. */
-if(strncmp(request,"GET /admin/access HTTP/1.1",26)==0){
+if(strncmp(request,"GET /admin/access HTTP/1.1\r\n",sizeof("GET /admin/access HTTP/1.1\r\n")-1U)==0){
     digit_admin_sa_request_t in;
     digit_admin_sa_response_t out;
     size_t used=0;
