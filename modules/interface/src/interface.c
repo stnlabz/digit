@@ -204,8 +204,16 @@ static void interface_channels_list(int client,const char *identity)
         off+=(size_t)n;
         ++visible;
     }
-    n=snprintf(json,sizeof(json),
-               "{\"count\":%zu,\"channels\":[%s]}\n",visible,items);
+    /* [AI:GPT-6 | 2026-10-09] Include only SA-verified organizations,
+     * allowing an empty-but-authorized workspace to remain visible. */
+    {
+        int stn=digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,"stn-labz",identity);
+        int chaos=digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,"team-chaos",identity);
+        n=snprintf(json,sizeof(json),
+           "{\"count\":%zu,\"organizations\":[%s%s%s],\"channels\":[%s]}\\n",
+           visible,stn?"\"stn-labz\"":"",stn&&chaos?",":"",
+           chaos?"\"team-chaos\"":"",items);
+    }
     if(n<0 || (size_t)n>=sizeof(json))goto invalid;
     interface_reply(client,200,json);
     return;
