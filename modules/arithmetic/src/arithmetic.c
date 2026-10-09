@@ -401,7 +401,9 @@ static digit_arithmetic_status_t evaluate(const char *expression,digit_arithmeti
  memset(result,0,sizeof(*result));
  if(!expression||!*expression)return DIGIT_ARITHMETIC_INVALID;
  if(strchr(expression,'^')||strstr(expression,"x*x")||strstr(expression,"X*X")||
-    strstr(expression,"x * x")||strstr(expression,"X * X"))
+    strstr(expression,"x * x")||strstr(expression,"X * X")||
+    (strchr(expression,'=')&&strchr(expression,'(')&&
+     (strchr(expression,'x')||strchr(expression,'X'))))
   return evaluate_polynomial(expression,result);
  /* [AI:GPT-6 | 2026-10-09] Unary signs are not binary operators.
   * Keep signed two-operand integer expressions on the original exact path. */
