@@ -8,21 +8,14 @@
 
 static FILE *digit_audit_file = NULL;
 
-/* [AI:GPT-6 | 2026-10-08] Permit isolated audit test sinks without
- * changing the fixed production log destination. */
-int digit_audit_open_path(const char *path)
+int digit_audit_open(void)
 {
     if (digit_audit_file != NULL)
     {
         return 1;
     }
 
-    if (path == NULL || path[0] != '/')
-    {
-        return 0;
-    }
-
-    digit_audit_file = fopen(path, "a");
+    digit_audit_file = fopen(DIGIT_AUDIT_PATH, "a");
     if (digit_audit_file == NULL)
     {
         return 0;
@@ -30,11 +23,6 @@ int digit_audit_open_path(const char *path)
 
     (void)setvbuf(digit_audit_file, NULL, _IOLBF, 0);
     return 1;
-}
-
-int digit_audit_open(void)
-{
-    return digit_audit_open_path(DIGIT_AUDIT_PATH);
 }
 
 void digit_audit_close(void)
