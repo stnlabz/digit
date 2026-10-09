@@ -42,11 +42,31 @@ static void *transition_thread(void *arg)
     }
     return NULL;
 }
+/* [AI:GPT-6 | 2026-10-08] The module graph legitimately
+ * chains services; nested dispatch must remain available. */
+static stnlabz_module_result_t nested_leaf(const void *in,size_t is,void *out,size_t os,size_t *used,void *ctx)
+{
+    (void)in;(void)is;(void)out;(void)os;(void)ctx;
+    *used = 0;
+    return STNLABZ_MODULE_OK;
+}
+static stnlabz_module_result_t nested_parent(const void *in,size_t is,void *out,size_t os,size_t *used,void *ctx)
+{
+    (void)in;(void)is;(void)out;(void)os;(void)ctx;
+    return digit_service_invoke("test.leaf", NULL, 0, NULL, 0, used);
+}
 int main(void)
 {
     pthread_t caller, swapper;
     stnlabz_module_result_t call_result = STNLABZ_MODULE_ERR_NOT_FOUND;
     int begun = 0, swapping = 0;
+    CHECK(digit_service_register("test.leaf",nested_leaf,NULL), "nested leaf registered");
+    CHECK(digit_service_register("test.parent",nested_parent,NULL), "nested parent registered");
+    { size_t used=1;
+      CHECK(digit_service_invoke("test.parent",NULL,0,NULL,0,&used)==STNLABZ_MODULE_OK && used==0,
+            "nested service invocation completes"); }
+    CHECK(digit_service_unregister("test.parent",NULL), "nested parent unregistered");
+    CHECK(digit_service_unregister("test.leaf",NULL), "nested leaf unregistered");
     CHECK(digit_service_register("test.inflight",handler,NULL), "service registered");
     if (!pthread_create(&caller,NULL,invoke_thread,&call_result)) begun = 1;
     CHECK(begun, "in-flight call thread started");
