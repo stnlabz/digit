@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     /* [AI:GPT-6 | 2026-10-09] Verify actual algebra intent gating. */
     {
         digit_intent_result_t r;
-        digit_intent_interpret("solve 3*x - 6 = 0",&r);
+        digit_intent_interpret("solve x^2 - 5*x + 6 = 0",&r);
         if(r.intent!=DIGIT_INTENT_FACT||r.target!=DIGIT_INTENT_TARGET_KNOWLEDGE||!r.established){
             fprintf(stderr,"FAIL algebra solve classification\n");++failures;
         }else printf("PASS algebra solve classification\n");
