@@ -291,10 +291,16 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
         }
     }
 
+    /* [AI:GPT-6 | 2026-10-08] Recovery after a failed admission:
+     * a prior attempt may have loaded this ID without registering it.
+     * Clear any unregistered loader slot before retrying admission. */
+    if (!has_incumbent)
+        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
+
     loader_result = stnlabz_module_loader_load(&manager->loader, candidate->module_id, staged, &loaded_descriptor);
     if (loader_result != STNLABZ_MODULE_LOADER_OK || loaded_descriptor == NULL)
     {
-        printf("[MODULE] GREEN candidate load failed: %s\n", candidate->module_id);
+        printf("[MODULE] GREEN candidate load failed: %s loader_result=%d\n", candidate->module_id, (int)loader_result);
         digit_hotload_audit("LOAD_FAILED", candidate->module_id, &result);
         unlink(staged);
         return 0;
@@ -322,6 +328,10 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
                    candidate->module_id, admission_stage,
                    stnlabz_module_result_string(module_result), (int)module_result);
             digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
+            /* [AI:GPT-6 | 2026-10-08] Registry holds a descriptor
+             * from the loaded object: unregister before unloading. */
+            (void)stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
+            (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
             unlink(staged);
             return 0;
         }
