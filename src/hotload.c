@@ -261,6 +261,20 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     }
     printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
 
+    /* [AI:GPT-6 | 2026-10-08] Reserve registry audit slots before
+     * touching a running incumbent. Seven normal lifecycle transitions
+     * follow: stop, unregister, discover, verify, qualify restore,
+     * authorize, activate. Keep one spare entry for a failure record. */
+    if (manager->registry.audit_count > STNLABZ_MODULE_AUDIT_MAX ||
+        STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count < 8U)
+    {
+        printf("[MODULE] Replacement deferred: registry audit capacity %zu/%u -- incumbent retained\n",
+               manager->registry.audit_count, (unsigned int)STNLABZ_MODULE_AUDIT_MAX);
+        digit_hotload_audit("AUDIT_CAPACITY_DEFERRED", candidate->module_id, NULL);
+        unlink(staged);
+        return 0;
+    }
+
     if (has_incumbent)
     {
         if (active->state == STNLABZ_MODULE_STATE_ACTIVE)
@@ -275,17 +289,27 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
             module_result = stnlabz_module_registry_stop(&manager->registry, candidate->module_id);
             if (module_result != STNLABZ_MODULE_OK)
             {
+                /* Registry rejected STOP: restore the incumbent's
+                 * service hooks before returning control to callers. */
+                if (active->descriptor.start == NULL ||
+                    active->descriptor.start(&manager->host) != STNLABZ_MODULE_OK)
+                    digit_hotload_audit("INCUMBENT_RESTART_FAILED", candidate->module_id, NULL);
                 digit_hotload_audit("REGISTRY_STOP_FAILED", candidate->module_id, NULL);
                 unlink(staged);
                 return 0;
             }
         }
 
-        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
         module_result = stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
         if (module_result != STNLABZ_MODULE_OK)
         {
             digit_hotload_audit("UNREGISTER_FAILED", candidate->module_id, NULL);
+            unlink(staged);
+            return 0;
+        }
+        if (stnlabz_module_loader_unload(&manager->loader, candidate->module_id) != STNLABZ_MODULE_LOADER_OK)
+        {
+            digit_hotload_audit("UNLOAD_FAILED", candidate->module_id, NULL);
             unlink(staged);
             return 0;
         }
