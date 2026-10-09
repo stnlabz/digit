@@ -338,3 +338,52 @@ int digit_project_bind_security_host(const char *root,const char *organization,
     return digit_project_bind_security(root,organization,project,actor,
                                        sa_registry,project_host_invoke,(void *)host);
 }
+
+/* [AI:GPT-6 | 2026-10-09] An ordinary channel is provisioned only
+ * inside an existing qualified project. A Core orphan remains inaccessible
+ * if any protected persistence step fails. */
+int digit_project_channel_create_host(const char *root,const char *org,
+ const char *project,const char *name,const char *actor,const char *sa_registry,
+ const stnlabz_module_host_t *host,char *channel,size_t capacity){
+ char filename[64],owner_org[DIGIT_PROJECT_ID_MAX],owner_project[DIGIT_PROJECT_ID_MAX];
+ char entry[DIGIT_CHANNEL_ID_MAX+2],existing[DIGIT_CHANNEL_ID_MAX];
+ digit_channel_create_request_t request;digit_channel_create_response_t result;
+ int lock=-1,dir=-1,fd=-1,ok=0,n;size_t used=0;
+ struct stat st;
+ if(!channel||capacity<DIGIT_CHANNEL_ID_MAX||!host||!host->invoke_service||
+    !project_component(name)||strlen(name)>40||
+    !digit_project_security_ready(root,org,project)||
+    !digit_security_sa_verify(sa_registry,org,actor)||
+    !digit_project_security_member(root,org,project,actor))return 0;
+ channel[0]=0;
+ n=snprintf(filename,sizeof(filename),"channel-%s.id",name);
+ if(n<1||(size_t)n>=sizeof(filename))return 0;
+ lock=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+ if(lock<0||fstat(lock,&st)!=0||!S_ISDIR(st.st_mode)||
+    (st.st_mode&077)||!digit_project_directory_owner_allowed(st.st_uid,geteuid())||
+    flock(lock,LOCK_EX|LOCK_NB)!=0)goto done;
+ if(digit_project_security_owner(root,"channel-probe",owner_org,sizeof(owner_org),
+                                 owner_project,sizeof(owner_project))<0)goto done;
+ dir=project_open(root,org,project);if(dir<0)goto done;
+ if(fstatat(dir,filename,&st,AT_SYMLINK_NOFOLLOW)==0||errno!=ENOENT)goto done;
+ fd=openat(dir,filename,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+ if(fd<0)goto done;
+ memset(&request,0,sizeof(request));memset(&result,0,sizeof(result));
+ n=snprintf(request.name,sizeof(request.name),"channel-%s-%s-%s",org,project,name);
+ if(n<1||(size_t)n>=sizeof(request.name))goto done;
+ if(host->invoke_service(DIGIT_CHANNEL_SERVICE_CREATE,&request,sizeof(request),
+       &result,sizeof(result),&used)!=STNLABZ_MODULE_OK||
+    used!=sizeof(result)||!result.created||
+    !project_component(result.channel.id))goto done;
+ if(digit_project_security_owner(root,result.channel.id,owner_org,sizeof(owner_org),
+      owner_project,sizeof(owner_project))!=0)goto done;
+ n=snprintf(entry,sizeof(entry),"%s\n",result.channel.id);
+ if(n<2||(size_t)n>=sizeof(entry)||write(fd,entry,(size_t)n)!=n||
+    fsync(fd)!=0||fsync(dir)!=0)goto done;
+ strcpy(channel,result.channel.id);ok=1;
+done:
+ if(fd>=0)close(fd);
+ if(dir>=0)close(dir);
+ if(lock>=0)close(lock);
+ return ok;
+}
