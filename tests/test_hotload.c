@@ -76,6 +76,26 @@ static void test_audit_capacity(void)
     CHECK(hotload->count == 0, "second deferral remains retryable");
     CHECK(manager->registry.audit_count == STNLABZ_MODULE_AUDIT_MAX - 3,
           "retry preserves audit capacity and incumbent");
+
+    /* [AI:GPT-6 | 2026-10-08] Positive control: reset only the
+     * isolated test registry, not a production audit registry. */
+    stnlabz_module_registry_init(&manager->registry);
+    {
+        stnlabz_module_descriptor_t approved = {0};
+        strcpy(approved.id, "sacrificial");
+        approved.version_major = 1;
+        CHECK(digit_qualification_record(&manager->qualifications, &approved),
+              "isolated qualified version recorded");
+    }
+    CHECK(digit_hotload_poll(hotload) == 1,
+          "eligible candidate is promoted on retry");
+    incumbent = stnlabz_module_registry_find(&manager->registry, "sacrificial");
+    CHECK(incumbent && incumbent->state == STNLABZ_MODULE_STATE_ACTIVE,
+          "promoted candidate becomes ACTIVE");
+    CHECK(manager->loader.count == 1, "promoted candidate is loaded");
+    CHECK(hotload->count == 1, "successful candidate snapshot is committed");
+    CHECK(digit_hotload_poll(hotload) == 0, "accepted candidate not repeatedly activated");
+    stnlabz_module_loader_unload_all(&manager->loader);
 cleanup:
     free(hotload);
     free(manager);
