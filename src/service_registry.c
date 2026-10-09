@@ -1,82 +1,150 @@
+#include <pthread.h>
 #include <string.h>
-
 #include "service_registry.h"
 
+/* [AI:GPT-6 | 2026-10-08] Protect service pointers from unload.
+ * Transition ownership permits the loader to register/start services
+ * while requests from other threads are refused. */
 static digit_service_registry_t digit_services;
-static int digit_services_initialized = 0;
+static int digit_services_initialized;
+static pthread_mutex_t services_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t services_idle = PTHREAD_COND_INITIALIZER;
+static size_t active_calls;
+static int transitioning;
+static pthread_t transition_owner;
 
-static void digit_service_ensure_init(void)
+static void ensure_init(void)
 {
     if (!digit_services_initialized)
     {
-        digit_service_registry_init(&digit_services);
+        memset(&digit_services, 0, sizeof(digit_services));
         digit_services_initialized = 1;
     }
 }
-
+static int owner(void)
+{
+    return transitioning && pthread_equal(pthread_self(), transition_owner);
+}
 void digit_service_registry_init(digit_service_registry_t *registry)
 {
-    if (registry == NULL) return;
-    memset(registry, 0, sizeof(*registry));
+    if (registry) memset(registry, 0, sizeof(*registry));
 }
-
-int digit_service_register(const char *name, stnlabz_module_service_handler_fn handler, void *handler_context)
+int digit_service_transition_begin(void)
 {
-    size_t index;
-    size_t length;
-
-    if (name == NULL || handler == NULL) return 0;
-    length = strlen(name);
-    if (length == 0 || length >= STNLABZ_MODULE_SERVICE_NAME_MAX) return 0;
-    digit_service_ensure_init();
-
-    for (index = 0; index < DIGIT_SERVICE_MAX; ++index)
-        if (digit_services.services[index].used && strcmp(digit_services.services[index].name, name) == 0) return 0;
-
-    for (index = 0; index < DIGIT_SERVICE_MAX; ++index)
+    pthread_mutex_lock(&services_lock);
+    if (transitioning)
     {
-        digit_service_record_t *record = &digit_services.services[index];
+        pthread_mutex_unlock(&services_lock);
+        return 0;
+    }
+    transitioning = 1;
+    transition_owner = pthread_self();
+    while (active_calls)
+        pthread_cond_wait(&services_idle, &services_lock);
+    pthread_mutex_unlock(&services_lock);
+    return 1;
+}
+void digit_service_transition_end(void)
+{
+    pthread_mutex_lock(&services_lock);
+    if (owner())
+    {
+        transitioning = 0;
+        pthread_cond_broadcast(&services_idle);
+    }
+    pthread_mutex_unlock(&services_lock);
+}
+int digit_service_register(const char *name, stnlabz_module_service_handler_fn handler, void *context)
+{
+    size_t i, length;
+    int added = 0;
+    if (!name || !handler) return 0;
+    length = strnlen(name, STNLABZ_MODULE_SERVICE_NAME_MAX);
+    if (!length || length >= STNLABZ_MODULE_SERVICE_NAME_MAX) return 0;
+    pthread_mutex_lock(&services_lock);
+    ensure_init();
+    if (transitioning && !owner()) goto done;
+    for (i = 0; i < DIGIT_SERVICE_MAX; ++i)
+        if (digit_services.services[i].used &&
+            strcmp(digit_services.services[i].name, name) == 0) goto done;
+    for (i = 0; i < DIGIT_SERVICE_MAX; ++i)
+    {
+        digit_service_record_t *record = &digit_services.services[i];
         if (!record->used)
         {
             record->used = 1;
             memcpy(record->name, name, length + 1);
             record->handler = handler;
-            record->handler_context = handler_context;
+            record->handler_context = context;
             ++digit_services.count;
-            return 1;
+            added = 1;
+            break;
         }
     }
-    return 0;
+done:
+    pthread_mutex_unlock(&services_lock);
+    return added;
 }
-
-int digit_service_unregister(const char *name, void *handler_context)
+int digit_service_unregister(const char *name, void *context)
 {
-    size_t index;
-    if (name == NULL) return 0;
-    digit_service_ensure_init();
-    for (index = 0; index < DIGIT_SERVICE_MAX; ++index)
+    size_t i;
+    int removed = 0;
+    if (!name) return 0;
+    pthread_mutex_lock(&services_lock);
+    ensure_init();
+    if (transitioning && !owner()) goto done;
+    for (i = 0; i < DIGIT_SERVICE_MAX; ++i)
     {
-        digit_service_record_t *record = &digit_services.services[index];
-        if (record->used && strcmp(record->name, name) == 0 && record->handler_context == handler_context)
+        digit_service_record_t *record = &digit_services.services[i];
+        if (record->used && strcmp(record->name, name) == 0 &&
+            record->handler_context == context)
         {
+            /* A module must only be unregistered after active service
+             * calls drain. The transition owner provides that barrier. */
+            while (active_calls && !transitioning)
+                pthread_cond_wait(&services_idle, &services_lock);
             memset(record, 0, sizeof(*record));
-            if (digit_services.count > 0) --digit_services.count;
-            return 1;
+            if (digit_services.count) --digit_services.count;
+            removed = 1;
+            break;
         }
     }
-    return 0;
+done:
+    pthread_mutex_unlock(&services_lock);
+    return removed;
 }
-
-stnlabz_module_result_t digit_service_invoke(const char *name, const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used)
+stnlabz_module_result_t digit_service_invoke(const char *name,
+    const void *request, size_t request_size, void *response,
+    size_t response_size, size_t *response_used)
 {
-    size_t index;
-    if (name == NULL || response_used == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    digit_service_ensure_init();
-    for (index = 0; index < DIGIT_SERVICE_MAX; ++index)
+    size_t i;
+    stnlabz_module_service_handler_fn handler = NULL;
+    void *context = NULL;
+    stnlabz_module_result_t result;
+    if (!name || !response_used) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    pthread_mutex_lock(&services_lock);
+    ensure_init();
+    if (transitioning && !owner()) goto missing;
+    for (i = 0; i < DIGIT_SERVICE_MAX; ++i)
     {
-        digit_service_record_t *record = &digit_services.services[index];
-        if (record->used && strcmp(record->name, name) == 0)
-            return record->handler(request, request_size, response, response_size, response_used, record->handler_context);
+        if (digit_services.services[i].used &&
+            strcmp(digit_services.services[i].name, name) == 0)
+        {
+            handler = digit_services.services[i].handler;
+            context = digit_services.services[i].handler_context;
+            ++active_calls;
+            break;
+        }
     }
+    if (!handler) goto missing;
+    pthread_mutex_unlock(&services_lock);
+    result = handler(request, request_size, response, response_size, response_used, context);
+    pthread_mutex_lock(&services_lock);
+    --active_calls;
+    if (!active_calls) pthread_cond_broadcast(&services_idle);
+    pthread_mutex_unlock(&services_lock);
+    return result;
+missing:
+    pthread_mutex_unlock(&services_lock);
     return STNLABZ_MODULE_ERR_NOT_FOUND;
 }
