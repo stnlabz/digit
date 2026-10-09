@@ -9,6 +9,7 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -653,6 +654,15 @@ static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h)
     struct sockaddr_in a;
     int enabled=1;
     if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    /* Reject missing, symlinked, group-readable, or world-readable keys. */
+    {
+        struct stat key_status;
+        if(lstat(DIGIT_INTERFACE_TLS_KEY,&key_status)!=0 ||
+           !S_ISREG(key_status.st_mode) || key_status.st_nlink!=1 ||
+           (key_status.st_mode&077)!=0 ||
+           (key_status.st_uid!=0 && key_status.st_uid!=geteuid()))
+            return STNLABZ_MODULE_ERR_START_FAILED;
+    }
     interface_tls_context=SSL_CTX_new(TLS_server_method());
     if(!interface_tls_context)return STNLABZ_MODULE_ERR_START_FAILED;
     if(SSL_CTX_set_min_proto_version(interface_tls_context,TLS1_2_VERSION)!=1 ||
