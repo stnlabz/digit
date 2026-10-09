@@ -16,6 +16,8 @@
 typedef struct {
     char token[DIGIT_SESSION_TOKEN_SIZE];
     char identity[DIGIT_SESSION_ID_SIZE];
+    /* [AI:GPT-6 | 2026-10-09] Volatile, per-session preferred name; never persisted. */
+    char preferred_name[64];
     time_t expires_at;
     int active;
 } digit_session_entry_t;
