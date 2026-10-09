@@ -67,7 +67,12 @@ static int project_metadata_matches(int dir,const char *org,const char *project)
        (st.st_mode&077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid()))
         goto finish;
     n=read(fd,row,sizeof(row));
-    if(n<5 || n>=(ssize_t)sizeof(row) || row[n-1]!='\n')goto finish;
+    /* [AI:GPT-6 | 2026-10-08] Reject hidden suffixes: C string
+     * comparisons must not accept embedded NUL bytes or extra records. */
+    if(n<5 || n>=(ssize_t)sizeof(row) || row[n-1]!='\n' ||
+       memchr(row,'\0',(size_t)n)!=NULL ||
+       memchr(row,'\n',(size_t)n-1)!=NULL ||
+       st.st_size!=n)goto finish;
     row[n-1]='\0';
     first=strchr(row,'\t');
     if(!first)goto finish;
