@@ -52,7 +52,18 @@ int main(void){
  check(digit_sa_change(file,"team-chaos","poemei","poemei",2),"founder bootstraps qualified initial Team ChAoS SA");
  check(digit_security_sa_verify(file,"team-chaos","poemei"),"Team ChAoS SA active after bootstrap");
  check(!digit_sa_change(file,"team-chaos","poemei","poemei",2),"bootstrap nonrepeatable");
+ { FILE *b=fopen(file,"wb");
+   if(!b)return 1;
+   if(fputs("poemei\\tstn-labz\\tSA\\t1\\t1\\t1\\n",b)<0){fclose(b);return 1;}
+   fclose(b);if(chmod(file,0600)!=0)return 1;
+ }
+ check(digit_sa_change(file,"team-chaos","poemei","poemei",2),
+       "explicit founder bootstrap creates missing organization SA record");
+ check(digit_security_sa_verify(file,"team-chaos","poemei"),
+       "new Team ChAoS SA assigned and qualified");
+ check(!digit_sa_change(file,"team-chaos","poemei","poemei",2),
+       "founder bootstrap single-use");
  unlink(file);rmdir(dir);
- printf("SA 1.6.5: %d passed %d failed\n",passed,failed);
+ printf("SA bootstrap qualification: %d passed %d failed\n",passed,failed);
  return failed!=0;
 }
