@@ -132,7 +132,7 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
   int n;
   if(target_sa!=0||found>1)goto done;
   if(found==0){
-   n=snprintf(out+used,len+512-used,"poemei\\tteam-chaos\\tSA\\t1\\t1\\t1\\n");
+   n=snprintf(out+used,len+512-used,"poemei\tteam-chaos\tSA\t1\t1\t1\n");
    if(n<0||(size_t)n>=len+512-used)goto done;
    used+=(size_t)n;
   }
