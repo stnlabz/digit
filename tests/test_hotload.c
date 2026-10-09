@@ -126,7 +126,7 @@ static int copy_fixture(const char *source, const char *target)
     return ok;
 }
 
-static void test_active_transition(int fail_start)
+static void test_active_transition(int fail_start, int fail_stop)
 {
     char root[] = "/tmp/digit-swap-XXXXXX";
     char dir[512], bin[576], live[640], replacement[660];
@@ -148,7 +148,8 @@ static void test_active_transition(int fail_start)
     snprintf(live, sizeof(live), "%s/sacrificial.so", bin);
     snprintf(replacement, sizeof(replacement), "%s.new", live);
     if (mkdir(dir, 0700) || mkdir(bin, 0700) ||
-        !copy_fixture("build/tests/modules/sacrificial/sacrificial.so", live))
+        !copy_fixture(fail_stop ? "build/tests/modules/sacrificial/sacrificial_stop_fail.so" :
+                      "build/tests/modules/sacrificial/sacrificial.so", live))
         goto cleanup;
 
     manager = calloc(1, sizeof(*manager));
@@ -181,23 +182,26 @@ static void test_active_transition(int fail_start)
     /* Deterministic update detection independent of filesystem timestamp resolution. */
     watcher->files[0].modified_time = 0;
     ready = 1;
-    CHECK(ready, fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
-    CHECK(digit_hotload_poll(watcher) == (fail_start ? 0 : 1),
+    CHECK(ready, fail_stop ? "failed-stop fixture prepared" :
+          fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
+    CHECK(digit_hotload_poll(watcher) == ((fail_start || fail_stop) ? 0 : 1),
+          fail_stop ? "failed incumbent stop rejects replacement" :
           fail_start ? "failed candidate rejected" : "active replacement accepted");
     record = stnlabz_module_registry_find(&manager->registry, "sacrificial");
     CHECK(record && record->state == STNLABZ_MODULE_STATE_ACTIVE,
           "replacement preserves active module state");
-    CHECK(record && record->descriptor.version_patch == (fail_start ? 0U : 1U),
+    CHECK(record && record->descriptor.version_patch == ((fail_start || fail_stop) ? 0U : 1U),
           fail_start ? "incumbent version restored" : "new version active");
     loaded = stnlabz_module_loader_find(&manager->loader, "sacrificial");
     CHECK(loaded && loaded->descriptor &&
-          loaded->descriptor->version_patch == (fail_start ? 0U : 1U),
+          loaded->descriptor->version_patch == ((fail_start || fail_stop) ? 0U : 1U),
           "loader matches registry version");
     CHECK(manager->loader.count == 1, "single module handle retained");
     CHECK(watcher->count == (fail_start ? 1U : 1U),
           "candidate snapshot remains valid");
 cleanup:
-    if (!ready) CHECK(0, fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
+    if (!ready) CHECK(0, fail_stop ? "failed-stop fixture prepared" :
+          fail_start ? "failed-start fixture prepared" : "replacement fixture prepared");
     if (manager) stnlabz_module_loader_unload_all(&manager->loader);
     free(watcher);
     free(manager);
@@ -286,8 +290,9 @@ int main(void)
           "watch file path capacity matches ABI");
 
     test_audit_capacity();
-    test_active_transition(0);
-    test_active_transition(1);
+    test_active_transition(0, 0);
+    test_active_transition(1, 0);
+    test_active_transition(0, 1);
     test_qualification_timeout();
 
     printf("\nHotload watcher tests: %d executed, %d failed\n", tests, failures);
