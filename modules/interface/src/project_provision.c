@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "project_provision.h"
 #include "security_sa.h"
+#include "account_auth.h"
 
 /* [AI:GPT-6 | 2026-10-08] READY is published only after both records.
  * Incomplete folders are NOT provisioned projects.
@@ -307,8 +308,11 @@ int digit_project_members_json(const char *root,const char *org,
      strlen(user)>=DIGIT_PROJECT_USER_MAX)goto done;
   for(i=0;i<count;i++)if(!strcmp(seen[i],user))goto done;
   strcpy(seen[count],user);
-  length=snprintf(json+used,capacity-used,"%s{\"user\":\"%s\",\"membership\":\"restricted\"}",
-     count?",":"",user);
+  length=snprintf(json+used,capacity-used,
+     "%s{\"user\":\"%s\",\"membership\":\"restricted\",\"account_verified_active\":%s,\"sa_authorized\":%s}",
+     count?",":"",user,
+     digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,user)?"true":"false",
+     digit_security_sa_verify(sa_registry,org,user)?"true":"false");
   if(length<0||(size_t)length>=capacity-used)goto done;
   used+=(size_t)length;count++;
  }
