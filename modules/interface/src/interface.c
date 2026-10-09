@@ -592,6 +592,12 @@ if(strncmp(request,"POST /admin/sa HTTP/1.1\r\n",sizeof("POST /admin/sa HTTP/1.1
             interface_reply(client,400,"{\"error\":\"invalid SA scope\"}\n");return;
         }
     }
+    if(!strcmp(command,"bootstrap")&&c){
+        if(!digit_sa_change(DIGIT_SECURITY_SA_REGISTRY,org,identity,user,2)){
+            interface_reply(client,403,"{\"error\":\"bootstrap denied; verify existing qualification, empty target SA roster and founder assignment\"}\n");return;
+        }
+        interface_reply(client,200,"{\"bootstrapped\":true}\n");return;
+    }
     if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)){
         interface_reply(client,403,"{\"error\":\"organization SA required\"}\n");return;
     }
