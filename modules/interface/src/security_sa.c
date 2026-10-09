@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -22,14 +23,19 @@ static int sa_ident(const char *s) {
 int digit_security_sa_verify(const char *registry,const char *organization,
                              const char *identity) {
     FILE *f;
-    struct stat st;
+    struct stat st,after,named;
+    int fd;
     char line[512];
     int found=0,authorized=0,invalid=0;
     if(!registry||!sa_ident(organization)||!sa_ident(identity)||
        strcmp(identity,"digit")==0)return 0;
-    f=fopen(registry,"r");
-    if(!f)return 0;
-    if(fstat(fileno(f),&st)!=0||!S_ISREG(st.st_mode)||
+    /* [AI:GPT-6 | 2026-10-08] 1.3.7: reject roster symlinks. */
+    fd=open(registry,O_RDONLY|O_NOFOLLOW);
+    if(fd<0)return 0;
+    f=fdopen(fd,"r");
+    if(!f){close(fd);return 0;}
+    if(fstat(fileno(f),&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1||
+       st.st_size<=0||st.st_size>8*1024*1024||
        (st.st_mode&077)!=0||(st.st_uid!=0 && st.st_uid!=geteuid())) {
         fclose(f);return 0;
     }
@@ -60,7 +66,26 @@ int digit_security_sa_verify(const char *registry,const char *organization,
                    strcmp(field[4],"1")==0 &&
                    strcmp(field[5],"1")==0;
     }
-    if(ferror(f))invalid=1;
-    fclose(f);
+    /* [AI:GPT-6 | 2026-10-08] 1.3.7: roster replacement or
+     * observable in-place change during evaluation denies access. */
+    if(ferror(f) || fstat(fileno(f),&after)!=0 ||
+       lstat(registry,&named)!=0 ||
+       !S_ISREG(after.st_mode) || !S_ISREG(named.st_mode) ||
+       after.st_nlink!=1 || named.st_nlink!=1 ||
+       (after.st_mode&077)!=0 || (named.st_mode&077)!=0 ||
+       (after.st_uid!=0 && after.st_uid!=geteuid()) ||
+       (named.st_uid!=0 && named.st_uid!=geteuid()) ||
+       after.st_dev!=st.st_dev || after.st_ino!=st.st_ino ||
+       named.st_dev!=st.st_dev || named.st_ino!=st.st_ino ||
+       after.st_size!=st.st_size || named.st_size!=st.st_size ||
+       after.st_mtim.tv_sec!=st.st_mtim.tv_sec ||
+       after.st_mtim.tv_nsec!=st.st_mtim.tv_nsec ||
+       named.st_mtim.tv_sec!=st.st_mtim.tv_sec ||
+       named.st_mtim.tv_nsec!=st.st_mtim.tv_nsec ||
+       after.st_ctim.tv_sec!=st.st_ctim.tv_sec ||
+       after.st_ctim.tv_nsec!=st.st_ctim.tv_nsec ||
+       named.st_ctim.tv_sec!=st.st_ctim.tv_sec ||
+       named.st_ctim.tv_nsec!=st.st_ctim.tv_nsec)invalid=1;
+    if(fclose(f)!=0)invalid=1;
     return !invalid && found==1 && authorized;
 }
