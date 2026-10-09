@@ -11,6 +11,7 @@
 #include "project_provision.h"
 #include "project_channel_bridge.h"
 #include "security_sa.h"
+#include "alerts_channel.h"
 /* [AI:GPT-6 | 2026-10-09] Initial 1.6.0 grant writer is intentionally
  * restricted to a bound Security channel. Other channels require their
  * own explicit validated project ownership before grants can be issued.
@@ -18,8 +19,8 @@
  * Serialize using the protected directory inode; write a unique private
  * temporary file and atomically rename after full validation.
  */
-int digit_grant_security_scoped(const char *path,const char *root,const char *sa_registry,
- const char *actor,const digit_grant_request_t *req){
+static int grant_bound_scoped(const char *path,const char *root,const char *sa_registry,
+ const char *actor,const digit_grant_request_t *req,int alerts){
  char binding[64],record[512],tmp[128],line[1024];
  char parent[512],*slash;
  int dir=-1,source=-1,target=-1,ok=0,existing=0,created=0;
@@ -32,7 +33,8 @@ int digit_grant_security_scoped(const char *path,const char *root,const char *sa
     !digit_project_security_member(root,req->organization,req->project,actor)||
     !digit_security_sa_verify(sa_registry,req->organization,req->user)||
     !digit_project_security_member(root,req->organization,req->project,req->user)||
-    !digit_project_security_channel_id(root,req->organization,req->project,binding,sizeof(binding))||
+    !(alerts ? digit_alerts_channel_lookup(root,req->organization,req->project,binding,sizeof(binding)) :
+      digit_project_security_channel_id(root,req->organization,req->project,binding,sizeof(binding)))||
     strcmp(binding,req->channel)!=0)return 0;
  if(strlen(path)>=sizeof(parent))return 0;
  strcpy(parent,path);slash=strrchr(parent,'/');
@@ -101,4 +103,15 @@ finish:
  if(created&&dir>=0)unlinkat(dir,tmp,0);
  if(dir>=0)close(dir);
  return ok;
+}
+
+/* [AI:GPT-6 | 2026-10-09] No caller-supplied flags or channel type.
+ * The protected project binding is the authoritative channel identity. */
+int digit_grant_security_scoped(const char *path,const char *root,const char *sa_registry,
+ const char *actor,const digit_grant_request_t *request){
+ return grant_bound_scoped(path,root,sa_registry,actor,request,0);
+}
+int digit_grant_alerts_scoped(const char *path,const char *root,const char *sa_registry,
+ const char *actor,const digit_grant_request_t *request){
+ return grant_bound_scoped(path,root,sa_registry,actor,request,1);
 }
