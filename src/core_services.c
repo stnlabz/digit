@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "core_services.h"
+#include "core_sa.h"
 #include "module.h"
 #include "service_registry.h"
 
@@ -14,6 +15,22 @@ static stnlabz_module_result_t alert_list_service(const void *request,size_t req
 static stnlabz_module_result_t alert_get_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *context){const digit_alert_get_request_t *in=request;digit_alert_get_response_t *out=response;(void)context;if(!in||request_size!=sizeof(*in)||!out||response_size<sizeof(*out)||!response_used)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(out,0,sizeof(*out));out->found=digit_alert_get(in->alert_id,&out->alert);*response_used=sizeof(*out);return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t alert_ack_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *context){const digit_alert_acknowledge_request_t *in=request;digit_alert_acknowledge_response_t *out=response;(void)context;if(!in||request_size!=sizeof(*in)||!out||response_size<sizeof(*out)||!response_used)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(out,0,sizeof(*out));out->acknowledged=digit_alert_acknowledge(in->alert_id,&out->alert);*response_used=sizeof(*out);return STNLABZ_MODULE_OK;}
 
+/* [AI:GPT-6 | 2026-10-08] Core-owned SA gate; the caller supplies an
+ * authenticated identity, not a role or authorization decision. */
+static stnlabz_module_result_t digit_admin_sa_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *context)
+{
+    const digit_admin_sa_request_t *in=request;
+    digit_admin_sa_response_t *out=response;
+    (void)context;
+    if(!in || request_size!=sizeof(*in) || !out || response_size<sizeof(*out) || !response_used)
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(out,0,sizeof(*out));
+    if(memchr(in->identity,0,sizeof(in->identity))!=NULL)
+        out->authorized=digit_core_sa_verify(DIGIT_ADMIN_SA_REGISTRY,DIGIT_ADMIN_ORGANIZATION,in->identity);
+    *response_used=sizeof(*out);
+    return STNLABZ_MODULE_OK;
+}
+
 int digit_core_services_register(void)
 {
     if(!digit_service_register(DIGIT_CHANNEL_SERVICE_CREATE,channel_create_service,NULL))return 0;
@@ -25,6 +42,7 @@ int digit_core_services_register(void)
     if(!digit_service_register(DIGIT_ALERT_SERVICE_LIST,alert_list_service,NULL))goto fail;
     if(!digit_service_register(DIGIT_ALERT_SERVICE_GET,alert_get_service,NULL))goto fail;
     if(!digit_service_register(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,alert_ack_service,NULL))goto fail;
+    if(!digit_service_register(DIGIT_ADMIN_SA_SERVICE,digit_admin_sa_service,NULL))goto fail;
     return 1;
 fail:
     digit_core_services_unregister();return 0;
@@ -32,5 +50,5 @@ fail:
 
 void digit_core_services_unregister(void)
 {
-    (void)digit_service_unregister(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_RAISE,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_CREATE,NULL);
+    (void)digit_service_unregister(DIGIT_ADMIN_SA_SERVICE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_RAISE,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_CREATE,NULL);
 }
