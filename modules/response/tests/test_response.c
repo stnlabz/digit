@@ -74,6 +74,9 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"Digit what is 2+2?","2 + 2 = 4."},
    {"Digit what is 2 X 2?","2 * 2 = 4."},
    {"Digit what is 2 x 2?","2 * 2 = 4."},
+   {"Digit what is 2 × 2?","2 * 2 = 4."},
+   {"Digit what is 2 multiplied by 2?","2 * 2 = 4."},
+   {"Digit what is 2 multiply by 2?","2 * 2 = 4."},
    {"What is 2 X 2?","2 * 2 = 4."},
    {"Digit what is 2 plus 2?","2 + 2 = 4."},
    {"Digit what is two plus two?","2 + 2 = 4."},
@@ -127,7 +130,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 5, "internal version is 1.7.5");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 6, "internal version is 1.7.6");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
