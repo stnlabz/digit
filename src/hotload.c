@@ -261,6 +261,24 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     }
     printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
 
+    /* [AI:GPT-6 | 2026-10-08] ABI registry audit is bounded.
+     * Admission needs an audit entry at every transition. Reject early
+     * instead of stopping a running incumbent with insufficient capacity. */
+    {
+        size_t remaining = STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count;
+        size_t required = has_incumbent ? 8u : 6u;
+        if (manager->registry.audit_count > STNLABZ_MODULE_AUDIT_MAX ||
+            remaining < required)
+        {
+            printf("[MODULE] Candidate deferred: %s registry audit capacity exhausted (%zu/%u)\n",
+                   candidate->module_id, manager->registry.audit_count,
+                   (unsigned int)STNLABZ_MODULE_AUDIT_MAX);
+            digit_hotload_audit("REGISTRY_AUDIT_FULL", candidate->module_id, &result);
+            unlink(staged);
+            return 0;
+        }
+    }
+
     if (has_incumbent)
     {
         if (active->state == STNLABZ_MODULE_STATE_ACTIVE)
@@ -281,11 +299,25 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
             }
         }
 
-        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
+        /* [AI:GPT-6 | 2026-10-08] Registry lifecycle must finish
+         * before dlclose invalidates module function pointers. */
         module_result = stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
         if (module_result != STNLABZ_MODULE_OK)
         {
+            printf("[MODULE] Incumbent unregister failed: %s result=%s (%d)\n",
+                   candidate->module_id, stnlabz_module_result_string(module_result),
+                   (int)module_result);
             digit_hotload_audit("UNREGISTER_FAILED", candidate->module_id, NULL);
+            unlink(staged);
+            return 0;
+        }
+        loader_result = stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
+        if (loader_result != STNLABZ_MODULE_LOADER_OK)
+        {
+            printf("[MODULE] Incumbent unload failed: %s result=%s (%d)\n",
+                   candidate->module_id, stnlabz_module_loader_result_string(loader_result),
+                   (int)loader_result);
+            digit_hotload_audit("UNLOAD_FAILED", candidate->module_id, NULL);
             unlink(staged);
             return 0;
         }
