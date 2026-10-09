@@ -16,6 +16,7 @@ typedef struct {
     unsigned long sequence;
     char module_id[64];
     char event[48];
+    char detail[256];
 } digit_lifecycle_entry_t;
 static digit_lifecycle_entry_t lifecycle_entries[DIGIT_LIFECYCLE_AUDIT_CAPACITY];
 static size_t lifecycle_head, lifecycle_count;
@@ -34,6 +35,7 @@ void digit_audit_lifecycle(const char *module_id, const char *event, const char 
     entry->sequence = ++lifecycle_sequence;
     snprintf(entry->module_id, sizeof(entry->module_id), "%s", module_id);
     snprintf(entry->event, sizeof(entry->event), "%s", event);
+    snprintf(entry->detail, sizeof(entry->detail), "%s", detail ? detail : "");
     lifecycle_head = (lifecycle_head + 1U) % DIGIT_LIFECYCLE_AUDIT_CAPACITY;
     if (lifecycle_count < DIGIT_LIFECYCLE_AUDIT_CAPACITY) ++lifecycle_count;
     snprintf(record, sizeof(record), "sequence=%lu module=%s %s",
