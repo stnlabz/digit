@@ -266,3 +266,74 @@ end:
     if(base>=0)close(base);
     return good;
 }
+
+/* [AI:GPT-6 | 2026-10-09] An SA-only directory of verified
+ * restricted project members. Does not equate account, membership and SA.
+ * Malformed, duplicate or mutable roster data fails closed. */
+int digit_project_members_json(const char *root,const char *org,
+ const char *project,const char *actor,const char *sa_registry,
+ char *json,size_t capacity){
+ int base=-1,o=-1,p=-1,fd=-1,ok=0;
+ FILE *file=NULL;struct stat before,after,named;
+ char row[256],seen[128][DIGIT_PROJECT_USER_MAX];
+ size_t count=0,used=0;
+ if(!json||capacity<128||!project_name(org)||!project_name(project)||
+    !project_name(actor)||!digit_security_sa_verify(sa_registry,org,actor)||
+    !digit_project_security_member(root,org,project,actor))return 0;
+ json[0]=0;
+ base=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
+ if(!private_dir(base))goto done;
+ o=open_private(base,org);if(o<0)goto done;
+ p=open_private(o,project);if(p<0)goto done;
+ fd=openat(p,"security.tsv",O_RDONLY|O_NOFOLLOW);
+ if(fd<0||fstat(fd,&before)!=0||!S_ISREG(before.st_mode)||
+    before.st_nlink!=1||(before.st_mode&077)!=0||
+    (before.st_uid!=0&&before.st_uid!=geteuid())||
+    before.st_size<=0||before.st_size>8*1024*1024)goto done;
+ file=fdopen(fd,"r");if(!file)goto done;fd=-1;
+ {int n=snprintf(json,capacity,
+   "{\"organization\":\"%s\",\"project\":\"%s\",\"members\":[",org,project);
+  if(n<0||(size_t)n>=capacity)goto done;used=(size_t)n;}
+ while(fgets(row,sizeof(row),file)){
+  char *first,*second,*user;size_t i,n=strlen(row);
+  int length;
+  if(n<2||row[n-1]!='\n'||memchr(row,'\0',n-1)!=NULL||
+     count>=128)goto done;
+  row[n-1]=0;first=row;second=strchr(first,'\t');
+  if(!second)goto done;*second++=0;user=strchr(second,'\t');
+  if(!user)goto done;*user++=0;
+  if(strchr(user,'\t')||strcmp(first,"security")||
+     strcmp(second,"restricted")||!project_name(user)||
+     strlen(user)>=DIGIT_PROJECT_USER_MAX)goto done;
+  for(i=0;i<count;i++)if(!strcmp(seen[i],user))goto done;
+  strcpy(seen[count],user);
+  length=snprintf(json+used,capacity-used,"%s{\"user\":\"%s\",\"membership\":\"restricted\"}",
+     count?",":"",user);
+  if(length<0||(size_t)length>=capacity-used)goto done;
+  used+=(size_t)length;count++;
+ }
+ if(ferror(file)||fstat(fileno(file),&after)!=0||
+    fstatat(p,"security.tsv",&named,AT_SYMLINK_NOFOLLOW)!=0||
+    !S_ISREG(after.st_mode)||!S_ISREG(named.st_mode)||
+    after.st_nlink!=1||named.st_nlink!=1||
+    (after.st_mode&077)||(named.st_mode&077)||
+    after.st_dev!=before.st_dev||after.st_ino!=before.st_ino||
+    named.st_dev!=before.st_dev||named.st_ino!=before.st_ino||
+    after.st_size!=before.st_size||named.st_size!=before.st_size||
+    after.st_mtim.tv_sec!=before.st_mtim.tv_sec||
+    after.st_mtim.tv_nsec!=before.st_mtim.tv_nsec||
+    named.st_mtim.tv_sec!=before.st_mtim.tv_sec||
+    named.st_mtim.tv_nsec!=before.st_mtim.tv_nsec||
+    after.st_ctim.tv_sec!=before.st_ctim.tv_sec||
+    after.st_ctim.tv_nsec!=before.st_ctim.tv_nsec||
+    named.st_ctim.tv_sec!=before.st_ctim.tv_sec||
+    named.st_ctim.tv_nsec!=before.st_ctim.tv_nsec)goto done;
+ if(used+4>=capacity)goto done;
+ memcpy(json+used,"]}\n",4);
+ ok=1;
+done:
+ if(!ok&&json&&capacity)json[0]=0;
+ if(file)fclose(file);if(fd>=0)close(fd);
+ if(p>=0)close(p);if(o>=0)close(o);if(base>=0)close(base);
+ return ok;
+}
