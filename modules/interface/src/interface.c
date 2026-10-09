@@ -52,6 +52,9 @@
 #define CORPUS_GET_SERVICE "corpus.get"
 #define CORPUS_SEARCH_SERVICE "corpus.search"
 #define DISPATCHER_SERVICE "dispatcher.handle"
+#define DISPATCHER_SCOPED_SERVICE "dispatcher.handle_scoped"
+#define DISPATCHER_SCOPE_PRIVATE 1U
+#define DISPATCHER_SCOPE_MAX 64
 #define CORPUS_BUILDER_TEXT_MAX 4096
 #define CORPUS_SEARCH_MAX 16
 #define DISPATCHER_REQUEST_MAX 4096
@@ -67,6 +70,8 @@ typedef struct { int found; interface_corpus_record_t record; } interface_corpus
 typedef struct { char query[4096]; } interface_corpus_search_request_t;
 typedef struct { size_t count; interface_corpus_record_t records[CORPUS_SEARCH_MAX]; } interface_corpus_search_result_t;
 typedef struct { char request[DISPATCHER_REQUEST_MAX]; } interface_dispatcher_request_t;
+/* [AI:GPT-6 | 2026-10-09] Mirrors additive Dispatcher scoped ABI; no retained identity. */
+typedef struct { char request[DISPATCHER_REQUEST_MAX]; char actor[DISPATCHER_SCOPE_MAX]; unsigned int scope_kind; char organization[DISPATCHER_SCOPE_MAX]; char project[DISPATCHER_SCOPE_MAX]; char channel[DISPATCHER_SCOPE_MAX]; } interface_scoped_dispatcher_request_t;
 typedef struct { int answered; char answer[DISPATCHER_ANSWER_MAX]; } interface_dispatcher_result_t;
 
 static int interface_fd=-1;
@@ -173,6 +178,21 @@ static void interface_dispatch(const char *body,interface_dispatcher_result_t *o
   if(interface_host&&interface_host->send_message)
    (void)interface_host->send_message("[INTERFACE] dispatcher.handle unavailable; returned conversational failure instead of HTTP 503");
  }
+}
+
+/* [AI:GPT-6 | 2026-10-09] Identity comes only from the resolved session.
+ * Failure of the scoped service does not downgrade to unscoped dispatch. */
+static int interface_dispatch_private(const char *body,const char *identity,interface_dispatcher_result_t *out){
+ interface_scoped_dispatcher_request_t in;size_t used=0,len,actor_len;
+ if(!out||!body||!identity)return 0;
+ memset(out,0,sizeof(*out));memset(&in,0,sizeof(in));
+ len=strnlen(body,sizeof(in.request));
+ actor_len=strnlen(identity,sizeof(in.actor));
+ if(!len||len>=sizeof(in.request)||!actor_len||actor_len>=sizeof(in.actor))return 0;
+ memcpy(in.request,body,len);
+ memcpy(in.actor,identity,actor_len);
+ in.scope_kind=DISPATCHER_SCOPE_PRIVATE;
+ return interface_invoke(DISPATCHER_SCOPED_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)&&used==sizeof(*out);
 }
 
 static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)||!digit_interface_builder_result_valid(out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
@@ -1008,7 +1028,7 @@ if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,ident
     interface_reply(client,200,json);return;
 }if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){if(!interface_alert_channel_messages(client,id,identity))interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
-if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}if(!interface_dispatch_private(body,identity,&out)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
  * record lookup, using the existing Corpus get service. UNKNOWN is
  * explicit when no record exists; unverified Core output is rejected. */
@@ -1224,5 +1244,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
