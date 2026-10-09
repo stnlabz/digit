@@ -28,15 +28,15 @@ int main(void){
  check(put(acl,"admin\tstn-labz\tdigit\tchannel137\t1\t1\t1\t1\n"),"grant fixture");
  check(digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"initially authorized");
  check(put(sa,"admin\tstn-labz\tSA\t1\t0\t1\n"),"revoke assignment");
- check(!digit_channel_acl_check_scoped(acl,root,sa,"admin","channel137"),"assignment revoked next request");
+ check(!digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"assignment revoked next request");
  check(put(sa,"admin\tstn-labz\tSA\t1\t1\t1\n"),"restore assignment");
- check(digit_channel_acl_check_scoped(acl,root,sa,"admin","channel137"),"restored assignment active");
+ check(digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"restored assignment active");
  check(put(member,"security\trestricted\tdigit\n"),"revoke membership");
- check(!digit_channel_acl_check_scoped(acl,root,sa,"admin","channel137"),"membership revoked next request");
+ check(!digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"membership revoked next request");
  check(put(member,"security\trestricted\tdigit\nsecurity\trestricted\tadmin\n"),"restore membership");
- check(digit_channel_acl_check_scoped(acl,root,sa,"admin","channel137"),"restored membership active");
+ check(digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"restored membership active");
  check(put(sa,"admin\tstn-labz\tADMIN\t1\t1\t1\n"),"downgrade SA role");
- check(!digit_channel_acl_check_scoped(acl,root,sa,"admin","channel137"),"downgrade denies next request");
+ check(!digit_channel_acl_check_scoped(acl,projects,sa,"admin","channel137"),"downgrade denies next request");
  printf("Interface 1.3.7 milestone: %d executed, %d failed\n",total,fail);
  return fail!=0;
 }
