@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "audit.h"
 
@@ -77,4 +78,13 @@ int digit_audit_event(const char *component, const char *event, const char *deta
     }
 
     return fprintf(digit_audit_file, "%s %s %s %s\n", time_buffer, component, event, detail) > 0;
+}
+
+/* [AI:GPT-6 | 2026-10-08] Synchronize checkpoint records to disk
+ * before Core can reclaim in-memory ABI lifecycle audit slots. */
+int digit_audit_sync(void)
+{
+    if (digit_audit_file == NULL) return 0;
+    if (fflush(digit_audit_file) != 0) return 0;
+    return fsync(fileno(digit_audit_file)) == 0;
 }
