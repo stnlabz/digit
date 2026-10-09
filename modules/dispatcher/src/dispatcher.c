@@ -139,8 +139,7 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
  result->tests_executed=10;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-result->tests_passed;
  result->negative_test_executed=1;result->negative_test_passed=negative_passed;
- result->negative_test_failed=result->negative_test_executed-result->negative_test_passed;
- return result->tests_failed||result->negative_test_failed?STNLABZ_MODULE_ERR_START_FAILED:STNLABZ_MODULE_OK;
+ return result->tests_failed||result->negative_test_passed!=result->negative_test_executed?STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
