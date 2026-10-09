@@ -16,6 +16,10 @@
 #ifndef SACRIFICIAL_FAIL_STOP
 #define SACRIFICIAL_FAIL_STOP 0
 #endif
+#ifndef SACRIFICIAL_FAIL_RESTART
+#define SACRIFICIAL_FAIL_RESTART 0
+#endif
+static unsigned int sacrificial_starts;
 
 static stnlabz_module_result_t sacrificial_qualify(
     stnlabz_module_qualification_result_t *result
@@ -45,7 +49,9 @@ static stnlabz_module_result_t sacrificial_start(
         (void)host->send_message("[SACRIFICIAL] start");
     }
 
-    return SACRIFICIAL_FAIL_START ? STNLABZ_MODULE_ERR_START_FAILED : STNLABZ_MODULE_OK;
+    ++sacrificial_starts;
+    return (SACRIFICIAL_FAIL_START || (SACRIFICIAL_FAIL_RESTART && sacrificial_starts > 1)) ?
+        STNLABZ_MODULE_ERR_START_FAILED : STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t sacrificial_stop(void)
