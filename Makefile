@@ -15,6 +15,7 @@ SACRIFICIAL_SO := $(SACRIFICIAL_DIR)/sacrificial.so
 SACRIFICIAL_V2_SO := $(SACRIFICIAL_DIR)/sacrificial_v2.so
 SACRIFICIAL_FAIL_SO := $(SACRIFICIAL_DIR)/sacrificial_fail.so
 SACRIFICIAL_HANG_SO := $(SACRIFICIAL_DIR)/sacrificial_hang.so
+SACRIFICIAL_STOP_FAIL_SO := $(SACRIFICIAL_DIR)/sacrificial_stop_fail.so
 SACRIFICIAL_CONF := $(SACRIFICIAL_DIR)/module.conf
 TEST_MODULE_MANAGER := build/test_module_manager
 TEST_HOTLOAD := build/test_hotload
@@ -95,13 +96,16 @@ $(SACRIFICIAL_FAIL_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_
 $(SACRIFICIAL_HANG_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DSACRIFICIAL_VERSION=3 -DSACRIFICIAL_HANG_QUALIFY=1 -fPIC -shared $< -o $@
 
+$(SACRIFICIAL_STOP_FAIL_SO): tests/modules/sacrificial/sacrificial.c | $(SACRIFICIAL_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DSACRIFICIAL_FAIL_STOP=1 -fPIC -shared $< -o $@
+
 $(SACRIFICIAL_CONF): tests/modules/sacrificial/module.conf | $(SACRIFICIAL_DIR)
 	cp $< $@
 
 $(TEST_MODULE_MANAGER): tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) $(SACRIFICIAL_V2_SO) $(SACRIFICIAL_FAIL_SO) $(SACRIFICIAL_HANG_SO) | build
+$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) $(SACRIFICIAL_V2_SO) $(SACRIFICIAL_FAIL_SO) $(SACRIFICIAL_HANG_SO) $(SACRIFICIAL_STOP_FAIL_SO) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_SERVICE_REGISTRY): tests/test_service_registry.c src/service_registry.c include/service_registry.h | build
