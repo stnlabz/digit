@@ -267,7 +267,19 @@ static stnlabz_module_result_t answer_service(const void *request,size_t request
             selected_count=kept;
         }
         trace_evidence(query,&evidence,selected,selected_count);
-    }output.evidence_count=(unsigned int)selected_count;render_intent_answer(&intent,query,selected,selected_count,&output,rendered_evidence,sizeof(rendered_evidence));if(response_host->send_message){char diagnostic[512];snprintf(diagnostic,sizeof(diagnostic),"[RESPONSE] outbound candidate intent=%.24s subject=%.80s text=\"%.300s\"",intent.intent,query,output.answer);(void)response_host->send_message(diagnostic);}if(!(intent.structured&&strcmp(intent.intent,"COMPARE")==0?validate_outbound_evidence(input->question,normalized,output.answer,rendered_evidence,1U,&validation):validate_outbound(input->question,normalized,output.answer,selected,selected_count,1U,&validation))){if(response_host->send_message)(void)response_host->send_message("[RESPONSE] Validator unavailable; deterministic response blocked");output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate the response.");}else if(validation.status!=VALIDATOR_PASS){if(response_host->send_message){char message[384];snprintf(message,sizeof(message),"[RESPONSE] Validator rejected deterministic response: %s",validation.reason[0]?validation.reason:"candidate rejected");(void)response_host->send_message(message);}output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't produce a grounded answer that passed validation.");}memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
+    }
+    /* [AI:GPT-6 | 2026-10-09] An evidence-free factual request must
+     * return an explicit uncertainty result, not a candidate submitted as
+     * if supported by retained records. Comparisons likewise need evidence. */
+    if(selected_count==0){
+        output.answered=1;
+        snprintf(output.answer,sizeof(output.answer),
+            "I don't have enough grounded information to answer that.");
+        memcpy(response,&output,sizeof(output));
+        *response_used=sizeof(output);
+        return STNLABZ_MODULE_OK;
+    }
+    output.evidence_count=(unsigned int)selected_count;render_intent_answer(&intent,query,selected,selected_count,&output,rendered_evidence,sizeof(rendered_evidence));if(response_host->send_message){char diagnostic[512];snprintf(diagnostic,sizeof(diagnostic),"[RESPONSE] outbound candidate intent=%.24s subject=%.80s text=\"%.300s\"",intent.intent,query,output.answer);(void)response_host->send_message(diagnostic);}if(!(intent.structured&&strcmp(intent.intent,"COMPARE")==0?validate_outbound_evidence(input->question,normalized,output.answer,rendered_evidence,1U,&validation):validate_outbound(input->question,normalized,output.answer,selected,selected_count,1U,&validation))){if(response_host->send_message)(void)response_host->send_message("[RESPONSE] Validator unavailable; deterministic response blocked");output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate the response.");}else if(validation.status!=VALIDATOR_PASS){if(response_host->send_message){char message[384];snprintf(message,sizeof(message),"[RESPONSE] Validator rejected deterministic response: %s",validation.reason[0]?validation.reason:"candidate rejected");(void)response_host->send_message(message);}output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't produce a grounded answer that passed validation.");}memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-09] Executed deterministic checks.
  * Networked Corpus/Reasoning/Validator acceptance remains separate. */
 static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_result_t *result){
@@ -298,5 +310,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
