@@ -1,11 +1,11 @@
 # Digit Development Roadmap
 
 **Organization:** STN-LABZ  
-**Status:** PROPOSED — subject to human review and approval  
+**Status:** APPROVED — PM 20261009:0123 UTC  
 **Planning baseline:** Interface 1.3.2 — Qualification GREEN / Hotload ACTIVE  
 **Prepared:** 2026-10-08
 
-> This roadmap is a proposed engineering plan. It does not approve an architectural change, supersede controlled documentation, or independently establish qualification.
+> This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
 
 ## Mission
 
@@ -75,7 +75,7 @@ Introduce bounded mission tasks, delegated execution, routine anomaly handling w
 | 1.3.10 | Interface regression stabilization | Full applicable test suite and runtime qualification GREEN |
 | 1.4.0 | Controlled communication milestone | End-to-end authorized channel exchange validated |
 
-Version assignments are **planning targets**, not authorization to change architecture. The STN-LABZ `MAJOR.MINOR.REVISION` sequence uses revisions 0 through 10, rolling over after `X.Y.10` to `X.(Y+1).0`.
+Version assignments are **approved planning targets**, not authorization to change architecture. The STN-LABZ `MAJOR.MINOR.REVISION` sequence uses revisions 0 through 10, rolling over after `X.Y.10` to `X.(Y+1).0`.
 
 ## Architectural boundaries
 
