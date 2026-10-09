@@ -167,7 +167,8 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     fact=has_word(text,"what")||has_word(text,"who");
     social=any_word(text,social_words,sizeof(social_words)/sizeof(social_words[0]));
     /* Question words framing an explicit knowledge operation are not conflicting intents. */
-    if(explain||define||compare){status=0;why=0;how=0;fact=0;}\n    if(fact&&!action){status=0;}
+    if(explain||define||compare){status=0;why=0;how=0;fact=0;}
+    if(fact&&!action){status=0;}
     operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
     if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
     if(action){set_result(result,DIGIT_INTENT_ACTION,DIGIT_INTENT_TARGET_CAPABILITY,1U,"Request directs Digit to perform or change something.");return;}
@@ -262,7 +263,10 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
         {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
-        {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},\n        {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},\n        {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},\n        {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
+        {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
+        {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
     };
     size_t i;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
