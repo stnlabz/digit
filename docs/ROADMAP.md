@@ -83,6 +83,32 @@ These observations establish a baseline, not a claim that every project-wide tes
 
 **Presence direction:** GUI right-side window becomes authorized channel presence, not an operational-alert feed. Events reside in the permanent organization's Alerts channel. Presence needs join/leave, expiry, and organization/project/channel visibility boundaries. **This is still planned, not implemented.**
 
+## 2026-10-09 development evidence addendum — Interface 1.6 and Digit Desktop
+
+**Document control:** This addendum records operator-reported test output and Windows GUI observations. It does not alter the existing APPROVED planning disposition or independently approve architectural changes. Historical statements below retain their original evidence cutoff.
+
+| Milestone | Observed state | Evidence limit |
+| --- | --- | --- |
+| Interface 1.6.10 | Operator-confirmed GREEN and active; scoped administration and verified restricted project-member listing exercised | Does not prove authenticated channel presence |
+| Interface 1.6.11 | Operator-reported scope-parser **46 passed, 0 failed** and historical regression **39 suites passed, 0 failed** | A separate 1.6.11 HOTLOAD_ACTIVE log was not supplied with this result |
+| Digit Desktop GUI 1.6.10 lineage | Windows BUILD GREEN and screenshots show grouped organizations/projects, `#` channel labels, right-hand Users display, `Digit [AI]` in STN-LABZ `#General`, project-member details and reply history | GUI title remains 1.6.10; screenshot is not proof of channel presence lifecycle or full conversational competence |
+
+**Approved communications direction as clarified by operator:** Digit is an **IRC-like, non-IRC** communications application **driven by Digit**. The user panel may list Digit as an agent participant, and Digit must be invocable from **any authorized channel**; showing her by default in `#General` does not confine invocation to General. Organization boundaries and server-mediated access control remain in force. A list of restricted project members and SA assignments does not equal an authenticated per-channel user-presence list. Presence must ultimately establish authenticated join, leave, expiry and channel-scoped visibility.
+
+**Observed interpretation gaps:** The agent answered a simple greeting in `#General` but responded to “who are you?”, channel-reporting questions and “are you here?” with a fixed inability-to-interpret message in some cases. Conversations are stored per channel, but the Interface/Dispatcher path has not been shown to receive the authenticated actor, organization, project, channel identity and relevant prior messages as structured context. The GUI screenshot also showed “Waiting for Digit...” after displayed responses; track as a separate client state issue. These are **open engineering items**, not qualified abilities.
+
+### Prioritized conversational engineering milestones (planned)
+
+1. **Channel and speaker context contract.** Define validated identity, organization/project/channel, message origin, approved prior-message window and retention/access boundaries between Interface and Dispatcher. Fail closed across organizations; no implicit authority from conversational text.
+2. **Intent and dialog handling.** Reliably distinguish ordinary conversation, greetings, identity questions, channel inquiries, follow-up questions, unsupported requests and commands; offer accurate, bounded clarifications. Keep deterministic authorization independent of language parsing.
+3. **Grounded responses.** Use authorized Corpus/RAG and module evidence with source attribution; explicitly distinguish evidence, inference and unknown. Do not invent capabilities, identity, incidents or remedial actions.
+4. **Error understanding and recommendations.** Map documented errors/alerts to verified causes, severity, relevant logs and bounded mitigation advice. Only qualified diagnostics may propose corrective action; execution requires separately authorized modules and approved procedures.
+5. **Agent role and presence.** Display Digit as a distinct `[AI]` channel participant (including General); make invocation available wherever channel access and the request contract permit it. Build authenticated, organization-isolated live user presence rather than treating SA rosters as online users.
+6. **Client state and usability.** Verify Waiting/Ready status lifecycle, reconnect behavior, message attribution, channels/users refresh and controlled failure displays.
+7. **Acceptance and release.** Add positive, negative and cross-organization dialog/presence tests; malformed contextual data, prompt injection, unsupported actions, stale histories and privilege escalation must fail safely. Retain full module regression, operator review and runtime qualification before ACTIVE disposition.
+
+**Acceptance principle:** Natural conversation and evidence-based recommendations may improve; **authority remains deterministic, explicitly delegated, and human controlled**. Test passing never substitutes for demonstrated runtime or mission behavior.
+
 ## Development phases
 
 ### Phase 1 — Interface foundation
