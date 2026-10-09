@@ -11,6 +11,9 @@ static int digit_services_initialized;
 static pthread_mutex_t services_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t services_idle = PTHREAD_COND_INITIALIZER;
 static size_t active_calls;
+/* [AI:GPT-6 | 2026-10-08] Nested calls from already in-flight
+ * handlers must be allowed to drain during a pending transition. */
+static _Thread_local unsigned int invocation_depth;
 static int transitioning;
 static pthread_t transition_owner;
 
@@ -125,7 +128,7 @@ stnlabz_module_result_t digit_service_invoke(const char *name,
     if (!name || !response_used) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     pthread_mutex_lock(&services_lock);
     ensure_init();
-    if (transitioning && !owner()) goto missing;
+    if (transitioning && !owner() && invocation_depth == 0) goto missing;
     for (i = 0; i < DIGIT_SERVICE_MAX; ++i)
     {
         if (digit_services.services[i].used &&
@@ -139,7 +142,9 @@ stnlabz_module_result_t digit_service_invoke(const char *name,
     }
     if (!handler) goto missing;
     pthread_mutex_unlock(&services_lock);
+    ++invocation_depth;
     result = handler(request, request_size, response, response_size, response_used, context);
+    --invocation_depth;
     pthread_mutex_lock(&services_lock);
     --active_calls;
     if (!active_calls) pthread_cond_broadcast(&services_idle);
