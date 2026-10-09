@@ -28,7 +28,7 @@ Modules and mission packages cannot override these orders.
 | 1.5.9 | 18/18 organization SA policy checks; 36/36 historical suites | GREEN / ACTIVE 15:17:54 UTC |
 | **1.5.10** | **16/16 project-list checks; 37/37 historical suites** | **GREEN / ACTIVE 15:25:50 UTC** |
 | 1.6.10 | Scoped channels, organization SA roster and restricted project-member directory | Operator-confirmed GREEN / active; Windows live member-directory screenshots |
-| **1.6.11** | **Project-member response distinguishes verified active account, restricted membership and organization SA authority** | **46/46 scope-parser tests; 39/39 historical suites, zero failures; hotload event not separately shown** |
+| **1.7.0** | **Project-member response distinguishes verified active account, restricted membership and organization SA authority** | **46/46 scope-parser tests; 39/39 historical suites, zero failures; hotload event not separately shown** |
 
 The historical Interface 1.3.x–1.4.x milestone record is retained in [Development Roadmap](docs/ROADMAP.md). Unit tests, module qualification, activation, and end-to-end authorization are **distinct** evidence gates.
 
@@ -66,7 +66,7 @@ make clean && make && make test
 
 For the native Windows GUI, use its repository's `build.cmd` in an MSVC environment. Do not publish credentials, account hashes, private keys or authorization registries.
 
-Interface 1.6.11: operator-reported **46 scope-parser tests and 39 historical suites passed**, zero failures. The previous 1.6.10 activation is separately evidenced; 1.6.11 hotload is not established by test output alone. Any new source change requires compilation, positive/negative tests, complete regression qualification, and operator review before activation.
+Interface 1.7.0: operator-reported **46 scope-parser tests and 39 historical suites passed**, zero failures. The previous 1.6.10 activation is separately evidenced; 1.7.0 hotload is not established by test output alone. Any new source change requires compilation, positive/negative tests, complete regression qualification, and operator review before activation.
 
 ## Next development phases
 
