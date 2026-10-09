@@ -26,19 +26,23 @@ static int project_component(const char *name) {
              (name[i]>='0'&&name[i]<='9')||name[i]=='-'||name[i]=='_'))return 0;
     return 1;
 }
+/* [AI:GPT-6 | 2026-10-08] Interface 1.3.6: channel binding
+ * must enforce the same directory-owner boundary as provisioning. */
+static int trusted_project_dir(int fd) {
+    struct stat st;
+    return fd>=0 && fstat(fd,&st)==0 && S_ISDIR(st.st_mode) &&
+           (st.st_mode&077)==0 &&
+           digit_project_directory_owner_allowed(st.st_uid,geteuid());
+}
 static int project_open(const char *root,const char *org,const char *project) {
     int rootfd=-1,orgfd=-1,p=-1;
-    struct stat st;
     if(!root||!project_component(org)||!project_component(project))return -1;
     rootfd=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
-    if(rootfd<0)goto end;
+    if(!trusted_project_dir(rootfd))goto end;
     orgfd=openat(rootfd,org,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
-    if(orgfd<0)goto end;
+    if(!trusted_project_dir(orgfd))goto end;
     p=openat(orgfd,project,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
-    if(p<0)goto end;
-    if(fstat(p,&st)!=0 || !S_ISDIR(st.st_mode) || (st.st_mode&077)) {
-        close(p);p=-1;
-    }
+    if(!trusted_project_dir(p)) {if(p>=0)close(p);p=-1;}
 end:
     if(orgfd>=0)close(orgfd);
     if(rootfd>=0)close(rootfd);
