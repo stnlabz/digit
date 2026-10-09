@@ -9,6 +9,39 @@
 
 static FILE *digit_audit_file = NULL;
 
+/* [AI:GPT-6 | 2026-10-08] Core owns a rolling 8192-event recent
+ * history; disk audit history remains append-only and unbounded by
+ * this cache. This buffer cannot prevent a module state transition. */
+typedef struct {
+    unsigned long sequence;
+    char module_id[64];
+    char event[48];
+} digit_lifecycle_entry_t;
+static digit_lifecycle_entry_t lifecycle_entries[DIGIT_LIFECYCLE_AUDIT_CAPACITY];
+static size_t lifecycle_head, lifecycle_count;
+static unsigned long lifecycle_sequence;
+
+size_t digit_audit_lifecycle_count(void) { return lifecycle_count; }
+size_t digit_audit_lifecycle_capacity(void) { return DIGIT_LIFECYCLE_AUDIT_CAPACITY; }
+
+void digit_audit_lifecycle(const char *module_id, const char *event, const char *detail)
+{
+    digit_lifecycle_entry_t *entry;
+    char record[384];
+    if (!module_id || !event) return;
+    entry = &lifecycle_entries[lifecycle_head];
+    memset(entry, 0, sizeof(*entry));
+    entry->sequence = ++lifecycle_sequence;
+    snprintf(entry->module_id, sizeof(entry->module_id), "%s", module_id);
+    snprintf(entry->event, sizeof(entry->event), "%s", event);
+    lifecycle_head = (lifecycle_head + 1U) % DIGIT_LIFECYCLE_AUDIT_CAPACITY;
+    if (lifecycle_count < DIGIT_LIFECYCLE_AUDIT_CAPACITY) ++lifecycle_count;
+    snprintf(record, sizeof(record), "sequence=%lu module=%s %s",
+             entry->sequence, module_id, detail ? detail : "");
+    (void)digit_audit_event("MODULE", event, record);
+}
+
+
 /* [AI:GPT-6 | 2026-10-08] Isolated unit tests open a private sink;
  * production callers continue to use the fixed audit pathname. */
 int digit_audit_open_path(const char *path)
