@@ -50,7 +50,7 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
   if(!strcmp(arithmetic_expected_answer,"Division by zero is undefined."))
    out->status=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;
   else if(sscanf(arithmetic_expected_answer,"%lld %c %lld = %lld remainder %lld%c",
-        &left,&op,&right,&value,&remainder,&tail)==5){
+        &left,&op,&right,&value,&remainder,&tail)>=5){
    out->status=DIGIT_ARITHMETIC_OK;out->left=left;out->right=right;
    out->value=value;out->remainder=remainder;out->operation=op;
   }else if(sscanf(arithmetic_expected_answer,"%lld %c %lld = %lld.%c",
