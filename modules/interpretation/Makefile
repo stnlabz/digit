@@ -12,7 +12,7 @@ DIGIT_PREFIX ?= /opt/digit
 INSTALL_DIR := $(DIGIT_PREFIX)/modules/interpretation
 INSTALL_BIN := $(INSTALL_DIR)/bin
 
-.PHONY: all clean check-abi rebuild install
+.PHONY: all clean check-abi rebuild install test
 
 all: check-abi $(TARGET)
 
@@ -24,6 +24,12 @@ $(TARGET): $(SOURCE) includes/interpretation.h ../corpus/includes/corpus.h | bin
 
 bin:
 	mkdir -p bin
+
+bin/test_interpretation: tests/test_interpretation.c $(SOURCE) includes/interpretation.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_interpretation.c $(SOURCE) -o $@
+
+test: check-abi bin/test_interpretation
+	./bin/test_interpretation
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
