@@ -300,15 +300,31 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
         return 0;
     }
 
-    module_result = stnlabz_module_registry_discover(&manager->registry, loaded_descriptor);
-    if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_verify(&manager->registry, candidate->module_id);
-    if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_restore_qualification(&manager->registry, candidate->module_id, &result.qualification);
-    if (module_result != STNLABZ_MODULE_OK)
+    /* [AI:GPT-6 | 2026-10-08] Distinguish registry admission stages.
+     * A GREEN qualification is not equivalent to successful admission. */
     {
-        printf("[MODULE] GREEN candidate registry admission failed: %s\n", candidate->module_id);
-        digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
-        unlink(staged);
-        return 0;
+        const char *admission_stage = "discover";
+        module_result = stnlabz_module_registry_discover(&manager->registry, loaded_descriptor);
+        if (module_result == STNLABZ_MODULE_OK)
+        {
+            admission_stage = "verify";
+            module_result = stnlabz_module_registry_verify(&manager->registry, candidate->module_id);
+        }
+        if (module_result == STNLABZ_MODULE_OK)
+        {
+            admission_stage = "restore_qualification";
+            module_result = stnlabz_module_registry_restore_qualification(
+                &manager->registry, candidate->module_id, &result.qualification);
+        }
+        if (module_result != STNLABZ_MODULE_OK)
+        {
+            printf("[MODULE] GREEN candidate registry admission failed: %s stage=%s result=%s (%d)\n",
+                   candidate->module_id, admission_stage,
+                   stnlabz_module_result_string(module_result), (int)module_result);
+            digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
+            unlink(staged);
+            return 0;
+        }
     }
 
     if (!already_qualified && (!digit_qualification_record(&manager->qualifications, loaded_descriptor) || !digit_qualification_store_save(manager->qualification_path, &manager->qualifications)))
