@@ -1,7 +1,7 @@
 #ifndef DIGIT_KNOWLEDGE_QUERY_H
 #define DIGIT_KNOWLEDGE_QUERY_H
 #include <stddef.h>
-/* [AI:GPT-6 | 2026-10-08] Interface 1.5.0.
+/* [AI:GPT-6 | 2026-10-08] Interface 1.4.1.
  * Local bounded knowledge query and source-preserving record validation. */
 #define DIGIT_KNOWLEDGE_QUERY_MAX 4096u
 #define DIGIT_KNOWLEDGE_RECORD_MAX 16u
