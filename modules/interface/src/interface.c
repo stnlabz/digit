@@ -195,6 +195,57 @@ static int interface_dispatch_private(const char *body,const char *identity,inte
  return interface_invoke(DISPATCHER_SCOPED_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)&&used==sizeof(*out);
 }
 
+/* [AI:GPT-6 | 2026-10-09] Per-session conversational name continuity.
+ * Interface owns the authenticated request and volatile session boundary.
+ * This does not persist a profile, assert legal identity or confer authority.
+ * Only private /ask can write or read this state. */
+static int interface_private_name(const char *body,const char *request,
+ const char *identity,char *answer,size_t capacity){
+ static const char *const prefixes[]={"my name is ","call me ","i am ","i'm "};
+ char token[DIGIT_SESSION_TOKEN_SIZE],resolved[DIGIT_SESSION_ID_SIZE];
+ digit_session_entry_t *entry=NULL;
+ size_t i,k;
+ const char *p=NULL;
+ char name[64];
+ if(!body||!request||!identity||!answer||!capacity||
+    !digit_http_bearer_token(request,token))return 0;
+ if(!digit_session_resolve(&interface_sessions,token,time(NULL),resolved,sizeof(resolved))||
+    strcmp(resolved,identity)!=0)return 0;
+ for(i=0;i<DIGIT_SESSION_CAPACITY;i++){
+  if(interface_sessions.entries[i].active&&
+     strcmp(interface_sessions.entries[i].token,token)==0){
+   entry=&interface_sessions.entries[i];break;
+  }
+ }
+ memset(token,0,sizeof(token));
+ if(!entry)return 0;
+ if(!strcasecmp(body,"what did i tell you my name was?")||
+    !strcasecmp(body,"what is my name?")||
+    !strcasecmp(body,"what's my name?")){
+  if(entry->preferred_name[0])
+   snprintf(answer,capacity,"You told me to call you %s.",entry->preferred_name);
+  else snprintf(answer,capacity,"You haven't told me what to call you in this session.");
+  return 1;
+ }
+ while(isspace((unsigned char)*body))body++;
+ for(i=0;i<sizeof(prefixes)/sizeof(prefixes[0]);i++)
+  if(!strncasecmp(body,prefixes[i],strlen(prefixes[i]))){
+   p=body+strlen(prefixes[i]);break;
+  }
+ if(!p||!isupper((unsigned char)*p))return 0;
+ for(k=0;k<sizeof(name)-1&&
+     (isalpha((unsigned char)*p)||*p==39||*p=='-');k++)
+  name[k]=*p++;
+ if(!k)return 0;
+ name[k]=0;
+ while(isspace((unsigned char)*p))p++;
+ if(*p=='.'||*p=='!')p++;
+ if(*p)return 0;
+ snprintf(entry->preferred_name,sizeof(entry->preferred_name),"%s",name);
+ snprintf(answer,capacity,"Nice to meet you, %s. I'll use that name in this session.",name);
+ return 1;
+}
+
 static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)||!digit_interface_builder_result_valid(out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
 static void interface_learn(int client,const char *text){interface_builder_result_t out;char answer[768],escaped[1600],er[512],eid[160],json[3000];int result=interface_process_learn(text,&out,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));interface_json_escape(answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",escaped,out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);}
 
@@ -1028,7 +1079,7 @@ if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,ident
     interface_reply(client,200,json);return;
 }if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){if(!interface_alert_channel_messages(client,id,identity))interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
-if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(!interface_dispatch_private(body,identity,&out)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_dispatch_private(body,identity,&out)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
  * record lookup, using the existing Corpus get service. UNKNOWN is
  * explicit when no record exists; unverified Core output is rejected. */
@@ -1244,5 +1295,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
