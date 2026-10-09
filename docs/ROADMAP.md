@@ -119,7 +119,7 @@ Detect changes to protected `security.tsv` metadata during membership evaluation
 
 ---
 
-**Roadmap disposition:** PROPOSED for human approval.  
+**Roadmap disposition:** APPROVED: PM 20261009:0123 UTC.  
 **Operational baseline:** Interface 1.3.2 GREEN / ACTIVE.  
 **Next development target:** Interface 1.3.3.
 
