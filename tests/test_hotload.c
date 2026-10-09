@@ -109,6 +109,8 @@ int main(void)
     CHECK(sizeof(hotload.files[0].path) == STNLABZ_MODULE_LOADER_PATH_MAX,
           "watch file path capacity matches ABI");
 
+    test_audit_capacity();
+
     printf("\nHotload watcher tests: %d executed, %d failed\n", tests, failures);
     return failures == 0 ? 0 : 1;
 }
