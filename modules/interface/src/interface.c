@@ -38,6 +38,7 @@
 #include "project_list.h"
 #include "grant_request.h"
 #include "grant_store.h"
+#include "alerts_channel.h"
 #include "security_sa.h"
 #include "core_services.h"
 
@@ -565,7 +566,31 @@ if(strncmp(request,"POST /admin/security/setup HTTP/1.1\r\n",
     if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,channel)){
         interface_reply(client,503,"{\"error\":\"security access not verified\"}\n");return;
     }
-    snprintf(json,sizeof(json),"{\"ready\":true,\"channel_id\":\"%s\"}\n",channel);
+    /* [AI:GPT-6 | 2026-10-09] One SA action guarantees both
+     * required administrative channels, with separate explicit grants. */
+    {
+        char alerts_id[DIGIT_CHANNEL_ID_MAX];
+        if(!digit_alerts_channel_ensure(DIGIT_PROJECT_ROOT,org,project,identity,
+               DIGIT_SECURITY_SA_REGISTRY,interface_host,alerts_id,sizeof(alerts_id))){
+            interface_reply(client,503,"{\"error\":\"Alerts provisioning incomplete\"}\n");return;
+        }
+        if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,alerts_id)){
+            memset(&access,0,sizeof(access));
+            snprintf(access.organization,sizeof(access.organization),"%s",org);
+            snprintf(access.project,sizeof(access.project),"%s",project);
+            snprintf(access.channel,sizeof(access.channel),"%s",alerts_id);
+            snprintf(access.user,sizeof(access.user),"%s",identity);
+            if(!digit_grant_alerts_scoped(DIGIT_CHANNEL_ACL_PATH,DIGIT_PROJECT_ROOT,
+                   DIGIT_SECURITY_SA_REGISTRY,identity,&access) ||
+               !digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,alerts_id)){
+                interface_reply(client,503,"{\"error\":\"Alerts authorization incomplete\"}\n");return;
+            }
+        }
+        snprintf(json,sizeof(json),
+            "{\"ready\":true,\"security_id\":\"%s\",\"alerts_id\":\"%s\"}\n",
+            channel,alerts_id);
+    }
+
     interface_reply(client,200,json);return;
 }
 /* [AI:GPT-6 | 2026-10-09] Return the exact bound Security ID only
