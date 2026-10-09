@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <unistd.h>
 
 #include "module.h"
 
@@ -8,6 +9,9 @@
 #endif
 #ifndef SACRIFICIAL_FAIL_START
 #define SACRIFICIAL_FAIL_START 0
+#endif
+#ifndef SACRIFICIAL_HANG_QUALIFY
+#define SACRIFICIAL_HANG_QUALIFY 0
 #endif
 
 static stnlabz_module_result_t sacrificial_qualify(
@@ -19,6 +23,7 @@ static stnlabz_module_result_t sacrificial_qualify(
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     }
 
+    if (SACRIFICIAL_HANG_QUALIFY) { for (;;) sleep(60); }
     result->tests_executed = 10;
     result->tests_passed = 10;
     result->tests_failed = 0;
