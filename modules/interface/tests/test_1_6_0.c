@@ -8,6 +8,7 @@
 #include "channel_acl.h"
 #include "grant_request.h"
 #include "grant_store.h"
+#include "alerts_channel.h"
 /* [AI:GPT-6 | 2026-10-09] 1.6.0 positive and negative input tests. */
 static unsigned tests,failures;
 static void check(int valid,const char *label){
@@ -67,6 +68,14 @@ int main(void){
  check(file!=NULL,"Security binding fixture opened");
  if(file){fputs("security-01\n",file);fclose(file);}
  check(chmod(binding,0600)==0,"Security binding private");
+ check(!digit_alerts_channel_lookup(projects,"stn-labz","operations",binding,sizeof(binding)),
+       "missing Alerts binding denied");
+ check(!digit_alerts_channel_ensure(projects,"stn-labz","operations","poemei",roster,
+       NULL,binding,sizeof(binding)),"missing Core host denies Alerts creation");
+ check(digit_grant_request_parse("stn-labz\toperations\talerts-01\tpoemei",&r),
+       "Alerts grant syntax accepted");
+ check(!digit_grant_alerts_scoped(grants,projects,roster,"poemei",&r),
+       "unbound Alerts grant denied");
  check(digit_grant_request_parse("stn-labz\toperations\tsecurity-01\tpoemei",&r),
        "Security grant request parsed");
  check(digit_grant_security_scoped(grants,projects,roster,"poemei",&r),
