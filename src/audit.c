@@ -8,14 +8,21 @@
 
 static FILE *digit_audit_file = NULL;
 
-int digit_audit_open(void)
+/* [AI:GPT-6 | 2026-10-08] Isolated unit tests open a private sink;
+ * production callers continue to use the fixed audit pathname. */
+int digit_audit_open_path(const char *path)
 {
     if (digit_audit_file != NULL)
     {
         return 1;
     }
 
-    digit_audit_file = fopen(DIGIT_AUDIT_PATH, "a");
+    if (path == NULL || path[0] != '/')
+    {
+        return 0;
+    }
+
+    digit_audit_file = fopen(path, "a");
     if (digit_audit_file == NULL)
     {
         return 0;
@@ -23,6 +30,11 @@ int digit_audit_open(void)
 
     (void)setvbuf(digit_audit_file, NULL, _IOLBF, 0);
     return 1;
+}
+
+int digit_audit_open(void)
+{
+    return digit_audit_open_path(DIGIT_AUDIT_PATH);
 }
 
 void digit_audit_close(void)
