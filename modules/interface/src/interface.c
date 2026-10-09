@@ -33,6 +33,7 @@
 #include "corpus_response.h"
 #include "builder_response.h"
 #include "dashboard_response.h"
+#include "channel_create_policy.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
 #include "core_services.h"
@@ -532,7 +533,33 @@ if(strncmp(request,"GET /channels/",14)==0 || strncmp(request,"POST /channels/",
         interface_reply(client,404,"{\"error\":\"not found\"}\n");return;
     }
 }
-if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,identity);return;}if(strncmp(request,"POST /channels ",15)==0){interface_reply(client,403,"{\"error\":\"channel provisioning not available\"}\n");return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
+if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,identity);return;}if(strncmp(request,"POST /channels HTTP/1.1\r\n",sizeof("POST /channels HTTP/1.1\r\n")-1U)==0){
+    digit_admin_sa_request_t auth;
+    digit_admin_sa_response_t grant;
+    digit_channel_create_request_t create;
+    digit_channel_create_response_t result;
+    char json[768],item[700];
+    size_t used=0;
+    memset(&auth,0,sizeof(auth));memset(&grant,0,sizeof(grant));
+    memset(&create,0,sizeof(create));memset(&result,0,sizeof(result));
+    if(strlen(identity)>=sizeof(auth.identity)){interface_reply(client,403,"{\"error\":\"forbidden\"}\n");return;}
+    snprintf(auth.identity,sizeof(auth.identity),"%s",identity);
+    if(!interface_invoke(DIGIT_ADMIN_SA_SERVICE,&auth,sizeof(auth),&grant,sizeof(grant),&used)||
+       used!=sizeof(grant)||grant.authorized!=1){interface_reply(client,403,"{\"error\":\"forbidden\"}\n");return;}
+    if(!body||!digit_interface_channel_create_name(body,sizeof(create.name))){
+        interface_reply(client,400,"{\"error\":\"invalid channel name\"}\n");return;
+    }
+    snprintf(create.name,sizeof(create.name),"%s",body);
+    used=0;
+    if(!interface_invoke(DIGIT_CHANNEL_SERVICE_CREATE,&create,sizeof(create),&result,sizeof(result),&used)||
+       used!=sizeof(result)){interface_reply(client,503,"{\"error\":\"channel creation unavailable\"}\n");return;}
+    if(!result.created){interface_reply(client,400,"{\"error\":\"channel creation rejected\"}\n");return;}
+    if(!interface_channel_json(&result.channel,item,sizeof(item))){
+        interface_reply(client,503,"{\"error\":\"channel response invalid\"}\n");return;
+    }
+    snprintf(json,sizeof(json),"{\"created\":true,\"acl_assigned\":false,\"channel\":%s}\n",item);
+    interface_reply(client,200,json);return;
+}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
@@ -736,5 +763,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
