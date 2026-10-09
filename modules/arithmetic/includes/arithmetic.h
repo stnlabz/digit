@@ -25,6 +25,8 @@ typedef struct {
     int64_t value;
     int64_t remainder;
     char operation;
+    /* [AI:GPT-6 | 2026-10-09] Exact fixed-point result when decimal operands are used. */
+    char decimal_answer[128];
 } digit_arithmetic_result_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
