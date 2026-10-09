@@ -4,7 +4,7 @@
 
 **Engineering principle:** Small, deterministic, and easy to use. **Determinism ≠ Probably.**
 
-Digit uses the **Core → Modules → Mission** architecture. The common Core binds through the applicable platform interface; target-specific implementation behavior stays outside common Core semantics. Human authority governs architectural decisions, assignments, and approvals.
+Digit follows **Core → Modules → Mission**. The common Core binds through its platform interface, with target-specific behavior outside shared Core semantics. Architecture, authorization and deployment remain under human control.
 
 ## General Orders
 
@@ -12,67 +12,72 @@ Digit uses the **Core → Modules → Mission** architecture. The common Core bi
 2. Follow established policies and authorized instructions.
 3. Report anything outside delegated authority to the appropriate next level of authority.
 
-These orders govern the agent and cannot be overridden by module or mission packages.
+Modules and mission packages cannot override these orders.
 
-## Current Interface status
+## Current development status
 
-**Operator-reported evidence through 2026-10-09 (UTC).**
+**Evidence cutoff: operator-reported 2026-10-09 UTC.** The last explicitly verified production Interface is **1.5.10**, with `MODULE QUALIFICATION_GREEN`, HTTPS listener activation and `MODULE HOTLOAD_ACTIVE` at **15:25:50 UTC**.
 
-| Release | Milestone tests | Historical regression suites | Runtime disposition |
-| --- | --- | --- | --- |
-| **1.4.0** | 17/17 | 18/18 | Qualification GREEN; HOTLOAD_ACTIVE |
-| **1.4.1** | 17/17 | 19/19 | Qualification GREEN; HOTLOAD_ACTIVE |
-| **1.4.2** | 17/17 | 20/20 | Qualification GREEN; REGISTRY_AUDIT_FULL; activation not confirmed |
-| **1.4.3** | 18/18 | 21/21 | Qualification GREEN; REGISTRY_AUDIT_FULL; activation not confirmed |
-| **1.4.4** | 21/21 | 22/22 | Qualification GREEN; REGISTRY_AUDIT_FULL; activation not confirmed |
-| **1.4.5** | 17/17 | 23/23 | Build and tests pass after source correction; UPDATE_CANDIDATE observed; qualification and activation not confirmed |
+| Milestone | Qualification | Runtime evidence |
+| --- | --- | --- |
+| 1.5.4 | 14/14 dedicated SA checks; historical suites passed | GREEN / ACTIVE 05:15:52 UTC |
+| 1.5.5 | TLS remote access / HTTPS; historical tests passed | Initial startup failed without cert/key; subsequently HTTPS verified locally and from Windows |
+| 1.5.6 | 14/14 dashboard checks; 34/34 historical suites | Operator reported installed; runtime dashboard displayed SA aggregates |
+| 1.5.7 | Version increment for refreshed dashboard release | Tested/installed status not separately established in this summary |
+| 1.5.8 | 14/14 channel-name boundary checks; historical suites passed | GREEN / ACTIVE 14:44:07 UTC |
+| 1.5.9 | 18/18 organization SA policy checks; 36/36 historical suites | GREEN / ACTIVE 15:17:54 UTC |
+| **1.5.10** | **16/16 project-list checks; 37/37 historical suites** | **GREEN / ACTIVE 15:25:50 UTC** |
 
-**Last explicitly confirmed active Interface:** **1.4.1**, hotloaded at 2026-10-09 01:58:21 UTC. **Latest tested Interface candidate:** **1.4.5**. Core `RUNTIME_ACTIVE` is not equivalent to Interface `HOTLOAD_ACTIVE`.
+The historical Interface 1.3.x–1.4.x milestone record is retained in [Development Roadmap](docs/ROADMAP.md). Unit tests, module qualification, activation, and end-to-end authorization are **distinct** evidence gates.
 
-The recurring `REGISTRY_AUDIT_FULL` messages were reported for **1.4.2–1.4.4**. Their cause and effect on activation have not been proven. The partial 1.4.5 log ends at `MODULE UPDATE_CANDIDATE`; no subsequent registry or hotload outcome was supplied.
+## Interface and Windows GUI
 
-### Implemented Interface work
+- HTTPS endpoint: **`https://digit.stn-labz.com:8081`**. Interface listens on the IPv4 wildcard address and requires TLS. Windows HTTPS validation was confirmed against the operator-installed temporary self-signed certificate; replace it with an appropriately trusted certificate for sustained operations.
+- `poemei` authenticated through Digit GUI. The Core-controlled STN-LABZ SA read-access check was observed successful.
+- The read-only `GET /admin/dashboard` reports Core channel/alert totals; the GUI displayed four channels and two alerts in operator testing. Dashboard counts do **not** confer channel ACL access.
+- GUI and Interface 1.5.9 introduced SA project creation and Security binding controls. Interface 1.5.10 and GUI 1.5.10 add organization-scoped project listing subject to current SA assignment and project membership.
+- `POST /channels` in 1.5.8 allows an authorized SA to request Core channel creation; this does **not** automatically grant visibility or membership.
 
-- Local HTTP interface and session/account authentication.
-- Protected channel access controls, Security Administrator checks, and scoped project provisioning.
-- Channel message validation and Core-backed **persistence receipts** (not proof of delivery).
-- Authenticated knowledge search via the existing `corpus.search` service, with source-attributed evidence and explicit `UNKNOWN` on no match.
-- Authenticated exact record retrieval via `corpus.get`, with record-identity checks.
-- Bounded result sets, duplicate ID rejection, canonical UTF-8 validation, and consistent safe record identifiers for bulk and single-record lookup.
+### Project storage and explicit authority
 
-**Not established by these milestones:** unrestricted employee direct messaging, end-to-end delivery confirmation, record-level Corpus authorization, conversational RAG synthesis, or remote network access.
+Protected project root: `/opt/digit/state/projects/<organization>/<project>/`. Project provisioning records include `project.tsv`, `security.tsv` and `READY`; restricted Security-channel binding uses `security_channel.id`. The channel-access registry is **`/opt/digit/state/auth/channel_grants.tsv`**, not `channel_acl.tsv`. Missing, invalid or unauthorized grants fail closed.
 
-### Interface network boundary
+Organization and project scopes are separate. A valid SA assignment to **stn-labz** does not authorize **team-chaos**. The Founder may hold both assignments independently, subject to the controlled roster; that second assignment has not been evidenced as provisioned. Project and channel access also require their corresponding membership/grants.
 
-The Interface listens on **`127.0.0.1:8081`**. Authenticated *remote* access is not yet enabled. Local checks must be performed on the Digit host; external clients cannot be assumed to reach this endpoint.
+**Operator-directed target layout:**
+- **STN-Labz:** `learn`, permanent SA `Alerts`, permanent SA `Security`.
+- **Team ChAoS:** permanent SA `Security`.
+- The existing legacy `general`, `learn`, `alerts`, and `Team ChAoS` channel records are not automatically migrated into those scopes. Preserve their message history.
+- The right-side GUI panel is intended to become **channel Presence**. Operational events belong in the permanent organization-scoped Alerts channel; live presence must be tracked separately.
 
-## Interface build and qualification
+**Not yet complete:** GUI-managed scoped channel grants, permanent SA channel provisioning and lifecycle enforcement, organization-isolated presence, legacy channel migration, and end-to-end multi-organization access qualification. Do not equate the 1.5.9 policy test or 1.5.10 listing test with these features being live.
 
-From the repository's `modules/interface` directory, with the required external ABI available at the expected sibling location:
+## Build and qualification
+
+From `modules/interface`, with the sibling external ABI available:
 
 ```sh
-git pull
 make clean && make && make test
 ```
 
-The current Makefile prints the **1.4.5 milestone assertions** individually and runs **23 historical regression suites**, reporting a summary unless a suite fails.
+For the native Windows GUI, use its repository's `build.cmd` in an MSVC environment. Do not publish credentials, account hashes, private keys or authorization registries.
 
-Compiling and passing module unit tests do **not** alone establish operational activation. The operator must inspect runtime evidence, including `MODULE QUALIFICATION_GREEN` and `MODULE HOTLOAD_ACTIVE`. Do not report an unobserved event as successful.
+Interface 1.5.10: **16 dedicated checks and 37 historical suites passed**, with `MODULE HOTLOAD_ACTIVE` observed. Any new source change requires compilation, positive/negative tests, complete regression qualification, and operator review before activation.
 
-### Current investigation
+## Next development phase: 1.6
 
-The 1.4.5 candidate passed its tests after correction of a malformed source-code newline insertion. An additional HTTP reply/audit formatting refactor occurred during that correction; its live request behavior has not been independently verified. Runtime observation for 1.4.5 ended at candidate detection. The specific stage and cause of any subsequent stall are **unknown**.
+1. Finish organizational isolation and explicit GUI-managed channel/project grants.
+2. Provision and protect per-organization permanent Security/Alerts channels (no automatic cross-org inheritance).
+3. Build authenticated per-channel Presence with explicit join, leave, expiry and visibility rules; maintain alert event records separately.
+4. Demonstrate negative cross-organization access cases and migration safety before treating the new organization model as operationally qualified.
+5. Then proceed to mission-oriented bounded work, escalation and structured audit under the General Orders.
 
-No audit reset, registry bypass, or unauthorized Core change is prescribed.
+These are **planned objectives**, not claims of implementation or deployment approval.
 
 ## Engineering boundaries
 
-- **Current authorized modification scope:** `modules/interface` only.
-- **Digit Core and external ABI:** no changes without explicit human authorization.
-- Source changes require annotation, positive/negative testing, historical regression coverage, and operator qualification evidence.
-- Milestones advance sequentially using the approved `MAJOR.MINOR.REVISION` scheme (revisions 0–10 before rollover).
-- New modules require the applicable Module Creation Request process.
+Core, external ABI and common autonomous-agent architecture changes require explicit human authorization. Preserve deterministic behavior, annotated source changes, negative tests, historical regression, and the Module Creation Request process when applicable.
 
-For the full plan, historical milestone evidence, and unresolved runtime gates, see **[Development Roadmap](docs/ROADMAP.md)**.
+See [Development Roadmap](docs/ROADMAP.md) for detailed evidence, development phases and outstanding gates.
 
 *Engineering systems worthy of trust when trust matters most.*
