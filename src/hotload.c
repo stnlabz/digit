@@ -261,24 +261,6 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     }
     printf("[MODULE] Qualification GREEN: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
 
-    /* [AI:GPT-6 | 2026-10-08] ABI registry audit is bounded.
-     * Admission needs an audit entry at every transition. Reject early
-     * instead of stopping a running incumbent with insufficient capacity. */
-    {
-        size_t remaining = STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count;
-        size_t required = has_incumbent ? 8u : 6u;
-        if (manager->registry.audit_count > STNLABZ_MODULE_AUDIT_MAX ||
-            remaining < required)
-        {
-            printf("[MODULE] Candidate deferred: %s registry audit capacity exhausted (%zu/%u)\n",
-                   candidate->module_id, manager->registry.audit_count,
-                   (unsigned int)STNLABZ_MODULE_AUDIT_MAX);
-            digit_hotload_audit("REGISTRY_AUDIT_FULL", candidate->module_id, &result);
-            unlink(staged);
-            return 0;
-        }
-    }
-
     if (has_incumbent)
     {
         if (active->state == STNLABZ_MODULE_STATE_ACTIVE)
@@ -299,74 +281,34 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
             }
         }
 
-        /* [AI:GPT-6 | 2026-10-08] Registry lifecycle must finish
-         * before dlclose invalidates module function pointers. */
+        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
         module_result = stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
         if (module_result != STNLABZ_MODULE_OK)
         {
-            printf("[MODULE] Incumbent unregister failed: %s result=%s (%d)\n",
-                   candidate->module_id, stnlabz_module_result_string(module_result),
-                   (int)module_result);
             digit_hotload_audit("UNREGISTER_FAILED", candidate->module_id, NULL);
-            unlink(staged);
-            return 0;
-        }
-        loader_result = stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
-        if (loader_result != STNLABZ_MODULE_LOADER_OK)
-        {
-            printf("[MODULE] Incumbent unload failed: %s result=%s (%d)\n",
-                   candidate->module_id, stnlabz_module_loader_result_string(loader_result),
-                   (int)loader_result);
-            digit_hotload_audit("UNLOAD_FAILED", candidate->module_id, NULL);
             unlink(staged);
             return 0;
         }
     }
 
-    /* [AI:GPT-6 | 2026-10-08] Recovery after a failed admission:
-     * a prior attempt may have loaded this ID without registering it.
-     * Clear any unregistered loader slot before retrying admission. */
-    if (!has_incumbent)
-        (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
-
     loader_result = stnlabz_module_loader_load(&manager->loader, candidate->module_id, staged, &loaded_descriptor);
     if (loader_result != STNLABZ_MODULE_LOADER_OK || loaded_descriptor == NULL)
     {
-        printf("[MODULE] GREEN candidate load failed: %s loader_result=%d\n", candidate->module_id, (int)loader_result);
+        printf("[MODULE] GREEN candidate load failed: %s\n", candidate->module_id);
         digit_hotload_audit("LOAD_FAILED", candidate->module_id, &result);
         unlink(staged);
         return 0;
     }
 
-    /* [AI:GPT-6 | 2026-10-08] Distinguish registry admission stages.
-     * A GREEN qualification is not equivalent to successful admission. */
+    module_result = stnlabz_module_registry_discover(&manager->registry, loaded_descriptor);
+    if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_verify(&manager->registry, candidate->module_id);
+    if (module_result == STNLABZ_MODULE_OK) module_result = stnlabz_module_registry_restore_qualification(&manager->registry, candidate->module_id, &result.qualification);
+    if (module_result != STNLABZ_MODULE_OK)
     {
-        const char *admission_stage = "discover";
-        module_result = stnlabz_module_registry_discover(&manager->registry, loaded_descriptor);
-        if (module_result == STNLABZ_MODULE_OK)
-        {
-            admission_stage = "verify";
-            module_result = stnlabz_module_registry_verify(&manager->registry, candidate->module_id);
-        }
-        if (module_result == STNLABZ_MODULE_OK)
-        {
-            admission_stage = "restore_qualification";
-            module_result = stnlabz_module_registry_restore_qualification(
-                &manager->registry, candidate->module_id, &result.qualification);
-        }
-        if (module_result != STNLABZ_MODULE_OK)
-        {
-            printf("[MODULE] GREEN candidate registry admission failed: %s stage=%s result=%s (%d)\n",
-                   candidate->module_id, admission_stage,
-                   stnlabz_module_result_string(module_result), (int)module_result);
-            digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
-            /* [AI:GPT-6 | 2026-10-08] Registry holds a descriptor
-             * from the loaded object: unregister before unloading. */
-            (void)stnlabz_module_registry_unregister(&manager->registry, candidate->module_id);
-            (void)stnlabz_module_loader_unload(&manager->loader, candidate->module_id);
-            unlink(staged);
-            return 0;
-        }
+        printf("[MODULE] GREEN candidate registry admission failed: %s\n", candidate->module_id);
+        digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
+        unlink(staged);
+        return 0;
     }
 
     if (!already_qualified && (!digit_qualification_record(&manager->qualifications, loaded_descriptor) || !digit_qualification_store_save(manager->qualification_path, &manager->qualifications)))
