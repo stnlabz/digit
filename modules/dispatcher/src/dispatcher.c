@@ -16,12 +16,10 @@
 /* [AI:GPT-5.6 Sol | 2026-10-07T00:09:00Z] Removed direct linkage to Intent module implementation symbols. Dispatcher communicates with Intent only through the registered service ABI so RTLD_NOW can load Dispatcher independently. */
 
 static const stnlabz_module_host_t *dispatcher_host=NULL;
-/* [AI:GPT-6 | 2026-10-09] One bounded, volatile interaction context.
- * The dispatcher ABI currently carries no session identity. This context is
- * process-wide and is cleared on unrelated requests, startup, and shutdown;
- * it is not multi-operator session isolation. */
-static char recent_equation[DIGIT_ARITHMETIC_EXPRESSION_MAX];
-static char recent_answer[DIGIT_DISPATCHER_ANSWER_MAX];
+/* [AI:GPT-6 | 2026-10-09] Account-bound context transition:
+ * Do not retain or verify earlier equations in process-global variables.
+ * The legacy dispatcher request has no authenticated actor/scope fields.
+ * A follow-up must fail closed until a scoped context contract is wired. */
 static int verify_followup(const char *request){
  return strcmp(request,"verify your answer")==0||
         strcmp(request,"verify that answer")==0||
@@ -29,30 +27,10 @@ static int verify_followup(const char *request){
         strcmp(request,"verify the solution")==0||
         strcmp(request,"verify")==0;
 }
-static void verify_recent(digit_dispatcher_result_t *out){
- digit_arithmetic_request_t input={0};
- digit_arithmetic_result_t result={0};
- size_t used=0;
- stnlabz_module_result_t rc;
+static void verify_unscoped(digit_dispatcher_result_t *out){
  out->answered=1;
- if(!recent_equation[0]){
-  snprintf(out->answer,sizeof(out->answer),"There is no retained equation in this interaction to verify.");
-  return;
- }
- snprintf(input.expression,sizeof(input.expression),"%s",recent_equation);
- rc=dispatcher_host->invoke_service(DIGIT_ARITHMETIC_SERVICE,&input,sizeof(input),
-                                    &result,sizeof(result),&used);
- if(rc!=STNLABZ_MODULE_OK||used!=sizeof(result)||result.status!=DIGIT_ARITHMETIC_OK||
-    !result.decimal_answer[0]){
-  snprintf(out->answer,sizeof(out->answer),"I could not re-evaluate the retained equation.");
-  return;
- }
- if(strcmp(result.decimal_answer,recent_answer)==0)
-  snprintf(out->answer,sizeof(out->answer),
-           "Re-evaluation agrees with the previous answer: %s",result.decimal_answer);
- else snprintf(out->answer,sizeof(out->answer),
-              "Re-evaluation disagrees with the previous answer. Current result: %s",
-              result.decimal_answer);
+ snprintf(out->answer,sizeof(out->answer),
+          "I cannot verify a previous answer without authenticated, account-bound conversation context. Please provide the equation again.");
 }
 
 static const char *intent_class_name(digit_intent_class_t intent){switch(intent){case DIGIT_INTENT_CONVERSATION:return "CONVERSATION";case DIGIT_INTENT_FACT:return "FACT";case DIGIT_INTENT_DEFINE:return "DEFINE";case DIGIT_INTENT_EXPLAIN:return "EXPLAIN";case DIGIT_INTENT_COMPARE:return "COMPARE";case DIGIT_INTENT_WHY:return "WHY";case DIGIT_INTENT_HOW:return "HOW";case DIGIT_INTENT_STATUS:return "STATUS";case DIGIT_INTENT_ACTION:return "ACTION";case DIGIT_INTENT_AMBIGUOUS:return "AMBIGUOUS";default:return "UNKNOWN";}}
@@ -143,12 +121,11 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     /* [AI:GPT-6 | 2026-10-09] Follow-ups use the immediately preceding
      * established equation only. No generalized free-form memory. */
     if(verify_followup(interpreted_request)){
-        verify_recent(&out);
+        verify_unscoped(&out);
         normalize_answer(out.answer);
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);
         return STNLABZ_MODULE_OK;
     }
-    recent_equation[0]='\0';recent_answer[0]='\0';
     memset(&intent_request,0,sizeof(intent_request));memset(&intent_result,0,sizeof(intent_result));
     snprintf(intent_request.text,sizeof(intent_request.text),"%s",interpreted_request);
     intent_sr=dispatcher_host->invoke_service(DIGIT_INTENT_SERVICE,&intent_request,sizeof(intent_request),&intent_result,sizeof(intent_result),&intent_used);
@@ -180,17 +157,6 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     else if(intent_result.intent==DIGIT_INTENT_STATUS&&source_action(interpreted_request))source_scan(interpreted_request,&out);
     else if(intent_result.intent==DIGIT_INTENT_UNKNOWN||intent_result.intent==DIGIT_INTENT_AMBIGUOUS){out.answered=1;snprintf(out.answer,sizeof(out.answer),"I can't establish what you want me to do from that request.");}
     else dispatch_intent_response(interpreted_request,&intent_result,&out);
-    /* Retain only successful equation answers, never unsupported output. */
-    if(strchr(interpreted_request,'=')&&
-       (strstr(out.answer,"x = ")==out.answer||
-        strstr(out.answer,"No solution.")==out.answer||
-        strstr(out.answer,"No real solutions.")==out.answer||
-        strstr(out.answer,"Infinitely many solutions.")==out.answer)){
-        if(strlen(interpreted_request)<sizeof(recent_equation)){
-            snprintf(recent_equation,sizeof(recent_equation),"%s",interpreted_request);
-            snprintf(recent_answer,sizeof(recent_answer),"%s",out.answer);
-        }
-    }
     normalize_answer(out.answer);
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
 }
@@ -219,7 +185,7 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
  result->negative_test_executed=1;result->negative_test_passed=negative_passed;
  return result->tests_failed||result->negative_test_passed!=result->negative_test_executed?STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
-static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;recent_equation[0]=0;recent_answer[0]=0;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;recent_equation[0]=0;recent_answer[0]=0;return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
+static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
 static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
