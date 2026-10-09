@@ -41,7 +41,7 @@ int main(void)
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "corpus") == 0, "module identity is corpus");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 3 && descriptor->version_patch == 2, "internal version is 1.3.2");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 3 && descriptor->version_patch == 3, "internal version is 1.3.3");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS && qualification.tests_passed == qualification.tests_executed && qualification.negative_test_executed && qualification.negative_test_passed, "qualification requirements pass");
     check(digit_corpus_validate(&record) && digit_corpus_append(path, &record) && digit_corpus_append(path, &second) && digit_corpus_append(path, &php), "valid records append");
