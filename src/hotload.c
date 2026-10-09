@@ -350,8 +350,10 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     if (old_active && active->descriptor.stop != NULL &&
         active->descriptor.stop() != STNLABZ_MODULE_OK)
     {
+        /* [AI:GPT-6 | 2026-10-08] Stop may have partially released
+         * services before reporting failure: try incumbent restoration. */
         digit_hotload_audit("INCUMBENT_STOP_FAILED", candidate->module_id, NULL);
-        goto reject_preload;
+        goto restore;
     }
     if (old_active &&
         stnlabz_module_registry_stop(&manager->registry, candidate->module_id) != STNLABZ_MODULE_OK)
