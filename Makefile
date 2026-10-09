@@ -106,8 +106,8 @@ $(SACRIFICIAL_RESTART_FAIL_SO): tests/modules/sacrificial/sacrificial.c | $(SACR
 $(SACRIFICIAL_CONF): tests/modules/sacrificial/module.conf | $(SACRIFICIAL_DIR)
 	cp $< $@
 
-$(TEST_MODULE_MANAGER): tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_MODULE_MANAGER): tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) $(SACRIFICIAL_V2_SO) $(SACRIFICIAL_FAIL_SO) $(SACRIFICIAL_HANG_SO) $(SACRIFICIAL_STOP_FAIL_SO) $(SACRIFICIAL_RESTART_FAIL_SO) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
