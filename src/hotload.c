@@ -18,6 +18,7 @@
 #include "audit.h"
 #include "hotload.h"
 #include "qualification_store.h"
+#include "service_registry.h"
 
 #define DIGIT_CANDIDATE_SUFFIX ".candidate.XXXXXX"
 #define DIGIT_QUALIFICATION_TIMEOUT_MS 3000
@@ -253,6 +254,7 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     int old_active = 0;
     int candidate_start_attempted = 0;
     int preloaded = 0;
+    int transition_acquired = 0;
 
     memset(&result, 0, sizeof(result));
     if (!digit_copy_candidate(candidate->path, staged, sizeof(staged))) { printf("[MODULE] Candidate staging failed: %s\n", candidate->module_id); digit_hotload_audit("STAGING_FAILED", candidate->module_id, NULL); return 0; }
@@ -339,6 +341,11 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     if (old_loaded != NULL) old_copy = *old_loaded;
     old_active = has_incumbent && active->state == STNLABZ_MODULE_STATE_ACTIVE;
     registry_before = manager->registry;
+    if (!digit_service_transition_begin()) {
+        digit_hotload_audit("TRANSITION_BUSY", candidate->module_id, NULL);
+        goto reject_preload;
+    }
+    transition_acquired = 1;
 
     if (old_active && active->descriptor.stop != NULL &&
         active->descriptor.stop() != STNLABZ_MODULE_OK)
@@ -411,6 +418,8 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     }
     staged_loader.count = 0; /* handle transferred to installed loader */
     preloaded = 0;
+    digit_service_transition_end();
+    transition_acquired = 0;
     unlink(staged);
     printf("[MODULE] HOTLOAD ACTIVE: %s %u.%u.%u\n", candidate->module_id, result.version_major, result.version_minor, result.version_patch);
     digit_hotload_audit("HOTLOAD_ACTIVE", candidate->module_id, &result);
@@ -439,6 +448,7 @@ restore:
         else digit_hotload_audit("INCUMBENT_RESTORED", candidate->module_id, NULL);
     }
 reject_preload:
+    if (transition_acquired) digit_service_transition_end();
     if (preloaded) stnlabz_module_loader_unload_all(&staged_loader);
     unlink(staged);
     return 0;
