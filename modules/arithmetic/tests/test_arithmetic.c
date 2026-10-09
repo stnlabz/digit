@@ -67,7 +67,7 @@ int main(void){
    {"solve 3*x - 6 = 0","x = 2.",DIGIT_ARITHMETIC_OK},
    {"x + 1 = x + 1","Infinitely many solutions.",DIGIT_ARITHMETIC_OK},
    {"x + 1 = x + 2","No solution.",DIGIT_ARITHMETIC_OK},
-   {"x*x = 4","",DIGIT_ARITHMETIC_INVALID},
+   {"x*x = 4","x = -2 and x = 2.",DIGIT_ARITHMETIC_OK},
    {"x / x = 1","",DIGIT_ARITHMETIC_INVALID},
    {"(2 + 3","",DIGIT_ARITHMETIC_INVALID},
    {"(1 / 0) + 4","",DIGIT_ARITHMETIC_DIVIDE_BY_ZERO}
