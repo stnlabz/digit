@@ -122,10 +122,132 @@ static digit_arithmetic_status_t evaluate_decimal(const char *expression,
  result->operation=op;
  return DIGIT_ARITHMETIC_OK;
 }
+/* [AI:GPT-6 | 2026-10-09] Recursive descent for bounded linear algebra.
+ * Values are fixed-point (three decimals); x is the only variable.
+ * Nonlinear products and variable denominators are rejected. */
+typedef struct { int64_t x,c; } linear_value_t;
+typedef struct {const char *p;int depth;digit_arithmetic_status_t error;} expression_parser_t;
+#define ALG_LIMIT INT64_C(1000000000)
+static int alg_limit(int64_t v){return v>=-ALG_LIMIT&&v<=ALG_LIMIT;}
+static linear_value_t alg_zero(void){linear_value_t v={0,0};return v;}
+static linear_value_t alg_expression(expression_parser_t *parser);
+static linear_value_t alg_primary(expression_parser_t *parser){
+ linear_value_t v=alg_zero();const char *before;
+ if(parser->error)return v;
+ skip_spaces(&parser->p);
+ if(*parser->p=='+'||*parser->p=='-'){
+  char sign=*parser->p++;
+  v=alg_primary(parser);
+  if(sign=='-'){v.x=-v.x;v.c=-v.c;}
+  return v;
+ }
+ if(*parser->p=='('){
+  ++parser->p;
+  if(++parser->depth>16){parser->error=DIGIT_ARITHMETIC_INVALID;return v;}
+  v=alg_expression(parser);
+  skip_spaces(&parser->p);
+  if(*parser->p!=')')parser->error=DIGIT_ARITHMETIC_INVALID;
+  else ++parser->p;
+  --parser->depth;
+  return v;
+ }
+ if((*parser->p=='x'||*parser->p=='X') &&
+    !isalnum((unsigned char)parser->p[1])&&parser->p[1]!='_'){
+  ++parser->p;v.x=DECIMAL_SCALE;return v;
+ }
+ before=parser->p;
+ if(!decimal_operand(&parser->p,&v.c)){
+  parser->p=before;parser->error=DIGIT_ARITHMETIC_INVALID;
+ }
+ return v;
+}
+static linear_value_t alg_product(expression_parser_t *parser){
+ linear_value_t left=alg_primary(parser);
+ while(!parser->error){
+  linear_value_t right;char op;int64_t x,c;
+  skip_spaces(&parser->p);
+  if(*parser->p!='*'&&*parser->p!='/')break;
+  op=*parser->p++;
+  right=alg_primary(parser);
+  if(parser->error)break;
+  if(op=='*'){
+   if(left.x!=0&&right.x!=0){parser->error=DIGIT_ARITHMETIC_INVALID;break;}
+   x=(left.x*right.c+left.c*right.x)/DECIMAL_SCALE;
+   c=(left.c*right.c)/DECIMAL_SCALE;
+  }else{
+   if(right.x!=0){parser->error=DIGIT_ARITHMETIC_INVALID;break;}
+   if(right.c==0){parser->error=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;break;}
+   x=(left.x*DECIMAL_SCALE)/right.c;
+   c=(left.c*DECIMAL_SCALE)/right.c;
+  }
+  if(!alg_limit(x)||!alg_limit(c)){parser->error=DIGIT_ARITHMETIC_OUT_OF_RANGE;break;}
+  left.x=x;left.c=c;
+ }
+ return left;
+}
+static linear_value_t alg_expression(expression_parser_t *parser){
+ linear_value_t left=alg_product(parser);
+ while(!parser->error){
+  linear_value_t right;char op;
+  skip_spaces(&parser->p);
+  if(*parser->p!='+'&&*parser->p!='-')break;
+  op=*parser->p++;
+  right=alg_product(parser);
+  if(parser->error)break;
+  left.x+=(op=='+'?right.x:-right.x);
+  left.c+=(op=='+'?right.c:-right.c);
+  if(!alg_limit(left.x)||!alg_limit(left.c))parser->error=DIGIT_ARITHMETIC_OUT_OF_RANGE;
+ }
+ return left;
+}
+static digit_arithmetic_status_t evaluate_algebra(const char *expression,digit_arithmetic_result_t *result){
+ expression_parser_t parser={0};
+ linear_value_t lhs,rhs;int64_t coefficient,constant,solution;
+ char text[48];
+ parser.p=expression;
+ skip_spaces(&parser.p);
+ if(strncasecmp(parser.p,"digit",5)==0 &&
+   (isspace((unsigned char)parser.p[5])||parser.p[5]==','||parser.p[5]==':')){
+  parser.p+=5;if(*parser.p==','||*parser.p==':')++parser.p;skip_spaces(&parser.p);
+ }
+ if(strncasecmp(parser.p,"what is ",8)==0)parser.p+=8;
+ else if(strncasecmp(parser.p,"calculate ",10)==0)parser.p+=10;
+ else if(strncasecmp(parser.p,"compute ",8)==0)parser.p+=8;
+ else if(strncasecmp(parser.p,"solve ",6)==0)parser.p+=6;
+ lhs=alg_expression(&parser);
+ if(parser.error)return parser.error;
+ skip_spaces(&parser.p);
+ if(*parser.p=='='){
+  ++parser.p;rhs=alg_expression(&parser);
+  if(parser.error)return parser.error;
+  coefficient=lhs.x-rhs.x;constant=rhs.c-lhs.c;
+  if(!alg_limit(coefficient)||!alg_limit(constant))return DIGIT_ARITHMETIC_OUT_OF_RANGE;
+  if(coefficient==0){
+   snprintf(result->decimal_answer,sizeof(result->decimal_answer),
+    "%s",constant==0?"Infinitely many solutions.":"No solution.");
+  }else{
+   solution=(constant*DECIMAL_SCALE)/coefficient;
+   if(!alg_limit(solution))return DIGIT_ARITHMETIC_OUT_OF_RANGE;
+   fixed_text(solution,text,sizeof(text));
+   snprintf(result->decimal_answer,sizeof(result->decimal_answer),"x = %s.",text);
+  }
+ }else{
+  if(lhs.x!=0)return DIGIT_ARITHMETIC_INVALID;
+  fixed_text(lhs.c,text,sizeof(text));
+  snprintf(result->decimal_answer,sizeof(result->decimal_answer),"Result = %s.",text);
+ }
+ skip_spaces(&parser.p);
+ if(*parser.p=='?')++parser.p;
+ skip_spaces(&parser.p);
+ if(*parser.p)return DIGIT_ARITHMETIC_INVALID;
+ return DIGIT_ARITHMETIC_OK;
+}
 static digit_arithmetic_status_t evaluate(const char *expression,digit_arithmetic_result_t *result){
  const char *p=expression;int64_t a,b;
  memset(result,0,sizeof(*result));
  if(!expression||!*expression)return DIGIT_ARITHMETIC_INVALID;
+ if(strchr(expression,'=')||strchr(expression,'(')||strchr(expression,')'))
+  return evaluate_algebra(expression,result);
  if(strchr(expression,'.')!=NULL)return evaluate_decimal(expression,result);
  skip_spaces(&p);
  if(strncasecmp(p,"digit",5)==0 && (isspace((unsigned char)p[5])||p[5]==','||p[5]==':')){
@@ -208,7 +330,7 @@ static stnlabz_module_result_t arithmetic_stop(void){
  arithmetic_host=NULL;return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "arithmetic","Digit Arithmetic",1,1,0,
+ "arithmetic","Digit Arithmetic",1,2,0,
  STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  arithmetic_qualify,arithmetic_start,arithmetic_stop
 };
