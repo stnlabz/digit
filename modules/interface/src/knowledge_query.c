@@ -1,0 +1,89 @@
+#include <stdio.h>
+#include <string.h>
+#include "knowledge_query.h"
+/* [AI:GPT-6 | 2026-10-08] Evidence is returned as records, not
+ * invented prose. Invalid or unproven sources fail closed. */
+static size_t bounded(const char *s,size_t capacity)
+{
+    size_t n=0;
+    if(!s)return capacity;
+    while(n<capacity && s[n])++n;
+    return n;
+}
+static int printable(const char *s,size_t capacity)
+{
+    size_t n=bounded(s,capacity),i;
+    if(!n||n>=capacity)return 0;
+    for(i=0;i<n;++i){
+        unsigned char ch=(unsigned char)s[i];
+        if(ch<32 || ch==127)return 0;
+    }
+    return 1;
+}
+int digit_knowledge_query_valid(const char *query)
+{
+    return printable(query,DIGIT_KNOWLEDGE_QUERY_MAX);
+}
+int digit_knowledge_record_valid(const digit_knowledge_record_t *record)
+{
+    if(!record)return 0;
+    return printable(record->id,sizeof(record->id)) &&
+           printable(record->category,sizeof(record->category)) &&
+           printable(record->source,sizeof(record->source)) &&
+           printable(record->text,sizeof(record->text));
+}
+static int append(char *out,size_t capacity,size_t *pos,const char *s)
+{
+    size_t n=strlen(s);
+    if(n>=capacity-*pos)return 0;
+    memcpy(out+*pos,s,n+1);
+    *pos+=n;
+    return 1;
+}
+static int escaped(char *out,size_t capacity,size_t *pos,const char *src)
+{
+    size_t i,n=strlen(src);
+    for(i=0;i<n;++i){
+        unsigned char c=(unsigned char)src[i];
+        if(c=='"' || c=='\\'){
+            if(capacity-*pos<=2)return 0;
+            out[(*pos)++]='\\';
+        }else if(capacity-*pos<=1)return 0;
+        out[(*pos)++]=(char)c;
+    }
+    out[*pos]=0;
+    return 1;
+}
+int digit_knowledge_result_json(const digit_knowledge_record_t *records,
+                               size_t count,char *output,size_t capacity)
+{
+    size_t i,off=0;
+    char countbuf[32];
+    if(!output||!capacity)return 0;
+    output[0]=0;
+    if(count>DIGIT_KNOWLEDGE_RECORD_MAX || (count && !records))return 0;
+    if(!count)return append(output,capacity,&off,
+        "{\"found\":false,\"answer\":\"UNKNOWN\",\"evidence_count\":0,\"records\":[]}\n");
+    if(!append(output,capacity,&off,
+               "{\"found\":true,\"answer\":\"EVIDENCE_ONLY\",\"evidence_count\":"))goto fail;
+    (void)snprintf(countbuf,sizeof(countbuf),"%zu",count);
+    if(!append(output,capacity,&off,countbuf) ||
+       !append(output,capacity,&off,",\"records\":["))goto fail;
+    for(i=0;i<count;++i){
+        if(!digit_knowledge_record_valid(&records[i]))goto fail;
+        if(!append(output,capacity,&off,i?",{\"id\":\"":"{\"id\":\"") ||
+           !escaped(output,capacity,&off,records[i].id) ||
+           !append(output,capacity,&off,"\",\"category\":\"") ||
+           !escaped(output,capacity,&off,records[i].category) ||
+           !append(output,capacity,&off,"\",\"source\":\"") ||
+           !escaped(output,capacity,&off,records[i].source) ||
+           !append(output,capacity,&off,"\",\"text\":\"") ||
+           !escaped(output,capacity,&off,records[i].text) ||
+           !append(output,capacity,&off,"\"}"))goto fail;
+    }
+    if(!append(output,capacity,&off,"]}\n"))goto fail;
+    return 1;
+fail:
+    output[0]=0;
+    return 0;
+}
