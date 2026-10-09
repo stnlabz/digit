@@ -399,16 +399,37 @@ int digit_hotload_poll(digit_hotload_t *hotload)
         {
             printf("[MODULE] New candidate detected: %s\n", current[index].module_id);
             digit_hotload_audit("NEW_CANDIDATE", current[index].module_id, NULL);
-            if (digit_hotload_promote(hotload, &current[index])) ++changes;
+            if (digit_hotload_promote(hotload, &current[index])) {
+                size_t slot;
+                for (slot = 0; slot < hotload->count; ++slot)
+                    if (strcmp(hotload->files[slot].module_id, current[index].module_id) == 0) break;
+                if (slot == hotload->count && hotload->count < DIGIT_HOTLOAD_MAX_MODULES)
+                    ++hotload->count;
+                if (slot < DIGIT_HOTLOAD_MAX_MODULES) {
+                    hotload->files[slot] = current[index];
+                    ++changes;
+                }
+            }
         }
         else if (previous->modified_time != current[index].modified_time || previous->size != current[index].size)
         {
             printf("[MODULE] Update candidate detected: %s\n", current[index].module_id);
             digit_hotload_audit("UPDATE_CANDIDATE", current[index].module_id, NULL);
-            if (digit_hotload_promote(hotload, &current[index])) ++changes;
+            if (digit_hotload_promote(hotload, &current[index])) {
+                size_t slot;
+                for (slot = 0; slot < hotload->count; ++slot)
+                    if (strcmp(hotload->files[slot].module_id, current[index].module_id) == 0) break;
+                if (slot == hotload->count && hotload->count < DIGIT_HOTLOAD_MAX_MODULES)
+                    ++hotload->count;
+                if (slot < DIGIT_HOTLOAD_MAX_MODULES) {
+                    hotload->files[slot] = current[index];
+                    ++changes;
+                }
+            }
         }
     }
-    memcpy(hotload->files, current, current_count * sizeof(current[0]));
-    hotload->count = current_count;
+    /* [AI:GPT-6 | 2026-10-08] Commit a fingerprint only after a
+     * successful admission. Deferred/rejected candidates remain retryable
+     * on later polls without requiring another filesystem modification. */
     return changes;
 }
