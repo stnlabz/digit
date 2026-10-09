@@ -2,9 +2,10 @@
 
 **Organization:** STN-LABZ  
 **Status:** APPROVED — PM 20261009:0123 UTC  
-**Last confirmed active Interface:** 1.4.7 — Qualification GREEN / Hotload ACTIVE (2026-10-09 02:55:15 UTC)  
-**Latest tested Interface:** 1.4.7 — 18/18 milestone checks, 25/25 historical suites; zero failures  
-**Prepared:** 2026-10-08
+**Last confirmed active Interface:** 1.5.10 — Qualification GREEN / HOTLOAD_ACTIVE (2026-10-09 15:25:50 UTC)  
+**Latest tested Interface:** 1.5.10 — 16/16 milestone checks, 37/37 historical suites; zero failures  
+**Prepared:** 2026-10-08  
+**Evidence updated:** 2026-10-09 UTC; operator-reported milestones through Interface 1.5.10
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
 
@@ -16,7 +17,10 @@ Develop Digit into a deterministic, modular, platform-independent autonomous age
 
 ## Confirmed baseline and evidence
 
-**Latest operator-confirmed Interface activation:** **1.4.7**, with `MODULE QUALIFICATION_GREEN` and `MODULE HOTLOAD_ACTIVE` at **2026-10-09 02:55:15 UTC**. Its dedicated milestone ran **18/18** assertions, and **25/25** historical regression suites passed with zero failures.
+**Current evidence supersedes the historical 1.4.7 snapshot below:** Interface **1.5.10** passed **16/16** project inventory tests and **37/37** historical regression suites; the operator reported `MODULE VERSION_CHANGED`, `MODULE QUALIFICATION_GREEN`, HTTPS listener activation, and `MODULE HOTLOAD_ACTIVE` at **2026-10-09 15:25:50 UTC**. Historical 1.4.x evidence remains for traceability.
+
+
+**Historical 1.4.x operator-confirmed Interface activation:** **1.4.7**, with `MODULE QUALIFICATION_GREEN` and `MODULE HOTLOAD_ACTIVE` at **2026-10-09 02:55:15 UTC**. Its dedicated milestone ran **18/18** assertions, and **25/25** historical regression suites passed with zero failures.
 
 **Prior operational milestone:** 1.4.6, with **21/21** milestone assertions, **24/24** historical suites and `MODULE QUALIFICATION_GREEN` / `MODULE HOTLOAD_ACTIVE` at **2026-10-09 02:46:47 UTC**.
 
@@ -61,6 +65,24 @@ Implemented Interface capabilities include:
 
 These observations establish a baseline, not a claim that every project-wide test suite has been independently reviewed in this roadmap.
 
+## Interface 1.5.x completion record (operator-reported, 2026-10-09 UTC)
+
+| Version | Implemented milestone | Evidence / operational qualification |
+| --- | --- | --- |
+| 1.5.4 | Digit account/session authorization and Core-owned STN-LABZ SA admission | 14/14 SA checks; GREEN / ACTIVE 05:15:52 |
+| 1.5.5 | TLS-only authenticated remote Interface | Missing certificate initially prevented startup; TLS 1.3, Windows remote HTTPS health and certificate trust subsequently verified |
+| 1.5.6 | Read-only SA Core channel/alert dashboard | 14/14 dashboard checks; 34/34 historical suites; GUI SA access and counts observed |
+| 1.5.7 | Reissued dashboard version for already-installed 1.5.6 baseline | Version bump committed; separate runtime qualification not established here |
+| 1.5.8 | SA-only Core-backed channel creation; GUI all-alert listing | 14/14 name checks; GREEN / ACTIVE 14:44:07; channel ACL grants remain separate |
+| 1.5.9 | Organization SA policy, project create and Security bind GUI controls | 18/18 policy checks; 36/36 historical suites; GREEN / ACTIVE 15:17:54 |
+| **1.5.10** | **Per-organization SA project inventory with project membership filtering** | **16/16 dedicated checks; 37/37 historical suites; GREEN / ACTIVE 15:25:50** |
+
+**Live observations and limits:** Founder `poemei` authenticated and Core SA admission returned authorized. The GUI reported four Core channels and two alerts. An initial channel-list 503 was investigated; the malformed `'general` record was removed under controlled maintenance, preserving the valid `general` identifier and message history. A later empty GUI channel list was attributed to missing `/opt/digit/state/auth/channel_grants.tsv`, which denies access by design. Core inventory is not account channel visibility. Channel provisioning, project inventory, and SA policy tests do not prove completed permanent-channel lifecycles or cross-org end-to-end isolation.
+
+**Approved operator-directed organizational targets:** STN-Labz owns `learn` plus permanent SA `Alerts` and `Security`; Team ChAoS owns its own permanent SA `Security`. Each has independent organization-scoped qualifications, assignments, security membership and channel grants. The Founder may receive explicit assignments in both; ownership alone never bypasses access checks. Existing legacy `alerts` and `Team ChAoS` named Core channels are not evidence of protected organizational migration.
+
+**Presence direction:** GUI right-side window becomes authorized channel presence, not an operational-alert feed. Events reside in the permanent organization's Alerts channel. Presence needs join/leave, expiry, and organization/project/channel visibility boundaries. **This is still planned, not implemented.**
+
 ## Development phases
 
 ### Phase 1 — Interface foundation
@@ -85,7 +107,7 @@ Milestones 1.3.3–1.3.10 cover protected membership and metadata consistency, d
 
 ### Phase 5 — Autonomous mission operations
 
-**Proposed versions:** 1.6.x and beyond.
+**Proposed versions:** 1.6.x and beyond. Interface 1.5.10 is the latest operator-confirmed baseline; 1.6 must first close organizational grants, permanent administrative channels and presence before asserting completed multi-organization operations.
 
 Introduce bounded mission tasks, delegated execution, routine anomaly handling within authority, structured status reporting, escalation, recovery, and audit trails.
 
@@ -157,22 +179,25 @@ The read-only investigation reproduced incorrect answers for action, arithmetic 
 
 These findings do **not** revoke the observed Interface 1.4.7 GREEN/ACTIVE runtime event. They constrain what that event establishes.
 
-## Immediate next objective
+## Immediate next objective — 1.6 planning gate
 
-**Interface 1.4.8 — Next sequential target, not yet committed or qualified.**
+**Interface 1.5.10 is ACTIVE, not merely a candidate.** The next work should complete the authority model, not infer features from dashboard counts.
 
-Prioritize narrowly scoped, deterministic improvements to Interface boundary validation and authenticated service handling based on remaining investigation findings. Define service-level positive/negative assertions, preserve all historical suites and maintain source/record attribution. Do not claim conversational history or action authorization reaches Dispatcher until the existing contract demonstrably carries it.
+1. **GUI-managed scoped access:** Introduce human-directed creation and review of organization/project/channel grants; preserve private regular files and fail-closed validation, no global SA bypass.
+2. **Permanent administrative channels:** Bootstrap organization-owned Security and Alerts channels, prohibit ordinary removal, audit provisioning and preserve the existing legacy data without assuming migration.
+3. **Presence:** Replace the right-hand GUI operational-alert list with authenticated channel membership/presence, scoped by each operator's grants; route retained operational notices into the organization's Alerts channel.
+4. **Cross-organization tests:** Explicitly prove STN-Labz-only SA cannot enumerate/manage Team ChAoS, and vice versa. Founder access to both requires two explicit active assignments.
+5. **Runtime acceptance:** Dedicated executable qualification tests, complete historical regression and operator-confirmed qualified activation, plus real client positive/negative access tests.
 
-**Engineering boundary:** Modifications remain limited to `modules/interface` unless explicitly authorized. Digit Core and the external ABI remain off-limits. Do not reset audit records, change production binaries, or infer system-wide qualification from Interface test results.
+**Still unresolved outside this milestone:** Dispatcher/Response behavior and evidence correctness, action routing, conversation context propagation, module qualification depth, durable audit/lifecycle guarantees and broader Core/ABI research. These remain bounded by the existing human authorization requirements.
 
-**Qualification evidence required:** successful build, dedicated assertions, complete historical regression and operator-confirmed `MODULE QUALIFICATION_GREEN` and `MODULE HOTLOAD_ACTIVE`.
-
+**Engineering boundary:** Architectural, Core and external ABI modifications require explicit human approval. No production change is authorized by this roadmap update alone.
 
 ---
 
-**Roadmap disposition:** APPROVED development plan (PM 20261009:0123 UTC); factual evidence/status update, not a new policy approval.  
-**Last confirmed active Interface:** 1.4.7 (operator-reported 2026-10-09 02:55:15 UTC).  
-**Latest operator-qualified milestone:** 1.4.7 (18/18 dedicated assertions, 25/25 historical suites, GREEN / ACTIVE).  
-**Next development target:** Interface 1.4.8 — planning only; unresolved cross-module investigation findings remain open.
+**Roadmap disposition:** Existing APPROVED planning document; evidence update dated 2026-10-09 UTC, not a new policy approval.  
+**Last confirmed active Interface:** 1.5.10 (operator-reported 2026-10-09 15:25:50 UTC).  
+**Latest operator-qualified milestone:** 1.5.10 (16/16 dedicated assertions, 37/37 historical suites, GREEN / ACTIVE).  
+**Next development series:** 1.6.x — planning, implementation and qualification pending.
 
 *Engineering systems worthy of trust when trust matters most.*
