@@ -47,7 +47,10 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
   arithmetic_calls++;
   if(!arithmetic_available)return STNLABZ_MODULE_ERR_NOT_FOUND;
   memset(out,0,sizeof(*out));
-  if((strchr(arithmetic_expected_request,'.') || strchr(arithmetic_expected_request,'=') || strchr(arithmetic_expected_request,'(')) &&
+  if(!strcmp(arithmetic_expected_answer,
+      "I cannot represent this result within my current arithmetic precision limits."))
+   out->status=DIGIT_ARITHMETIC_OUT_OF_RANGE;
+  else if((strchr(arithmetic_expected_request,'.') || strchr(arithmetic_expected_request,'=') || strchr(arithmetic_expected_request,'(')) &&
      arithmetic_expected_answer[0] &&
      strstr(arithmetic_expected_answer," = ")){
    out->status=DIGIT_ARITHMETIC_OK;
@@ -117,13 +120,14 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"Digit what is 2 plus 2?","2 + 2 = 4."},
    {"Digit what is two plus two?","2 + 2 = 4."},
    {"Digit, what is 2 plus 2?","2 + 2 = 4."},
-   {"Digital what is 2 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."},
+   {"Digital what is 2 plus 2?","I cannot evaluate that arithmetic expression within my supported mathematical capabilities."},
    {"What is 7 minus 12?","7 - 12 = -5."},
    {"What is 3 times 5?","3 * 5 = 15."},
    {"What is 9 divided by 3?","9 / 3 = 3."},
    {"Digit what is 8 / 2?","8 / 2 = 4."},
    {"Digit what is 1000 / 0.5?","1000 / 0.5 = 2000."},
    {"Digit what is 2*x+3=11?","x = 4."},
+   {"solve 10000*x^2 - 0.001 = 0","I cannot represent this result within my current arithmetic precision limits."},
    {"Digit what is (2 + 3) * 4?","Result = 20."},
    {"Digit what is 8 ÷ 2?","8 / 2 = 4."},
    {"Digit what is 8 divide by 2?","8 / 2 = 4."},
@@ -132,8 +136,8 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    {"What is 7 divided by 2?","7 / 2 = 3 remainder 1."},
    {"What is 7 divided by 0?","Division by zero is undefined."},
    {"What is 1000000000 times 1000000000?","1000000000 * 1000000000 = 1000000000000000000."},
-   {"What is 1000000001 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."},
-   {"What is 2 plus 2 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."}
+   {"What is 1000000001 plus 2?","I cannot represent this result within my current arithmetic precision limits."},
+   {"What is 2 plus 2 plus 2?","I cannot evaluate that arithmetic expression within my supported mathematical capabilities."}
   };
   size_t i;
   for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
@@ -183,7 +187,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 9, "internal version is 1.7.9");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 10, "internal version is 1.7.10");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
