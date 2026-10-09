@@ -33,9 +33,10 @@ static int grant_bound_scoped(const char *path,const char *root,const char *sa_r
     !digit_project_security_member(root,req->organization,req->project,actor)||
     !digit_security_sa_verify(sa_registry,req->organization,req->user)||
     !digit_project_security_member(root,req->organization,req->project,req->user)||
-    !(alerts ? digit_alerts_channel_lookup(root,req->organization,req->project,binding,sizeof(binding)) :
-      digit_project_security_channel_id(root,req->organization,req->project,binding,sizeof(binding)))||
-    strcmp(binding,req->channel)!=0)return 0;
+    !(alerts==2 ? digit_project_channel_match(root,req->organization,req->project,req->channel) :
+      ((alerts ? digit_alerts_channel_lookup(root,req->organization,req->project,binding,sizeof(binding)) :
+         digit_project_security_channel_id(root,req->organization,req->project,binding,sizeof(binding))) &&
+       strcmp(binding,req->channel)==0)))return 0;
  if(strlen(path)>=sizeof(parent))return 0;
  strcpy(parent,path);slash=strrchr(parent,'/');
  if(!slash||slash==parent)return 0;
@@ -114,4 +115,10 @@ int digit_grant_security_scoped(const char *path,const char *root,const char *sa
 int digit_grant_alerts_scoped(const char *path,const char *root,const char *sa_registry,
  const char *actor,const digit_grant_request_t *request){
  return grant_bound_scoped(path,root,sa_registry,actor,request,1);
+}
+
+/* [AI:GPT-6 | 2026-10-09] Explicit, existing-project channel authorization. */
+int digit_grant_project_channel_scoped(const char *path,const char *root,const char *sa_registry,
+ const char *actor,const digit_grant_request_t *request){
+ return grant_bound_scoped(path,root,sa_registry,actor,request,2);
 }
