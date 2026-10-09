@@ -49,7 +49,8 @@ static int record(int dir,const char *name,const char *value) {
 static int private_regular(int dir,const char *name) {
     struct stat st;
     return fstatat(dir,name,&st,AT_SYMLINK_NOFOLLOW)==0 &&
-           S_ISREG(st.st_mode) && (st.st_mode&077)==0 &&
+           S_ISREG(st.st_mode) && st.st_nlink==1 &&
+           (st.st_mode&077)==0 &&
            (st.st_uid==0 || st.st_uid==geteuid());
 }
 int digit_project_security_ready(const char *root,const char *org,const char *project) {
@@ -95,7 +96,7 @@ int digit_project_security_member(const char *root,const char *org,
     p=open_private(o,project);if(p<0)goto done;
     fd=openat(p,"security.tsv",O_RDONLY|O_NOFOLLOW);
     if(fd<0||fstat(fd,&st)!=0||!S_ISREG(st.st_mode)||
-       (st.st_mode&077)!=0||
+       st.st_nlink!=1||(st.st_mode&077)!=0||
        (st.st_uid!=0&&st.st_uid!=geteuid()))goto done;
     file=fdopen(fd,"r");
     if(!file)goto done;
