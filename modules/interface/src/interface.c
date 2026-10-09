@@ -503,6 +503,41 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
 }
+/* [AI:GPT-6 | 2026-10-09] Interface 1.5.9: authenticated, scoped
+ * SA project provisioning. The session identity is the project founder;
+ * the organization is checked against the protected SA roster. */
+if(strncmp(request,"POST /admin/projects HTTP/1.1\r\n",
+           sizeof("POST /admin/projects HTTP/1.1\r\n")-1U)==0){
+    char organization[DIGIT_PROJECT_ID_MAX],project[DIGIT_PROJECT_ID_MAX];
+    const char *separator;
+    size_t org_length,project_length,i;
+    if(!body || !(separator=strchr(body,'\t')) || strchr(separator+1,'\t')){
+        interface_reply(client,400,"{\"error\":\"expected organization TAB project\"}\n");return;
+    }
+    org_length=(size_t)(separator-body);
+    project_length=strlen(separator+1);
+    if(org_length==0 || project_length==0 ||
+       org_length>=sizeof(organization) || project_length>=sizeof(project)){
+        interface_reply(client,400,"{\"error\":\"invalid project scope\"}\n");return;
+    }
+    for(i=0;i<org_length+project_length;++i){
+        const unsigned char c=(unsigned char)(i<org_length?body[i]:separator[1+i-org_length]);
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+             (c>='0'&&c<='9')||c=='-'||c=='_')){
+            interface_reply(client,400,"{\"error\":\"invalid project identifier\"}\n");return;
+        }
+    }
+    memcpy(organization,body,org_length);organization[org_length]=0;
+    memcpy(project,separator+1,project_length);project[project_length]=0;
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,organization,identity)){
+        interface_reply(client,403,"{\"error\":\"organization SA assignment required\"}\n");return;
+    }
+    if(!digit_project_provision(DIGIT_PROJECT_ROOT,organization,project,
+                                identity,identity,DIGIT_SECURITY_SA_REGISTRY)){
+        interface_reply(client,503,"{\"error\":\"project provisioning failed or already exists\"}\n");return;
+    }
+    interface_reply(client,200,"{\"created\":true,\"security_ready\":true,\"channel_bound\":false}\n");return;
+}
 /* [AI:GPT-6 | 2026-10-08] Authenticated, SA-only project binding.
  * The actor is always the resolved active account, never request data.
  * The trusted bridge rechecks assignment and security membership before
@@ -763,5 +798,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
