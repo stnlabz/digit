@@ -40,6 +40,7 @@
 #include "grant_store.h"
 #include "alerts_channel.h"
 #include "security_sa.h"
+#include "sa_management.h"
 #include "core_services.h"
 
 #define INTERFACE_BUFFER_MAX 65536
@@ -567,6 +568,47 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
  * resources: one SA action provisions, binds and self-grants Security.
  * Retry continues completed stages; authorization is rechecked at every
  * boundary. A partial failure is reported, never presented as success. */
+/* [AI:GPT-6 | 2026-10-09] Strict same-organization SA roster.
+ * Role assignment requires pre-existing qualifications and current SA. */
+if(strncmp(request,"POST /admin/sa HTTP/1.1\r\n",sizeof("POST /admin/sa HTTP/1.1\r\n")-1U)==0){
+    char command[12],org[64],user[64],json[8192];
+    char *one,*two;
+    size_t a,b,c,i;
+    if(!body||!(one=strchr(body,'\t'))||!(two=strchr(one+1,'\t'))||
+       strchr(two+1,'\t')||strchr(body,'\r')||strchr(body,'\n')){
+        interface_reply(client,400,"{\"error\":\"invalid SA command\"}\n");return;
+    }
+    a=(size_t)(one-body);b=(size_t)(two-one-1);c=strlen(two+1);
+    if(!a||a>=sizeof(command)||!b||b>=sizeof(org)||c>=sizeof(user)){
+        interface_reply(client,400,"{\"error\":\"invalid SA arguments\"}\n");return;
+    }
+    memcpy(command,body,a);command[a]=0;
+    memcpy(org,one+1,b);org[b]=0;
+    memcpy(user,two+1,c+1);
+    for(i=0;i<b+c;i++){
+        char ch=i<b?org[i]:user[i-b];
+        if(!((ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||
+             (ch>='0'&&ch<='9')||ch=='-'||ch=='_'||ch=='.')){
+            interface_reply(client,400,"{\"error\":\"invalid SA scope\"}\n");return;
+        }
+    }
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)){
+        interface_reply(client,403,"{\"error\":\"organization SA required\"}\n");return;
+    }
+    if(!strcmp(command,"list")&&!c){
+        if(!digit_sa_list(DIGIT_SECURITY_SA_REGISTRY,org,identity,json,sizeof(json))){
+            interface_reply(client,503,"{\"error\":\"SA registry unavailable\"}\n");return;
+        }
+        interface_reply(client,200,json);return;
+    }
+    if((!strcmp(command,"assign")||!strcmp(command,"revoke"))&&c){
+        if(!digit_sa_change(DIGIT_SECURITY_SA_REGISTRY,org,identity,user,!strcmp(command,"assign"))){
+            interface_reply(client,403,"{\"error\":\"SA change denied or target not qualified\"}\n");return;
+        }
+        interface_reply(client,200,"{\"updated\":true}\n");return;
+    }
+    interface_reply(client,400,"{\"error\":\"unknown SA command\"}\n");return;
+}
 if(strncmp(request,"POST /admin/security/setup HTTP/1.1\r\n",
            sizeof("POST /admin/security/setup HTTP/1.1\r\n")-1U)==0){
     char org[DIGIT_PROJECT_ID_MAX],project[DIGIT_PROJECT_ID_MAX];
