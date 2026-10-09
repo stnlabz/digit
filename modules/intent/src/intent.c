@@ -252,6 +252,18 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
                    "First-person operator context is conversation, not an authority grant.");return;
     }
+    /* [AI:GPT-6 | 2026-10-09] Sentence-level interrogative fallback:
+     * permit evidence-backed answering, never capability execution.
+     * No question-specific vocabulary or answer is embedded here. */
+    {
+        size_t n=strlen(text);
+        while(n>0&&isspace((unsigned char)text[n-1]))--n;
+        if(n>0&&text[n-1]=='?'){
+            set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,
+                       "Interrogative request routed to grounded knowledge response.");
+            return;
+        }
+    }
     set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established.");
 }
 
@@ -343,6 +355,8 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"ingest lesson-one", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
         {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"What does update mean?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"Can a variable retain a value?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"Can you run an unknown operation?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"flibbertigibbet", DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U}
     };
     size_t i;
@@ -386,7 +400,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 8,
+    "intent", "Digit Intent", 1, 1, 9,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
