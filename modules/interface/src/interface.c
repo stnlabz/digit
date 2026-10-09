@@ -24,6 +24,7 @@
 #include "message_origin.h"
 #include "controlled_communication.h"
 #include "message_results.h"
+#include "channel_results.h"
 #include "alert_results.h"
 #include "knowledge_query.h"
 #include "project_admin_route.h"
@@ -122,8 +123,77 @@ static void interface_dispatch(const char *body,interface_dispatcher_result_t *o
 static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
 static void interface_learn(int client,const char *text){interface_builder_result_t out;char answer[768],escaped[1600],er[512],eid[160],json[3000];int result=interface_process_learn(text,&out,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));interface_json_escape(answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",escaped,out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);}
 
-static void interface_channels_list(int client,const char *identity){digit_channel_list_response_t out;size_t used=0,off=0,i,count=0;char json[INTERFACE_BUFFER_MAX];memset(&out,0,sizeof(out));if(!interface_invoke(DIGIT_CHANNEL_SERVICE_LIST,NULL,0,&out,sizeof(out),&used)||used!=sizeof(out)||out.count>DIGIT_CORE_SERVICE_CHANNEL_LIST_MAX){interface_reply(client,503,"{\"error\":\"channel service unavailable\"}\n");return;}off=(size_t)snprintf(json,sizeof(json),"{\"count\":%zu,\"channels\":[",(size_t)0);for(i=0;i<out.count;++i){char item[700];int w;if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,identity,out.channels[i].id))continue;if(!interface_channel_json(&out.channels[i],item,sizeof(item)))return;w=snprintf(json+off,sizeof(json)-off,"%s%s",count?",":"",item);if(w<=0||(size_t)w>=sizeof(json)-off)return;off+=(size_t)w;++count;}snprintf(json+off,sizeof(json)-off,"]}\n");{char result[INTERFACE_BUFFER_MAX];int w=snprintf(result,sizeof(result),"{\"count\":%zu,%s",count,strchr(json,',')+1);if(w<0||(size_t)w>=sizeof(result)){interface_reply(client,503,"{\"error\":\"channel output unavailable\"}\n");return;}interface_reply(client,200,result);}}
-static void interface_channel_get(int client,const char *id){digit_channel_get_request_t in;digit_channel_get_response_t out;size_t used=0;char item[700],json[900];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);if(!interface_invoke(DIGIT_CHANNEL_SERVICE_GET,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"channel service unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_channel_json(&out.channel,item,sizeof(item));snprintf(json,sizeof(json),"{\"found\":true,\"channel\":%s}\n",item);interface_reply(client,200,json);}
+/* [AI:GPT-6 | 2026-10-08] 1.4.10: validate all Core
+ * channel records before ACL filtering; avoid partial/truncated JSON. */
+static void interface_channels_list(int client,const char *identity)
+{
+    digit_channel_list_response_t out;
+    size_t used=0,off=0,i,visible=0;
+    char json[INTERFACE_BUFFER_MAX],items[INTERFACE_BUFFER_MAX];
+    int n;
+    memset(&out,0,sizeof(out));
+    if(!interface_invoke(DIGIT_CHANNEL_SERVICE_LIST,NULL,0,
+                         &out,sizeof(out),&used) || used!=sizeof(out) ||
+       !digit_interface_channels_valid(out.channels,out.count,
+                                       DIGIT_CORE_SERVICE_CHANNEL_LIST_MAX)){
+        interface_reply(client,503,"{\"error\":\"invalid channel list\"}\n");
+        return;
+    }
+    items[0]=0;
+    for(i=0;i<out.count;++i){
+        char item[700];
+        if(!digit_channel_acl_check_file(DIGIT_CHANNEL_ACL_PATH,
+                                         identity,out.channels[i].id))continue;
+        if(!interface_channel_json(&out.channels[i],item,sizeof(item)))goto invalid;
+        n=snprintf(items+off,sizeof(items)-off,"%s%s",visible?",":"",item);
+        if(n<0 || (size_t)n>=sizeof(items)-off)goto invalid;
+        off+=(size_t)n;
+        ++visible;
+    }
+    n=snprintf(json,sizeof(json),
+               "{\"count\":%zu,\"channels\":[%s]}\n",visible,items);
+    if(n<0 || (size_t)n>=sizeof(json))goto invalid;
+    interface_reply(client,200,json);
+    return;
+invalid:
+    interface_reply(client,503,"{\"error\":\"channel serialization failed\"}\n");
+}
+static void interface_channel_get(int client,const char *id)
+{
+    digit_channel_get_request_t in;
+    digit_channel_get_response_t out;
+    size_t used=0;
+    char item[700],json[900];
+    int n;
+    if(!digit_interface_channel_exact_valid(NULL,0,id)){
+        interface_reply(client,400,"{\"error\":\"invalid channel id\"}\n");return;
+    }
+    memset(&in,0,sizeof(in));
+    memset(&out,0,sizeof(out));
+    snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);
+    if(!interface_invoke(DIGIT_CHANNEL_SERVICE_GET,&in,sizeof(in),
+                         &out,sizeof(out),&used) || used!=sizeof(out)){
+        interface_reply(client,503,"{\"error\":\"channel service unavailable\"}\n");
+        return;
+    }
+    if(!digit_interface_channel_exact_valid(&out.channel,out.found,id)){
+        interface_reply(client,503,"{\"error\":\"invalid channel response\"}\n");
+        return;
+    }
+    if(!out.found){
+        interface_reply(client,404,"{\"found\":false}\n");return;
+    }
+    if(!interface_channel_json(&out.channel,item,sizeof(item))){
+        interface_reply(client,503,"{\"error\":\"channel serialization failed\"}\n");
+        return;
+    }
+    n=snprintf(json,sizeof(json),"{\"found\":true,\"channel\":%s}\n",item);
+    if(n<0 || (size_t)n>=sizeof(json)){
+        interface_reply(client,503,"{\"error\":\"channel serialization failed\"}\n");
+        return;
+    }
+    interface_reply(client,200,json);
+}
 /* [AI:GPT-6 | 2026-10-08] 1.4.7: validate the complete
  * Core message list before serializing; never silently truncate JSON. */
 static void interface_messages_list(int client,const char *id)
@@ -499,7 +569,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[14];
+    int tests[16];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -522,6 +592,9 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     /* [AI:GPT-6 | 2026-10-08] 1.4.8: execute alert boundary smoke checks. */
     tests[12]=digit_interface_alerts_valid(NULL,0,0,0);
     tests[13]=!digit_interface_alerts_valid(NULL,1,0,0);
+    /* [AI:GPT-6 | 2026-10-08] 1.4.10 channel boundary smoke checks. */
+    tests[14]=digit_interface_channels_valid(NULL,0,0);
+    tests[15]=!digit_interface_channels_valid(NULL,1,0);
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -529,11 +602,11 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     }
     r->negative_test_executed=1;
     r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
-                            tests[9] && tests[10] && tests[11] && tests[13];
+                            tests[9] && tests[10] && tests[11] && tests[13] && tests[15];
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
