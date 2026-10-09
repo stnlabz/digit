@@ -2,7 +2,7 @@
 
 **Organization:** STN-LABZ  
 **Status:** APPROVED — PM 20261009:0123 UTC  
-**Current operational baseline:** Interface 1.3.10 — Qualification GREEN / Hotload ACTIVE  
+**Current operational baseline:** Interface 1.4.0 — Qualification GREEN / Hotload ACTIVE  
 **Prepared:** 2026-10-08
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
@@ -15,7 +15,7 @@ Develop Digit into a deterministic, modular, platform-independent autonomous age
 
 ## Confirmed baseline
 
-Interface **1.3.10** is the latest operator-confirmed operational baseline. The 1.3.10 milestone reported **18/18 passing assertions**, **17/17 historical regression suites passing**, zero failures, and runtime `MODULE QUALIFICATION_GREEN` / `MODULE HOTLOAD_ACTIVE` on **2026-10-09 at 01:43:53 UTC**.
+Interface **1.3.10** is the latest operator-confirmed operational baseline. The 1.4.0 milestone reported **18/18 passing assertions**, **17/17 historical regression suites passing**, zero failures, and runtime `MODULE QUALIFICATION_GREEN` / `MODULE HOTLOAD_ACTIVE` on **2026-10-09 at 02:54:55 UTC**.
 
 ### Interface security milestone evidence
 
@@ -138,7 +138,7 @@ Implement and validate authorized, structured channel communication, delivery tr
 ---
 
 **Roadmap disposition:** APPROVED: PM 20261009:0123 UTC.  
-**Operational baseline:** Interface 1.3.10 GREEN / ACTIVE (operator-confirmed 2026-10-09 01:43:53 UTC).  
+**Operational baseline:** Interface 1.4.0 GREEN / ACTIVE (operator-confirmed 2026-10-09 02:54:55 UTC).  
 **Next development target:** Interface 1.4.0.
 
 *Engineering systems worthy of trust when trust matters most.*
