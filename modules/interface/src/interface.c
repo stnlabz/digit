@@ -506,6 +506,44 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
 }
+/* [AI:GPT-6 | 2026-10-09] Return the exact bound Security ID only
+ * to a currently assigned organization SA who belongs to the project.
+ * This is metadata retrieval, not a new authorization grant. */
+if(strncmp(request,"GET /admin/security-binding?scope=",
+           sizeof("GET /admin/security-binding?scope=")-1U)==0){
+    const char *begin=request+sizeof("GET /admin/security-binding?scope=")-1U;
+    const char *end=strchr(begin,' ');
+    const char *sep;
+    char org[DIGIT_PROJECT_ID_MAX],project[DIGIT_PROJECT_ID_MAX];
+    char channel[DIGIT_CHANNEL_ID_MAX],json[256];
+    size_t on,pn,i;
+    if(!end||strncmp(end," HTTP/1.1\r\n",sizeof(" HTTP/1.1\r\n")-1U)!=0||
+       !(sep=memchr(begin,'/',(size_t)(end-begin)))){
+        interface_reply(client,400,"{\"error\":\"invalid project scope\"}\n");return;
+    }
+    on=(size_t)(sep-begin);pn=(size_t)(end-sep-1);
+    if(!on||!pn||on>=sizeof(org)||pn>=sizeof(project)){
+        interface_reply(client,400,"{\"error\":\"invalid project scope\"}\n");return;
+    }
+    for(i=0;i<on+pn;++i){
+        unsigned char c=(unsigned char)(i<on?begin[i]:sep[1+i-on]);
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+             (c>='0'&&c<='9')||c=='-'||c=='_')){
+            interface_reply(client,400,"{\"error\":\"invalid project scope\"}\n");return;
+        }
+    }
+    memcpy(org,begin,on);org[on]=0;
+    memcpy(project,sep+1,pn);project[pn]=0;
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)||
+       !digit_project_security_member(DIGIT_PROJECT_ROOT,org,project,identity)){
+        interface_reply(client,403,"{\"error\":\"organization SA and project membership required\"}\n");return;
+    }
+    if(!digit_project_security_channel_id(DIGIT_PROJECT_ROOT,org,project,channel,sizeof(channel))){
+        interface_reply(client,404,"{\"error\":\"security channel not bound\"}\n");return;
+    }
+    snprintf(json,sizeof(json),"{\"channel_id\":\"%s\"}\n",channel);
+    interface_reply(client,200,json);return;
+}
 /* [AI:GPT-6 | 2026-10-09] 1.6.0 restricted SA channel grant.
  * The authenticated identity, not the request body, is the granting actor.
  * No grant exists unless the project Security channel is already bound. */
