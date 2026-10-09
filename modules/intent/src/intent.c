@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #include "intent.h"
 #include "../../corpus/includes/corpus.h"
@@ -178,6 +179,28 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         return;
     }
     text=interpreted;
+    /* [AI:GPT-6 | 2026-10-09] A bounded solve-equation request is
+     * an arithmetic knowledge query, not a privileged executable action. */
+    {
+        const char *p=text;
+        if(strncasecmp(p,"digit ",6)==0)p+=6;
+        if(strncasecmp(p,"solve ",6)==0){
+            const char *q=p+6;int equation=0,variable=0,valid=1;
+            while(*q){
+                unsigned char c=(unsigned char)*q++;
+                if(c=='=')equation=1;
+                else if(c=='x'||c=='X')variable=1;
+                else if(!(isdigit(c)||isspace(c)||c=='.'||c=='+'||
+                          c=='-'||c=='*'||c=='/'||c=='('||c==')'||c=='?'))
+                    valid=0;
+            }
+            if(equation&&variable&&valid){
+                set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,
+                           1U,"Bounded algebra equation request.");
+                return;
+            }
+        }
+    }
     action=starts_with_command(text,action_words,sizeof(action_words)/sizeof(action_words[0]));
     status=any_word(text,status_words,sizeof(status_words)/sizeof(status_words[0]));
     explain=find_word(text,"explain",&after);
@@ -283,6 +306,8 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"why did qualification fail", DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
+        {"solve 3*x - 6 = 0", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"solve x + 1 = x + 2", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
         {"What is the build status?", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Please build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
@@ -332,7 +357,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 5,
+    "intent", "Digit Intent", 1, 1, 6,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
