@@ -15,7 +15,8 @@ HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
-MILESTONE_TEST_TARGET := bin/test_1_4_6
+MILESTONE_TEST_TARGET := bin/test_1_4_7
+REPAIR_TEST_TARGET := bin/test_1_4_6
 PREVIOUS_MILESTONE_TEST_TARGET := bin/test_1_4_5
 UTF8_TEST_TARGET := bin/test_1_4_4
 RECORD_TEST_TARGET := bin/test_1_4_3
@@ -33,7 +34,7 @@ PROJECT_BRIDGE_TEST_TARGET := bin/test_project_channel_bridge
 SA_TEST_TARGET := bin/test_security_sa
 MESSAGE_ORIGIN_TEST_TARGET := bin/test_message_origin
 PROJECT_ADMIN_ROUTE_TEST_TARGET := bin/test_project_admin_route
-SOURCE := src/interface.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
+SOURCE := src/interface.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -48,7 +49,7 @@ check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h includes/project_admin_route.h includes/message_origin.h includes/http_write.h includes/knowledge_query.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h includes/project_admin_route.h includes/message_origin.h includes/message_results.h includes/http_write.h includes/knowledge_query.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
 $(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
@@ -111,8 +112,11 @@ $(UTF8_TEST_TARGET): tests/test_1_4_4.c src/knowledge_query.c includes/knowledge
 $(PREVIOUS_MILESTONE_TEST_TARGET): tests/test_1_4_5.c src/knowledge_query.c includes/knowledge_query.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_5.c src/knowledge_query.c -o $@
 
-$(MILESTONE_TEST_TARGET): tests/test_1_4_6.c src/http_write.c src/knowledge_query.c includes/http_write.h includes/knowledge_query.h | bin
+$(REPAIR_TEST_TARGET): tests/test_1_4_6.c src/http_write.c src/knowledge_query.c includes/http_write.h includes/knowledge_query.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_6.c src/http_write.c src/knowledge_query.c -o $@
+
+$(MILESTONE_TEST_TARGET): tests/test_1_4_7.c src/message_results.c src/controlled_communication.c includes/message_results.h includes/controlled_communication.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_1_4_7.c src/message_results.c src/controlled_communication.c -o $@
 
 $(PROJECT_BRIDGE_TEST_TARGET): tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c includes/project_channel_bridge.h includes/security_sa.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_project_channel_bridge.c src/project_channel_bridge.c src/project_provision.c src/security_sa.c -o $@
@@ -126,12 +130,12 @@ $(MESSAGE_ORIGIN_TEST_TARGET): tests/test_message_origin.c includes/message_orig
 $(SA_TEST_TARGET): tests/test_security_sa.c src/security_sa.c includes/security_sa.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_security_sa.c src/security_sa.c -o $@
 
-test: check-abi $(MILESTONE_TEST_TARGET) $(PREVIOUS_MILESTONE_TEST_TARGET) $(UTF8_TEST_TARGET) $(RECORD_TEST_TARGET) $(INTEGRITY_TEST_TARGET) $(KNOWLEDGE_TEST_TARGET) $(COMMUNICATION_TEST_TARGET) $(STABILIZATION_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET)
-	@echo 'DIGIT INTERFACE 1.4.6 — MILESTONE'
+test: check-abi $(MILESTONE_TEST_TARGET) $(REPAIR_TEST_TARGET) $(PREVIOUS_MILESTONE_TEST_TARGET) $(UTF8_TEST_TARGET) $(RECORD_TEST_TARGET) $(INTEGRITY_TEST_TARGET) $(KNOWLEDGE_TEST_TARGET) $(COMMUNICATION_TEST_TARGET) $(STABILIZATION_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET)
+	@echo 'DIGIT INTERFACE 1.4.7 — MILESTONE'
 	./$(MILESTONE_TEST_TARGET)
 	@echo 'DIGIT INTERFACE — HISTORICAL REGRESSION'
 	@set -eu; passed=0; failed=0; \
-	for suite in $(PREVIOUS_MILESTONE_TEST_TARGET) $(UTF8_TEST_TARGET) $(RECORD_TEST_TARGET) $(INTEGRITY_TEST_TARGET) $(KNOWLEDGE_TEST_TARGET) $(COMMUNICATION_TEST_TARGET) $(STABILIZATION_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET); do \
+	for suite in $(REPAIR_TEST_TARGET) $(PREVIOUS_MILESTONE_TEST_TARGET) $(UTF8_TEST_TARGET) $(RECORD_TEST_TARGET) $(INTEGRITY_TEST_TARGET) $(KNOWLEDGE_TEST_TARGET) $(COMMUNICATION_TEST_TARGET) $(STABILIZATION_TEST_TARGET) $(PRIOR_MILESTONE_TEST_TARGET) $(EARLIER_MILESTONE_TEST_TARGET) $(OLDEST_MILESTONE_TEST_TARGET) $(FIRST_MILESTONE_TEST_TARGET) $(BASE_MILESTONE_TEST_TARGET) $(ORIGINAL_MILESTONE_TEST_TARGET) $(TEST_TARGET) $(ACCESS_TEST_TARGET) $(SESSION_TEST_TARGET) $(HTTP_AUTH_TEST_TARGET) $(ACCOUNT_AUTH_TEST_TARGET) $(CHANNEL_ACL_TEST_TARGET) $(PROJECT_TEST_TARGET) $(PROJECT_BRIDGE_TEST_TARGET) $(SA_TEST_TARGET) $(MESSAGE_ORIGIN_TEST_TARGET) $(PROJECT_ADMIN_ROUTE_TEST_TARGET); do \
 	  output=$$(mktemp); \
 	  if ./$$suite >"$$output" 2>&1; then \
 	    passed=$$((passed + 1)); \
