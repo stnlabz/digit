@@ -10,6 +10,40 @@ static size_t bounded(const char *s,size_t capacity)
     while(n<capacity && s[n])++n;
     return n;
 }
+/* [AI:GPT-6 | 2026-10-08] Interface 1.4.4: reject malformed
+ * UTF-8 before passing knowledge to JSON. Accept canonical Unicode scalar
+ * values only: no overlong encodings, surrogate values or invalid tails. */
+static int digit_knowledge_utf8_valid(const unsigned char *s,size_t n)
+{
+    size_t i=0;
+    while(i<n){
+        unsigned char a=s[i],b,c,d;
+        if(a<0x80){++i;continue;}
+        if(a<0xc2 || a>0xf4)return 0;
+        if(a<=0xdf){
+            if(i+1>=n)return 0;
+            b=s[i+1];
+            if(b<0x80 || b>0xbf)return 0;
+            i+=2;continue;
+        }
+        if(a<=0xef){
+            if(i+2>=n)return 0;
+            b=s[i+1];c=s[i+2];
+            if(b<0x80 || b>0xbf || c<0x80 || c>0xbf ||
+               (a==0xe0 && b<0xa0) ||
+               (a==0xed && b>=0xa0))return 0;
+            i+=3;continue;
+        }
+        if(i+3>=n)return 0;
+        b=s[i+1];c=s[i+2];d=s[i+3];
+        if(b<0x80 || b>0xbf || c<0x80 || c>0xbf ||
+           d<0x80 || d>0xbf ||
+           (a==0xf0 && b<0x90) ||
+           (a==0xf4 && b>0x8f))return 0;
+        i+=4;
+    }
+    return 1;
+}
 static int printable(const char *s,size_t capacity)
 {
     size_t n=bounded(s,capacity),i;
@@ -18,7 +52,7 @@ static int printable(const char *s,size_t capacity)
         unsigned char ch=(unsigned char)s[i];
         if(ch<32 || ch==127)return 0;
     }
-    return 1;
+    return digit_knowledge_utf8_valid((const unsigned char *)s,n);
 }
 int digit_knowledge_query_valid(const char *query)
 {
