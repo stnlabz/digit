@@ -473,12 +473,6 @@ if(strncmp(request,"GET /knowledge/record/",22)==0){
     if(!digit_interface_corpus_exact_json(&out.record,out.found,id,result,sizeof(result))){
         interface_reply(client,503,"{\"error\":\"corpus response invalid\"}\n");return;
     }
-    if(out.found && strcmp(out.record.id,id)!=0){
-        interface_reply(client,503,"{\"error\":\"corpus record identity mismatch\"}\n");return;
-    }
-    if(!digit_knowledge_single_json(&out.record,out.found,result,sizeof(result))){
-        interface_reply(client,503,"{\"error\":\"corpus record invalid or oversized\"}\n");return;
-    }
     interface_reply(client,200,result);return;
 }
 /* [AI:GPT-6 | 2026-10-08] 1.4.1: authenticated knowledge
@@ -524,9 +518,6 @@ if(strncmp(request,"GET /corpus/",12)==0){
     if(!digit_interface_corpus_exact_json(&out.record,out.found,rid,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"invalid corpus result\"}\n");return;
     }
-    if(!digit_knowledge_single_json(&out.record,out.found,json,sizeof(json))){
-        interface_reply(client,503,"{\"error\":\"invalid corpus record\"}\n");return;
-    }
     if(!out.found){interface_reply(client,404,json);return;}
     interface_reply(client,200,json);return;
 }
@@ -545,8 +536,7 @@ if(strncmp(request,"POST /corpus/search ",20)==0){
                          &out,sizeof(out),&used) || used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;
     }
-    if(!digit_interface_corpus_search_valid(out.records,out.count,CORPUS_SEARCH_MAX) ||
-       !digit_knowledge_result_json(out.records,out.count,json,sizeof(json))){
+    if(!digit_interface_corpus_search_json(out.records,out.count,CORPUS_SEARCH_MAX,json,sizeof(json))){
         interface_reply(client,503,"{\"error\":\"invalid corpus search result\"}\n");return;
     }
     interface_reply(client,200,json);return;
@@ -609,5 +599,5 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 }
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
