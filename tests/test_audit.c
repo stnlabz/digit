@@ -38,6 +38,25 @@ int main(void)
     check(digit_audit_event("TEST", "NULL_DETAIL", NULL), "null detail writes");
     check(digit_audit_event(NULL, "BAD", NULL) == 0, "null component is rejected");
     check(digit_audit_event("TEST", NULL, NULL) == 0, "null event is rejected");
+    /* [AI:GPT-6 | 2026-10-08] Core lifecycle audit remains writable
+     * well beyond the retired 128-event ABI ceiling. */
+    check(digit_audit_lifecycle_capacity() == 8192U,
+          "Core lifecycle buffer holds 8192 entries");
+    for (unsigned int i = 0; i < 8200U; ++i)
+        digit_audit_lifecycle("sacrificial", "ACTIVATED", "source=core");
+    check(digit_audit_lifecycle_count() == 8192U,
+          "Core ring retains 8192 most recent events");
+    check(digit_audit_sync(), "persistent lifecycle history flushes");
+    {
+        FILE *in = fopen(path, "rb");
+        unsigned long lines = 0;
+        int ch;
+        if (in) {
+            while ((ch = fgetc(in)) != EOF) if (ch == '\\n') ++lines;
+            fclose(in);
+        }
+        check(lines >= 8200UL, "persistent audit retains events beyond ring capacity");
+    }
     digit_audit_close();
     check(digit_audit_event("TEST", "AFTER_CLOSE", NULL) == 0, "write after close is rejected");
 
