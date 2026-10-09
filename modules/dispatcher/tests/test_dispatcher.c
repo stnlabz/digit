@@ -7,6 +7,7 @@
 #include "intent.h"
 #include "interpretation.h"
 #include "response.h"
+#include "lesson.h"
 
 static stnlabz_module_service_handler_fn dispatcher_handler;
 static unsigned response_calls;
