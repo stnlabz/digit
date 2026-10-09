@@ -23,3 +23,12 @@ int digit_interface_corpus_exact_json(const digit_knowledge_record_t *record,int
  if(!digit_interface_corpus_exact_valid(record,found,requested_id))return 0;
  return digit_knowledge_single_json(record,found,output,capacity);
 }
+
+/* [AI:GPT-6 | 2026-10-08] 1.5.1 bounded shared search JSON rendering. */
+int digit_interface_corpus_search_json(const digit_knowledge_record_t *records,size_t count,size_t record_capacity,char *output,size_t output_capacity)
+{
+ if(!output||!output_capacity)return 0;
+ output[0]=0;
+ if(!digit_interface_corpus_search_valid(records,count,record_capacity))return 0;
+ return digit_knowledge_result_json(records,count,output,output_capacity);
+}
