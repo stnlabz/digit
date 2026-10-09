@@ -116,9 +116,17 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     }
     /* [AI:GPT-6 | 2026-10-09] Only explicitly named, supported
      * capabilities execute. A generic ACTION cannot enter retrieval. */
-    else if(lesson_action(in->request,&out)){}
+    /* [AI:GPT-6 | 2026-10-09] Require an established, target-consistent
+     * Intent before executing any capability, including lesson ingestion. */
+    else if(!intent_result.established ||
+            (intent_result.intent==DIGIT_INTENT_ACTION &&
+             intent_result.target!=DIGIT_INTENT_TARGET_CAPABILITY)){
+        out.answered=1;
+        snprintf(out.answer,sizeof(out.answer),"I can't establish an authorized request to dispatch.");
+    }
     else if(intent_result.intent==DIGIT_INTENT_ACTION){
-        if(source_action(interpreted_request))source_scan(interpreted_request,&out);
+        if(lesson_action(interpreted_request,&out)){}
+        else if(source_action(interpreted_request))source_scan(interpreted_request,&out);
         else unsupported_action(&out);
     }
     else if(intent_result.intent==DIGIT_INTENT_STATUS&&source_action(interpreted_request))source_scan(interpreted_request,&out);
@@ -154,5 +162,5 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
 }
 static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
