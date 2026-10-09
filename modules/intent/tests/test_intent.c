@@ -127,6 +127,23 @@ int main(int argc, char **argv)
     expect_intent("negative-unknown", "flibbertigibbet",
                   DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U);
 
+    /* [AI:GPT-6 | 2026-10-09] Validate the actual interpreter,
+     * not only enum names and declared expectations. */
+    {
+        digit_intent_result_t interpreted;
+        digit_intent_interpret("ingest lesson-one",&interpreted);
+        if(interpreted.intent!=DIGIT_INTENT_ACTION||
+           interpreted.target!=DIGIT_INTENT_TARGET_CAPABILITY||
+           !interpreted.established){
+            fprintf(stderr,"FAIL actual ingest intent\\n");++failures;
+        }
+        digit_intent_interpret("What does ingest mean?",&interpreted);
+        if(interpreted.intent!=DIGIT_INTENT_FACT||
+           interpreted.target!=DIGIT_INTENT_TARGET_KNOWLEDGE){
+            fprintf(stderr,"FAIL factual ingest question\\n");++failures;
+        }
+    }
+
     if (failures != 0)
     {
         fprintf(stderr, "Intent qualification tests failed: %d\n", failures);
