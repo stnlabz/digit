@@ -8,12 +8,14 @@
 #include "interpretation.h"
 #include "response.h"
 #include "lesson.h"
+#include "arithmetic.h"
 
 static stnlabz_module_service_handler_fn dispatcher_handler;
 static unsigned response_calls;
 static digit_intent_class_t chosen_intent;
 static unsigned int chosen_established=1;
 static unsigned int lesson_calls=0;
+static unsigned int arithmetic_calls=0;
 
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
@@ -45,11 +47,22 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   lesson_calls++;
   return STNLABZ_MODULE_ERR_NOT_FOUND;
  }
+ if(!strcmp(name,DIGIT_ARITHMETIC_SERVICE)){
+  const digit_arithmetic_request_t *in=input;
+  digit_arithmetic_result_t *out=output;
+  if(isize!=sizeof(*in)||osize<sizeof(*out)||strcmp(in->expression,"solve 3*x - 6 = 0"))
+   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  arithmetic_calls++;
+  memset(out,0,sizeof(*out));out->status=DIGIT_ARITHMETIC_OK;
+  snprintf(out->decimal_answer,sizeof(out->decimal_answer),"x = 2.");
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
+ }
  if(!strcmp(name,DIGIT_RESPONSE_SERVICE)){
   digit_response_result_t *out=output;
   if(osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
   response_calls++;memset(out,0,sizeof(*out));out->answered=1;
-  snprintf(out->answer,sizeof(out->answer),"Bounded response");
+  snprintf(out->answer,sizeof(out->answer),"%s",
+   strstr(((const digit_response_request_t *)input)->question,"solve 3*x - 6 = 0")?"x = 2.":"Bounded response");
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  return STNLABZ_MODULE_ERR_NOT_FOUND;
@@ -69,7 +82,7 @@ static int dispatch_case(const char *request,digit_intent_class_t intent,
 int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
- if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=1||!d->qualify){
+ if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=2||!d->qualify){
   fprintf(stderr,"Dispatcher descriptor invalid\\n");return 1;
  }
  memset(&q,0,sizeof(q));
@@ -110,6 +123,18 @@ int main(void){
       lesson_calls!=0||strstr(output.answer,"can't establish")==NULL){
     fprintf(stderr,"Dispatcher unestablished action gate FAILED\\n");return 1;
    }
+  }
+  /* [AI:GPT-6 | 2026-10-09] Bounded interaction-context regression. */
+  if(!dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
+                    "no retained equation") ||
+     !dispatch_case("solve 3*x - 6 = 0",DIGIT_INTENT_FACT,1,"x = 2.") ||
+     !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
+                    "Re-evaluation agrees") ||
+     arithmetic_calls!=1 ||
+     !dispatch_case("Who are you?",DIGIT_INTENT_FACT,1,"Bounded response") ||
+     !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
+                    "no retained equation")){
+   fprintf(stderr,"Dispatcher bounded follow-up context FAILED\\n");return 1;
   }
   if(!d->stop||d->stop()!=STNLABZ_MODULE_OK){
    fprintf(stderr,"Dispatcher mock shutdown FAILED\\n");return 1;
