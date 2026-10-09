@@ -256,13 +256,15 @@ static int interface_alert_channel_messages(int client,const char *channel,
     if(n<0||(size_t)n>=sizeof(json))goto invalid;
     off=(size_t)n;
     for(i=0;i<result.count;++i){
-        char id[160],detail[2400],summary[700],content[4096],escaped[8200];
+        char id[160],detail[2400],summary[700],source[200],content[4096],escaped[8200];
         const digit_alert_t *a=&result.alerts[i];
         interface_json_escape(a->id,id,sizeof(id));
         interface_json_escape(a->summary,summary,sizeof(summary));
+        interface_json_escape(a->source,source,sizeof(source));
         interface_json_escape(a->detail,detail,sizeof(detail));
-        n=snprintf(content,sizeof(content),"[%s] %s%s%s%s",
+        n=snprintf(content,sizeof(content),"[%s] %s | Source: %s | Time: %llu | ID: %s%s%s%s",
                    interface_alert_severity_string(a->severity),summary,
+                   source[0]?source:"unspecified",a->created_at,id,
                    detail[0]?" | ":"",detail,a->acknowledged?" [ACK]":"");
         if(n<0||(size_t)n>=sizeof(content))goto invalid;
         interface_json_escape(content,escaped,sizeof(escaped));
