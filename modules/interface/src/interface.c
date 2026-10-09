@@ -214,8 +214,72 @@ static void interface_alerts_list(int client,int unacknowledged)
 invalid:
     interface_reply(client,503,"{\"error\":\"alert list serialization failed\"}\n");
 }
-static void interface_alert_get(int client,const char *id){digit_alert_get_request_t in;digit_alert_get_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_GET,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.found){interface_reply(client,404,"{\"found\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"found\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
-static void interface_alert_ack(int client,const char *id){digit_alert_acknowledge_request_t in;digit_alert_acknowledge_response_t out;size_t used=0;char item[4000],json[4300];memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);if(!interface_invoke(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)){interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;}if(!out.acknowledged){interface_reply(client,404,"{\"acknowledged\":false}\n");return;}interface_alert_json(&out.alert,item,sizeof(item));snprintf(json,sizeof(json),"{\"acknowledged\":true,\"alert\":%s}\n",item);interface_reply(client,200,json);}
+/* [AI:GPT-6 | 2026-10-08] 1.4.9: untrusted Core
+ * exact alert results must match requested identities and state. */
+static void interface_alert_get(int client,const char *id)
+{
+    digit_alert_get_request_t in;
+    digit_alert_get_response_t out;
+    size_t used=0;
+    char item[4000],json[4300];
+    int n;
+    if(!digit_interface_alert_exact_valid(NULL,0,id,0)){
+        interface_reply(client,400,"{\"error\":\"invalid alert id\"}\n");return;
+    }
+    memset(&in,0,sizeof(in));
+    memset(&out,0,sizeof(out));
+    snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);
+    if(!interface_invoke(DIGIT_ALERT_SERVICE_GET,&in,sizeof(in),
+                         &out,sizeof(out),&used)||used!=sizeof(out)){
+        interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;
+    }
+    if(!digit_interface_alert_exact_valid(&out.alert,out.found,id,0)){
+        interface_reply(client,503,"{\"error\":\"invalid alert response\"}\n");return;
+    }
+    if(!out.found){
+        interface_reply(client,404,"{\"found\":false}\n");return;
+    }
+    if(!interface_alert_json(&out.alert,item,sizeof(item))){
+        interface_reply(client,503,"{\"error\":\"alert serialization failed\"}\n");return;
+    }
+    n=snprintf(json,sizeof(json),"{\"found\":true,\"alert\":%s}\n",item);
+    if(n<0||(size_t)n>=sizeof(json)){
+        interface_reply(client,503,"{\"error\":\"alert serialization failed\"}\n");return;
+    }
+    interface_reply(client,200,json);
+}
+static void interface_alert_ack(int client,const char *id)
+{
+    digit_alert_acknowledge_request_t in;
+    digit_alert_acknowledge_response_t out;
+    size_t used=0;
+    char item[4000],json[4300];
+    int n;
+    if(!digit_interface_alert_exact_valid(NULL,0,id,1)){
+        interface_reply(client,400,"{\"error\":\"invalid alert id\"}\n");return;
+    }
+    memset(&in,0,sizeof(in));
+    memset(&out,0,sizeof(out));
+    snprintf(in.alert_id,sizeof(in.alert_id),"%s",id);
+    if(!interface_invoke(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,&in,sizeof(in),
+                         &out,sizeof(out),&used)||used!=sizeof(out)){
+        interface_reply(client,503,"{\"error\":\"alert service unavailable\"}\n");return;
+    }
+    if(!digit_interface_alert_exact_valid(&out.alert,out.acknowledged,id,1)){
+        interface_reply(client,503,"{\"error\":\"invalid acknowledgement\"}\n");return;
+    }
+    if(!out.acknowledged){
+        interface_reply(client,404,"{\"acknowledged\":false}\n");return;
+    }
+    if(!interface_alert_json(&out.alert,item,sizeof(item))){
+        interface_reply(client,503,"{\"error\":\"alert serialization failed\"}\n");return;
+    }
+    n=snprintf(json,sizeof(json),"{\"acknowledged\":true,\"alert\":%s}\n",item);
+    if(n<0||(size_t)n>=sizeof(json)){
+        interface_reply(client,503,"{\"error\":\"alert serialization failed\"}\n");return;
+    }
+    interface_reply(client,200,json);
+}
 
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
@@ -471,5 +535,5 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 }
 static stnlabz_module_result_t interface_start(const stnlabz_module_host_t *h){struct sockaddr_in a;int enabled=1;if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;digit_session_store_init(&interface_sessions);interface_host=h;interface_fd=socket(AF_INET,SOCK_STREAM,0);if(interface_fd<0)return STNLABZ_MODULE_ERR_START_FAILED;(void)setsockopt(interface_fd,SOL_SOCKET,SO_REUSEADDR,&enabled,sizeof(enabled));memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(DIGIT_INTERFACE_DEFAULT_PORT);if(inet_pton(AF_INET,DIGIT_INTERFACE_DEFAULT_HOST,&a.sin_addr)!=1||bind(interface_fd,(struct sockaddr *)&a,sizeof(a))!=0||listen(interface_fd,8)!=0){close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}interface_running=1;if(pthread_create(&interface_thread,NULL,interface_server,NULL)!=0){interface_running=0;close(interface_fd);interface_fd=-1;return STNLABZ_MODULE_ERR_START_FAILED;}if(h->send_message)(void)h->send_message("[INTERFACE] HTTP interface active on loopback:8081; authenticated remote access not yet enabled");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,4,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
