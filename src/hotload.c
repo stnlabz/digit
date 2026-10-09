@@ -207,7 +207,6 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     digit_candidate_result_t result;
     stnlabz_module_descriptor_t identity;
     const stnlabz_module_descriptor_t *loaded_descriptor = NULL;
-    stnlabz_module_loader_result_t loader_result;
     stnlabz_module_result_t module_result;
     char staged[DIGIT_HOTLOAD_PATH_MAX];
     int already_qualified;
@@ -217,7 +216,7 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
     stnlabz_loaded_module_t old_copy;
     stnlabz_module_registry_t registry_before;
     int old_active = 0;
-    int candidate_started = 0;
+    int candidate_start_attempted = 0;
     int preloaded = 0;
 
     memset(&result, 0, sizeof(result));
@@ -339,13 +338,13 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
         digit_hotload_audit("ADMISSION_FAILED", candidate->module_id, &result);
         goto restore;
     }
+    candidate_start_attempted = 1;
     if (loaded_descriptor->start != NULL &&
         loaded_descriptor->start(&manager->host) != STNLABZ_MODULE_OK)
     {
         digit_hotload_audit("START_FAILED", candidate->module_id, &result);
         goto restore;
     }
-    candidate_started = 1;
 
     if (!already_qualified &&
         (!digit_qualification_record(&manager->qualifications, loaded_descriptor) ||
@@ -385,7 +384,7 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
 restore:
     /* Stop candidate services before restoring the incumbent. The ABI
      * audit trail remains append-only; only live state is restored. */
-    if (candidate_started && loaded_descriptor->stop != NULL)
+    if (candidate_start_attempted && loaded_descriptor->stop != NULL)
         (void)loaded_descriptor->stop();
     {
         size_t saved_count = registry_before.count;
