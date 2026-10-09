@@ -224,6 +224,60 @@ static void interface_channel_get(int client,const char *id)
 }
 /* [AI:GPT-6 | 2026-10-08] 1.4.7: validate the complete
  * Core message list before serializing; never silently truncate JSON. */
+/* [AI:GPT-6 | 2026-10-09] Read-only operational Alerts projection.
+ * The Core Alert record is authoritative: no duplicate messages, no
+ * replay on refresh. This route is restricted to the STN-Labz Operations
+ * Alerts binding AND a currently authorized organization SA. */
+static int interface_alert_channel_messages(int client,const char *channel,
+ const char *identity){
+    char bound[DIGIT_CHANNEL_ID_MAX];
+    digit_alert_list_request_t request;
+    digit_alert_list_response_t result;
+    char json[INTERFACE_BUFFER_MAX];
+    size_t used=0,off=0,i;
+    int n;
+    if(!digit_alerts_channel_lookup(DIGIT_PROJECT_ROOT,"stn-labz","operations",
+                                   bound,sizeof(bound)) ||
+       strcmp(bound,channel)!=0)return 0;
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,"stn-labz",identity) ||
+       !digit_project_security_member(DIGIT_PROJECT_ROOT,"stn-labz","operations",identity)){
+        interface_reply(client,403,"{\"error\":\"alerts scope forbidden\"}\n");return 1;
+    }
+    memset(&request,0,sizeof(request));
+    memset(&result,0,sizeof(result));
+    if(!interface_invoke(DIGIT_ALERT_SERVICE_LIST,&request,sizeof(request),
+                         &result,sizeof(result),&used)||used!=sizeof(result)||
+       !digit_interface_alerts_valid(result.alerts,result.count,
+                                    DIGIT_CORE_SERVICE_ALERT_LIST_MAX,0)){
+        interface_reply(client,503,"{\"error\":\"alert records unavailable\"}\n");return 1;
+    }
+    n=snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"count\":%zu,\"messages\":[",
+               channel,result.count);
+    if(n<0||(size_t)n>=sizeof(json))goto invalid;
+    off=(size_t)n;
+    for(i=0;i<result.count;++i){
+        char id[160],detail[2400],summary[700],content[4096],escaped[8200];
+        const digit_alert_t *a=&result.alerts[i];
+        interface_json_escape(a->id,id,sizeof(id));
+        interface_json_escape(a->summary,summary,sizeof(summary));
+        interface_json_escape(a->detail,detail,sizeof(detail));
+        n=snprintf(content,sizeof(content),"[%s] %s%s%s%s",
+                   interface_alert_severity_string(a->severity),summary,
+                   detail[0]?" | ":"",detail,a->acknowledged?" [ACK]":"");
+        if(n<0||(size_t)n>=sizeof(content))goto invalid;
+        interface_json_escape(content,escaped,sizeof(escaped));
+        n=snprintf(json+off,sizeof(json)-off,
+          "%s{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"digit\",\"body\":\"%s\"}",
+          i?",":"",id,channel,a->created_at,escaped);
+        if(n<0||(size_t)n>=sizeof(json)-off)goto invalid;
+        off+=(size_t)n;
+    }
+    n=snprintf(json+off,sizeof(json)-off,"]}\n");
+    if(n<0||(size_t)n>=sizeof(json)-off)goto invalid;
+    interface_reply(client,200,json);return 1;
+invalid:
+    interface_reply(client,503,"{\"error\":\"Alerts channel response exceeded limits\"}\n");return 1;
+}
 static void interface_messages_list(int client,const char *id)
 {
     digit_channel_message_list_request_t in;
@@ -760,7 +814,7 @@ if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,ident
     }
     snprintf(json,sizeof(json),"{\"created\":true,\"acl_assigned\":false,\"channel\":%s}\n",item);
     interface_reply(client,200,json);return;
-}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
+}if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){if(!interface_alert_channel_messages(client,id,identity))interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
 if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_learn(client,learn);return;}interface_dispatch(body,&out);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
