@@ -2,7 +2,7 @@
 
 **Organization:** STN-LABZ  
 **Status:** APPROVED — PM 20261009:0123 UTC  
-**Current operational baseline:** Interface 1.3.5 — Qualification GREEN / Hotload ACTIVE  
+**Current operational baseline:** Interface 1.3.10 — Qualification GREEN / Hotload ACTIVE  
 **Prepared:** 2026-10-08
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
@@ -15,9 +15,22 @@ Develop Digit into a deterministic, modular, platform-independent autonomous age
 
 ## Confirmed baseline
 
-Interface 1.3.5 is the current operator-confirmed baseline: **7/7 milestone assertions passed**, **12/12 historical regression suites passed**, and runtime events confirmed **MODULE QUALIFICATION_GREEN** and **MODULE HOTLOAD_ACTIVE** on 2026-10-09 at **01:13:57 UTC**. Previous confirmed baselines include Interface 1.3.2 (41/41 project-provisioning assertions; GREEN / ACTIVE at 00:18:44 UTC), 1.3.3 (audit regression 10/10 passed separately; Interface HOTLOAD_ACTIVE at 00:55:16 UTC), and 1.3.4 (12/12 milestone assertions, 11/11 historical suites, HOTLOAD_ACTIVE at 01:04:33 UTC).
+Interface **1.3.10** is the latest operator-confirmed operational baseline. The 1.3.10 milestone reported **18/18 passing assertions**, **17/17 historical regression suites passing**, zero failures, and runtime `MODULE QUALIFICATION_GREEN` / `MODULE HOTLOAD_ACTIVE` on **2026-10-09 at 01:43:53 UTC**.
 
-These are operator-reported test and runtime results, not independently reproduced tests.
+### Interface security milestone evidence
+
+| Version | Milestone tests | Historical regression suites | Runtime evidence (UTC, 2026-10-09) |
+| --- | --- | --- | --- |
+| 1.3.3 | Prior operator-confirmed audit regression 10/10; dedicated milestone count not established here | Not recorded here | HOTLOAD_ACTIVE 00:55:16 |
+| 1.3.4 | 12/12 | 11/11 | HOTLOAD_ACTIVE 01:04:33 |
+| 1.3.5 | 7/7 | 12/12 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:13:57 |
+| 1.3.6 | 15/15 | 13/13 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:23:34 |
+| 1.3.7 | 15/15 | 14/14 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:29:22 |
+| 1.3.8 | 14/14 | 15/15 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:34:28 |
+| 1.3.9 | 19/19 | 16/16 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:40:02 |
+| 1.3.10 | 18/18 | 17/17 | QUALIFICATION_GREEN / HOTLOAD_ACTIVE 01:43:53 |
+
+All results above are **operator-reported** and were not independently reproduced by this roadmap update. Earlier Interface 1.3.2 baseline: 41/41 project-provisioning assertions; GREEN / ACTIVE at 00:18:44 UTC.
 
 Implemented Interface capabilities include:
 
@@ -35,15 +48,15 @@ These observations establish a baseline, not a claim that every project-wide tes
 
 ### Phase 1 — Interface foundation
 
-**Status:** Implemented and qualified through Interface 1.3.5.
+**Status:** Implemented and operator-qualified through Interface 1.3.10.
 
 Scope: HTTP interface, session authentication, protected ACL records, project security provisioning, SA authorization, Core channel binding, and negative security validation.
 
 ### Phase 2 — Complete Interface security
 
-**Proposed versions:** 1.3.3–1.3.10.
+**Status:** Completed through 1.3.10 — operator-reported qualification GREEN / hotload ACTIVE.
 
-Completed milestones through 1.3.5 address security membership snapshot checks, project metadata/READY consistency checks, and project-directory ownership validation. Remaining scope includes channel/project authorization consistency, authorization-revocation tests, resource limits, security audit coverage, and full applicable regression qualification.
+Milestones 1.3.3–1.3.10 cover protected membership and metadata consistency, directory ownership, channel/project authorization scope, SA and membership revocation, HTTP framing and resource limits, security audit event formatting, and final regression stabilization. Qualification applies to the reported test coverage; it does not establish untested behavior.
 
 ### Phase 3 — Controlled communications
 
@@ -63,19 +76,19 @@ Connect authorized Corpus/RAG retrieval to message handling while preserving sou
 
 Introduce bounded mission tasks, delegated execution, routine anomaly handling within authority, structured status reporting, escalation, recovery, and audit trails.
 
-## Proposed Interface milestones
+## Interface milestones and disposition
 
-| Version | Engineering objective | Completion evidence |
+| Version | Engineering objective | Disposition |
 | --- | --- | --- |
-| 1.3.3 | Security membership snapshot consistency | **ACTIVE** — Interface 1.3.3 HOTLOAD_ACTIVE at 00:55:16 UTC; full milestone-specific concurrency evidence not recorded here |
-| 1.3.4 | Project metadata and readiness race protection | **ACTIVE** — 12/12 milestone assertions; 11/11 historical suites; HOTLOAD_ACTIVE at 01:04:33 UTC. Alias rejection/restoration tested; deterministic concurrent mutation testing remains unproven |
-| 1.3.5 | Project-directory ownership validation | **GREEN / ACTIVE** — 7/7 milestone assertions; 12/12 historical suites; QUALIFICATION_GREEN and HOTLOAD_ACTIVE at 01:13:57 UTC. Real foreign-owned directory filesystem denial not exercised in reported tests |
-| 1.3.6 | Channel and project authorization consistency | Cross-project scope borrowing denied |
-| 1.3.7 | SA revocation and membership lifecycle | Revocation effective on next authorization request |
-| 1.3.8 | HTTP request and resource limits | Oversized/malformed requests rejected |
-| 1.3.9 | Security audit event coverage | Authorized and rejected operations traceable |
-| 1.3.10 | Interface regression stabilization | Full applicable test suite and runtime qualification GREEN |
-| 1.4.0 | Controlled communication milestone | End-to-end authorized channel exchange validated |
+| 1.3.3 | Security membership snapshot consistency | ACTIVE; earlier milestone-specific concurrency coverage not fully recorded |
+| 1.3.4 | Project metadata and readiness race protection | ACTIVE; alias rejection/restoration tested; deterministic concurrent mutation testing not proven in recorded evidence |
+| 1.3.5 | Project-directory ownership validation | GREEN / ACTIVE; actual foreign-owned filesystem denial not exercised in the reported suite |
+| 1.3.6 | Channel and project authorization consistency | GREEN / ACTIVE; same-organization and cross-organization scope borrowing denied in tests |
+| 1.3.7 | SA revocation and membership lifecycle | GREEN / ACTIVE; revocation, restoration and role downgrade covered |
+| 1.3.8 | HTTP request and resource limits | GREEN / ACTIVE; bounded framing, malformed/oversized input rejection covered |
+| 1.3.9 | Security audit event coverage | GREEN / ACTIVE; event classification and sensitive-data exclusion tested; delivery remains best-effort, not independently durable |
+| 1.3.10 | Interface regression stabilization | GREEN / ACTIVE; 18 milestone assertions and 17 historical suites passed |
+| 1.4.0 | Controlled communication milestone | **NEXT — PLANNED / NOT QUALIFIED** |
 
 Version assignments are **approved planning targets**, not authorization to change architecture. The STN-LABZ `MAJOR.MINOR.REVISION` sequence uses revisions 0 through 10, rolling over after `X.Y.10` to `X.(Y+1).0`.
 
@@ -113,16 +126,19 @@ New modules follow the Module Creation Request (MCR) process and applicable cont
 
 ## Immediate next objective
 
-**Interface 1.3.6 — Channel and Project Authorization Consistency**
+**Interface 1.4.0 — Controlled Communication Milestone**
 
-Verify that channel authorization cannot borrow project scope or security membership from a different organization or project. Add a dedicated 1.3.6 milestone test suite and retain historical regression coverage with concise summaries. Changes remain within the Interface module; Core and ABI are outside the scope of this milestone.
+Implement and validate authorized, structured channel communication, delivery tracking, and auditable communication records within the established Core service contracts and existing module boundaries. No automatic guest-to-employee authorization and no unrestricted employee direct messages.
 
-**Acceptance evidence:** Affected tests pass, the full applicable regression suite passes, and Digit reports `MODULE QUALIFICATION_GREEN` and `MODULE HOTLOAD_ACTIVE`.
+**Scope:** Interface module changes only unless explicitly authorized otherwise. Digit Core and the external ABI are not in scope.
+
+**Acceptance evidence:** Dedicated positive and negative 1.4.0 milestone tests, full applicable regression validation, operator review, and runtime `MODULE QUALIFICATION_GREEN` / `MODULE HOTLOAD_ACTIVE`. Planning does not establish qualification.
+
 
 ---
 
 **Roadmap disposition:** APPROVED: PM 20261009:0123 UTC.  
-**Operational baseline:** Interface 1.3.5 GREEN / ACTIVE (operator-confirmed 2026-10-09 01:13:57 UTC).  
-**Next development target:** Interface 1.3.6.
+**Operational baseline:** Interface 1.3.10 GREEN / ACTIVE (operator-confirmed 2026-10-09 01:43:53 UTC).  
+**Next development target:** Interface 1.4.0.
 
 *Engineering systems worthy of trust when trust matters most.*
