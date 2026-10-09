@@ -470,7 +470,7 @@ if(strncmp(request,"GET /knowledge/record/",22)==0){
                          &out,sizeof(out),&used)||used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;
     }
-    if(!digit_interface_corpus_exact_valid(&out.record,out.found,id)){
+    if(!digit_interface_corpus_exact_json(&out.record,out.found,id,result,sizeof(result))){
         interface_reply(client,503,"{\"error\":\"corpus response invalid\"}\n");return;
     }
     if(out.found && strcmp(out.record.id,id)!=0){
