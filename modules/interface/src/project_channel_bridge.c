@@ -375,11 +375,12 @@ int digit_project_channel_create_host(const char *root,const char *org,
        &result,sizeof(result),&used)!=STNLABZ_MODULE_OK||
     used!=sizeof(result)||!result.created||
     !project_component(result.channel.id))goto done;
- if(digit_project_security_owner(root,result.channel.id,owner_org,sizeof(owner_org),
-      owner_project,sizeof(owner_project))!=0)goto done;
  n=snprintf(entry,sizeof(entry),"%s\n",result.channel.id);
  if(n<2||(size_t)n>=sizeof(entry)||write(fd,entry,(size_t)n)!=n||
     fsync(fd)!=0||fsync(dir)!=0)goto done;
+ if(digit_project_security_owner(root,result.channel.id,owner_org,sizeof(owner_org),
+      owner_project,sizeof(owner_project))!=1||strcmp(owner_org,org)||
+      strcmp(owner_project,project))goto done;
  strcpy(channel,result.channel.id);ok=1;
 done:
  if(fd>=0)close(fd);
