@@ -43,7 +43,7 @@ typedef enum { DIGIT_CONTEXT_UNKNOWN=0,DIGIT_CONTEXT_CONVERSATION,DIGIT_CONTEXT_
 typedef struct { interface_relevance_t relevance; interface_context_category_t category; unsigned int confidence; char reason[256]; } interface_reasoning_result_t;
 typedef struct { char text[CORPUS_BUILDER_TEXT_MAX]; char source[256]; } interface_builder_request_t;
 typedef struct { int candidate; int stored; unsigned int confidence; char category[64]; char record_id[65]; char reason[256]; } interface_builder_result_t;
-typedef struct { char id[65]; char category[64]; char source[256]; char text[4096]; } interface_corpus_record_t;
+typedef digit_knowledge_record_t interface_corpus_record_t;
 typedef struct { int found; interface_corpus_record_t record; } interface_corpus_get_result_t;
 typedef struct { char query[4096]; } interface_corpus_search_request_t;
 typedef struct { size_t count; interface_corpus_record_t records[CORPUS_SEARCH_MAX]; } interface_corpus_search_result_t;
@@ -249,7 +249,7 @@ if(strncmp(request,"POST /knowledge/query ",22)==0){
         interface_reply(client,503,"{\"error\":\"corpus search unavailable\"}\n");return;
     }
     if(out.count>CORPUS_SEARCH_MAX ||
-       !digit_knowledge_result_json((const digit_knowledge_record_t *)out.records,
+       !digit_knowledge_result_json(out.records,
                                     out.count,result,sizeof(result))){
         interface_reply(client,503,"{\"error\":\"corpus response invalid or oversized\"}\n");return;
     }
