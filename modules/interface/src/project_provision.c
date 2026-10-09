@@ -53,6 +53,35 @@ static int private_regular(int dir,const char *name) {
            (st.st_mode&077)==0 &&
            (st.st_uid==0 || st.st_uid==geteuid());
 }
+/* [AI:GPT-6 | 2026-10-08] Project identity is authoritative data,
+ * not merely a protected file's existence. Parse exactly one bounded row
+ * and require the claimed scope to match the directory being opened. */
+static int project_metadata_matches(int dir,const char *org,const char *project) {
+    int fd=openat(dir,"project.tsv",O_RDONLY|O_NOFOLLOW);
+    char row[3*DIGIT_PROJECT_ID_MAX+4],*first,*second,*admin;
+    ssize_t n;
+    struct stat st;
+    int ok=0;
+    if(fd<0)return 0;
+    if(fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) || st.st_nlink!=1 ||
+       (st.st_mode&077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid()))
+        goto finish;
+    n=read(fd,row,sizeof(row));
+    if(n<5 || n>=(ssize_t)sizeof(row) || row[n-1]!='\\n')goto finish;
+    row[n-1]='\\0';
+    first=strchr(row,'\\t');
+    if(!first)goto finish;
+    *first++='\\0';
+    second=strchr(first,'\\t');
+    if(!second)goto finish;
+    *second++='\\0';
+    admin=second;
+    if(strchr(admin,'\\t') || !project_name(admin))goto finish;
+    ok=strcmp(row,org)==0 && strcmp(first,project)==0;
+finish:
+    if(close(fd)!=0)ok=0;
+    return ok;
+}
 int digit_project_security_ready(const char *root,const char *org,const char *project) {
     int base=-1,o=-1,p=-1,markerfd=-1,good=0;
     char marker[32];
@@ -64,7 +93,8 @@ int digit_project_security_ready(const char *root,const char *org,const char *pr
     o=open_private(base,org);if(o<0)goto end;
     p=open_private(o,project);if(p<0)goto end;
     if(!private_regular(p,"READY")||!private_regular(p,"security.tsv")||
-       !private_regular(p,"project.tsv"))goto end;
+       !private_regular(p,"project.tsv")||
+       !project_metadata_matches(p,org,project))goto end;
     markerfd=openat(p,"READY",O_RDONLY|O_NOFOLLOW);
     if(markerfd<0)goto end;
     n=read(markerfd,marker,sizeof(marker));
