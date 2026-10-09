@@ -137,7 +137,9 @@ int main(void) {
         char roster[4096];
         check(digit_project_members_json(root,"stn-labz","second","sysadmin",
                registry,roster,sizeof(roster)) &&
-              strstr(roster,"\"user\":\"sysadmin\"")!=NULL,
+              strstr(roster,"\"user\":\"sysadmin\"")!=NULL &&
+              strstr(roster,"\"account_verified_active\":")!=NULL &&
+              strstr(roster,"\"sa_authorized\":true")!=NULL,
               "authorized SA reads verified restricted members");
         check(!digit_project_members_json(root,"stn-labz","second","poe",
                registry,roster,sizeof(roster)),
