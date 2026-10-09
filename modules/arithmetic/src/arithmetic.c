@@ -479,7 +479,21 @@ static stnlabz_module_result_t arithmetic_qualify(stnlabz_module_qualification_r
   digit_arithmetic_status_t status=evaluate(cases[i].input,&r);
   if(status==cases[i].status&&(status!=DIGIT_ARITHMETIC_OK||r.value==cases[i].value))++passed;
  }
- qualification->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0]));
+ /* [AI:GPT-6 | 2026-10-09] Qualify quadratic behavior during Core hotload. */
+ {
+  static const struct {const char *equation,*answer;} quadratics[]={
+   {"solve x^2 - 5*x + 6 = 0","x = 2 and x = 3."},
+   {"solve x^2 - 4*x + 4 = 0","x = 2."},
+   {"solve x^2 + 1 = 0","No real solutions."},
+   {"solve (x+1)*(x+2) = 0","x = -2 and x = -1."}
+  };
+  for(i=0;i<sizeof(quadratics)/sizeof(quadratics[0]);++i){
+   digit_arithmetic_status_t status=evaluate(quadratics[i].equation,&r);
+   if(status==DIGIT_ARITHMETIC_OK &&
+      strcmp(r.decimal_answer,quadratics[i].answer)==0)++passed;
+  }
+ }
+ qualification->tests_executed=(unsigned int)(sizeof(cases)/sizeof(cases[0])+4);
  qualification->tests_passed=passed;
  qualification->tests_failed=qualification->tests_executed-passed;
  qualification->negative_test_executed=1;
