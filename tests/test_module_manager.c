@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "module_manager.h"
+#include "audit.h"
 
 static int failures = 0;
 static int tests = 0;
@@ -23,7 +24,7 @@ int main(void)
 
     CHECK(digit_module_manager_count(&manager) == 0,
           "manager starts with zero modules");
-    CHECK(manager.registry.audit_count == 0,
+    CHECK(digit_audit_lifecycle_count() == 0,
           "manager starts with empty audit trail");
     CHECK(manager.loader.count == 0,
           "loader starts empty");
