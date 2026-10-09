@@ -35,6 +35,7 @@
 #include "dashboard_response.h"
 #include "channel_create_policy.h"
 #include "project_admin_route.h"
+#include "project_list.h"
 #include "security_sa.h"
 #include "core_services.h"
 
@@ -503,6 +504,29 @@ if(strncmp(request,"GET /admin/dashboard HTTP/1.1\r\n",sizeof("GET /admin/dashbo
     free(channels);free(alerts);
     interface_reply(client,200,json);return;
 }
+/* [AI:GPT-6 | 2026-10-09] 1.5.10: SA-only project inventory.
+ * No cross-organization fallback: each explicit organization must be
+ * authorized independently against the current protected roster. */
+if(strncmp(request,"GET /admin/projects?organization=",
+           sizeof("GET /admin/projects?organization=")-1U)==0){
+    const char *start=request+sizeof("GET /admin/projects?organization=")-1U;
+    const char *end=strchr(start,' ');
+    char org[DIGIT_PROJECT_ID_MAX],json[8192];
+    size_t n;
+    if(!end||strncmp(end," HTTP/1.1\r\n",sizeof(" HTTP/1.1\r\n")-1U)!=0){
+        interface_reply(client,400,"{\"error\":\"invalid project list request\"}\n");return;
+    }
+    n=(size_t)(end-start);
+    if(n==0||n>=sizeof(org)){interface_reply(client,400,"{\"error\":\"invalid organization\"}\n");return;}
+    memcpy(org,start,n);org[n]=0;
+    if(!digit_security_sa_verify(DIGIT_SECURITY_SA_REGISTRY,org,identity)){
+        interface_reply(client,403,"{\"error\":\"organization SA assignment required\"}\n");return;
+    }
+    if(!digit_project_list_scoped(DIGIT_PROJECT_ROOT,org,json,sizeof(json))){
+        interface_reply(client,503,"{\"error\":\"project inventory unavailable\"}\n");return;
+    }
+    interface_reply(client,200,json);return;
+}
 /* [AI:GPT-6 | 2026-10-09] Interface 1.5.9: authenticated, scoped
  * SA project provisioning. The session identity is the project founder;
  * the organization is checked against the protected SA roster. */
@@ -798,5 +822,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,5,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
