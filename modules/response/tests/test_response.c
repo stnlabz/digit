@@ -65,9 +65,29 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
  unexpected_services=0;
  check(response_handler&&response_handler(&request,sizeof(request),&answer,
        sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
-       answer.answered&&strstr(answer.answer,"cannot verify that calculation")!=NULL,
-       "arithmetic question cannot return unrelated evidence");
- check(unexpected_services==0,"unsupported calculation does not invoke Corpus or Reasoning");
+       answer.answered&&strcmp(answer.answer,"2 + 2 = 4.")==0,
+       "arithmetic question computes an exact answer");
+ check(unexpected_services==0,"arithmetic bypasses Corpus and Reasoning");
+ /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
+ {
+  static const struct {const char *question,*expected;} cases[]={
+   {"What is 7 minus 12?","7 - 12 = -5."},
+   {"What is 3 times 5?","3 * 5 = 15."},
+   {"What is 9 divided by 3?","9 / 3 = 3."},
+   {"What is 7 divided by 2?","7 / 2 = 3 remainder 1."},
+   {"What is 7 divided by 0?","Division by zero is undefined."},
+   {"What is 1000000000 times 1000000000?","1000000000 * 1000000000 = 1000000000000000000."},
+   {"What is 1000000001 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."},
+   {"What is 2 plus 2 plus 2?","I cannot evaluate that arithmetic expression within the supported two-operand integer limits."}
+  };
+  size_t i;
+  for(i=0;i<sizeof(cases)/sizeof(cases[0]);++i){
+   memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
+   snprintf(request.question,sizeof(request.question),"%s",cases[i].question);
+   check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&strcmp(answer.answer,cases[i].expected)==0,cases[i].question);
+  }
+ }
+
  /* [AI:GPT-6 | 2026-10-09] A valid knowledge request with zero
   * retrieved evidence must not invoke outbound factual validation. */
  memset(&request,0,sizeof(request));
@@ -94,7 +114,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 1, "internal version is 1.7.1");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 2, "internal version is 1.7.2");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
