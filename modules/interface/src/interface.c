@@ -92,7 +92,7 @@ static void interface_reply(int c,int status,const char *body){
                            status==401?"Unauthorized":status==403?"Forbidden":
                            status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";
         int n=snprintf(header,sizeof(header),
-          "HTTP/1.1 %d %s\\r\\nContent-Type: application/json; charset=utf-8\\r\\nContent-Length: %zu\\r\\nConnection: close\\r\\n\\r\\n",
+          "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
           status,reason,strlen(body));
         size_t off;
         if(n<=0||(size_t)n>=sizeof(header))return;
