@@ -100,7 +100,8 @@ static int security_owner_scan(const char *root,const char *channel_id,
     if(rootfd<0)return errno==ENOENT?0:-1;
     {
         struct stat st;
-        if(fstat(rootfd,&st)!=0||!S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)
+        if(fstat(rootfd,&st)!=0||!S_ISDIR(st.st_mode)||(st.st_mode&077)!=0||
+           !digit_project_directory_owner_allowed(st.st_uid,geteuid()))
             goto failure;
     }
     organizations=fdopendir(rootfd);
@@ -115,7 +116,8 @@ static int security_owner_scan(const char *root,const char *channel_id,
            (o->d_name[1]=='.'&&!o->d_name[2])))continue;
         if(!project_component(o->d_name))goto failure;
         if(fstatat(dirfd(organizations),o->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0 ||
-           !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)goto failure;
+           !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0||
+           !digit_project_directory_owner_allowed(st.st_uid,geteuid()))goto failure;
         orgfd=openat(dirfd(organizations),o->d_name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
         if(orgfd<0)goto failure;
         projects=fdopendir(orgfd);
@@ -129,7 +131,8 @@ static int security_owner_scan(const char *root,const char *channel_id,
                (p->d_name[1]=='.'&&!p->d_name[2])))continue;
             if(!project_component(p->d_name))goto failure;
             if(fstatat(dirfd(projects),p->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0||
-               !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0)goto failure;
+               !S_ISDIR(st.st_mode)||(st.st_mode&077)!=0||
+           !digit_project_directory_owner_allowed(st.st_uid,geteuid()))goto failure;
             /* [AI:GPT-6 | 2026-10-08] Incomplete or corrupted project
              * records cannot be ignored during ownership discovery.
              * An omitted owner could otherwise permit access through
@@ -214,7 +217,9 @@ int digit_project_bind_security(const char *root,const char *org,
     lockfd=open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
     if(lockfd<0)return 0;
     if(fstat(lockfd,&root_stat)!=0 || !S_ISDIR(root_stat.st_mode) ||
-       (root_stat.st_mode&077)!=0 || flock(lockfd,LOCK_EX|LOCK_NB)!=0)
+       (root_stat.st_mode&077)!=0 ||
+       !digit_project_directory_owner_allowed(root_stat.st_uid,geteuid()) ||
+       flock(lockfd,LOCK_EX|LOCK_NB)!=0)
         goto end;
     if(digit_project_security_channel_id(root,org,project,existing,sizeof(existing)))
         goto end;
