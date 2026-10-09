@@ -16,7 +16,7 @@ static int accepts(const char *request,size_t capacity,size_t want){
                 (size_t)(end-request)+2,capacity,&actual) && actual==want;
 }
 int main(void){
-    char huge[9000],nul[96];
+    char huge[9001],nul[96];
     const char *base="GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n";
     check(accepts(base,65536,0),"valid GET with headers");
     check(accepts("GET /health HTTP/1.1\r\n\r\n",65536,0),
@@ -48,8 +48,7 @@ int main(void){
     strcpy(nul,"GET /health HTTP/1.1\r\nHost: a\r\n\r\n");
     nul[24]=0;
     {
-        size_t len=(size_t)(strstr("GET /health HTTP/1.1\r\nHost: a\r\n\r\n","\r\n\r\n")-"GET /health HTTP/1.1\r\nHost: a\r\n\r\n")+2;
-        size_t body=0;
+        size_t len=strlen("GET /health HTTP/1.1\\r\\nHost: a\\r\\n\\r\\n")-2;\n        size_t body=0;
         check(!digit_http_limits_headers(nul,len,65536,&body),
               "embedded NUL header denied");
     }
