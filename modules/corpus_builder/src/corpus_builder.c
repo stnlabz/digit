@@ -131,8 +131,42 @@ static stnlabz_module_result_t builder_service(const void *request, size_t reque
 
 static stnlabz_module_result_t builder_qualify(stnlabz_module_qualification_result_t *result)
 {
+    /* [AI:GPT-6 | 2026-10-09] Execute offline deterministic qualification
+     * without invoking live Corpus persistence or external services. */
+    digit_corpus_builder_request_t input;
+    digit_corpus_builder_result_t output;
+    char identifier[65], repeat[65], changed[65];
+    size_t used = 0;
+    unsigned int passed = 0;
     if (result == NULL) return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-    memset(result, 0, sizeof(*result)); result->tests_executed = 10; result->tests_passed = 10; result->negative_test_executed = 1; result->negative_test_passed = 1; return STNLABZ_MODULE_OK;
+    memset(result, 0, sizeof(*result));
+    memset(&input, 0, sizeof(input));
+    snprintf(input.text, sizeof(input.text), "Digit module qualification.");
+    snprintf(input.source, sizeof(input.source), "qualification:test");
+    build_record_id(&input, "ENGINEERING", identifier, sizeof(identifier));
+    build_record_id(&input, "ENGINEERING", repeat, sizeof(repeat));
+    passed += (unsigned int)(strcmp(identifier, repeat) == 0);
+    passed += (unsigned int)(strncmp(identifier, "DIGIT-", 6) == 0);
+    passed += (unsigned int)(strlen(identifier) == 22);
+    build_record_id(&input, "RULE", changed, sizeof(changed));
+    passed += (unsigned int)(strcmp(identifier, changed) != 0);
+    snprintf(input.source, sizeof(input.source), "qualification:other");
+    build_record_id(&input, "ENGINEERING", changed, sizeof(changed));
+    passed += (unsigned int)(strcmp(identifier, changed) != 0);
+    passed += (unsigned int)(strcmp(category_string(CB_ENGINEERING), "ENGINEERING") == 0);
+    passed += (unsigned int)(strcmp(category_string(CB_RULE), "RULE") == 0);
+    passed += (unsigned int)(strcmp(category_string(CB_HYPOTHESIS), "HYPOTHESIS") == 0);
+    passed += (unsigned int)(strcmp(category_string(CB_UNKNOWN), "UNKNOWN") == 0);
+    passed += (unsigned int)(builder_service(&input, sizeof(input), &output,
+                    sizeof(output), &used, NULL) == STNLABZ_MODULE_ERR_INVALID_STATE);
+    result->tests_executed = 10;
+    result->tests_passed = passed;
+    result->tests_failed = result->tests_executed - passed;
+    result->negative_test_executed = 1;
+    result->negative_test_passed = (builder_service(NULL, 0, &output,
+                 sizeof(output), &used, NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT);
+    return result->tests_failed || !result->negative_test_passed
+        ? STNLABZ_MODULE_ERR_QUALIFICATION : STNLABZ_MODULE_OK;
 }
 
 static stnlabz_module_result_t builder_start(const stnlabz_module_host_t *host)
@@ -151,5 +185,5 @@ static stnlabz_module_result_t builder_stop(void)
     builder_host = NULL; return STNLABZ_MODULE_OK;
 }
 
-static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 5, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
+static const stnlabz_module_descriptor_t builder_descriptor = { "corpus_builder", "Digit Corpus Builder", 1, 0, 6, STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR, builder_qualify, builder_start, builder_stop };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void) { return &builder_descriptor; }
