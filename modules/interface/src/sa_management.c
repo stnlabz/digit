@@ -80,10 +80,11 @@ done:
 int digit_sa_change(const char *registry,const char *org,const char *actor,
  const char *user,int assign){
  char parent[512],*slash,*buf=NULL,*out=NULL,*line,*save=NULL;
- char temp[96],*fields[6];size_t len,used=0,found=0,active=0;
+ char temp[96],*fields[6];size_t len,used=0,found=0,active=0,target_sa=0;
+ int bootstrap=assign==2;
  int dir=-1,fd=-1,tmp=-1,ok=0;struct stat st;unsigned long seq=0;
  if(!registry||!ident(org)||!ident(actor)||!ident(user)||
-    (assign!=0&&assign!=1)||strlen(registry)>=sizeof(parent))return 0;
+    (assign!=0&&assign!=1&&assign!=2)||strlen(registry)>=sizeof(parent))return 0;
  snprintf(parent,sizeof(parent),"%s",registry);
  slash=strrchr(parent,'/');if(!slash||slash==parent)return 0;
  *slash++=0;
@@ -91,7 +92,11 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
  if(dir<0||fstat(dir,&st)!=0||!S_ISDIR(st.st_mode)||
     (st.st_mode&077)||(st.st_uid!=0&&st.st_uid!=geteuid())||
     flock(dir,LOCK_EX)!=0)goto done;
- if(!digit_security_sa_verify(registry,org,actor))goto done;
+ if(bootstrap){
+  /* [AI:GPT-6 | 2026-10-09] Explicit one-time founder bootstrap, not a general privilege bridge. */
+  if(strcmp(org,"team-chaos")||strcmp(actor,"poemei")||strcmp(user,"poemei")||
+     !digit_security_sa_verify(registry,"stn-labz",actor))goto done;
+ }else if(!digit_security_sa_verify(registry,org,actor))goto done;
  fd=openat(dir,slash,O_RDONLY|O_NOFOLLOW);
  if(fd<0||!read_safe(fd,&buf,&len))goto done;
  out=calloc(len+512,1);if(!out)goto done;
@@ -100,9 +105,11 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
   if(strlen(line)+2>sizeof(record))goto done;
   snprintf(record,sizeof(record),"%s\n",line);
   if(!parse(record,fields))goto done;
-  if(!strcmp(fields[0],actor)&&!strcmp(fields[1],org)&&
+  if(!bootstrap&&!strcmp(fields[0],actor)&&!strcmp(fields[1],org)&&
       !strcmp(fields[2],"SA")&&!strcmp(fields[3],"1")&&
       !strcmp(fields[4],"1")&&!strcmp(fields[5],"1"))active++;
+  if(!strcmp(fields[1],org)&&!strcmp(fields[2],"SA")&&
+     !strcmp(fields[3],"1")&&!strcmp(fields[4],"1")&&!strcmp(fields[5],"1"))target_sa++;
   if(!strcmp(fields[0],user)&&!strcmp(fields[1],org)){
    found++;
    /* Existing qualification is necessary; assigning cannot mint it. */
@@ -117,7 +124,7 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
   used+=(size_t)n;
   for(i=0;i<6;i++)if(!fields[i][0])goto done;
  }
- if(active!=1||found!=1)goto done;
+ if((bootstrap ? target_sa!=0 : active!=1)||found!=1)goto done;
  for(seq=0;seq<16;seq++){
   snprintf(temp,sizeof(temp),".security_sa.%ld.%lu.tmp",(long)getpid(),seq);
   tmp=openat(dir,temp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
