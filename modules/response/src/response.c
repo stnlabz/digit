@@ -89,7 +89,7 @@ static int arithmetic_question(const char *text){
        !strcmp(token,"four")||!strcmp(token,"five")||
        !strcmp(token,"six")||!strcmp(token,"seven")||
        !strcmp(token,"eight")||!strcmp(token,"nine")||
-       !strcmp(token,"ten"))operands++;
+       !strcmp(token,"ten")||!strcmp(token,"zero"))operands++;
     j=0;
    }
    if(c=='+'||c=='-'||c=='*'||c=='/'||(c==0xC3 && (unsigned char)text[i]==0xB7))operation=1;
