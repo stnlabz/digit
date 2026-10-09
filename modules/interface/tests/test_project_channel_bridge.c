@@ -21,10 +21,11 @@ static int mock(const char *service,const void *request,size_t request_size,
        request_size!=sizeof(*in) || response_size<sizeof(*out) ||
        (strcmp(in->name,"security-stn-labz-second")!=0 &&
         strcmp(in->name,"security-stn-labz-third")!=0 &&
-        strcmp(in->name,"security-stn-labz-fourth")!=0))return 0;
+        strcmp(in->name,"security-stn-labz-fourth")!=0 &&
+        strcmp(in->name,"channel-stn-labz-second-updates")!=0))return 0;
     memset(out,0,sizeof(*out));
     out->created=1;
-    strcpy(out->channel.id,force_collision ||
+    strcpy(out->channel.id,!strcmp(in->name,"channel-stn-labz-second-updates")?"channel-123-3":force_collision ||
            strcmp(in->name,"security-stn-labz-second")==0 ?
            "channel-123-1":"channel-123-2");
     strcpy(out->channel.name,in->name);
@@ -156,6 +157,32 @@ int main(void) {
               "host adapter denies duplicate binding");
     }
 
+    /* [AI:GPT-6 | 2026-10-09] Ordinary channels inherit an existing
+     * organization/project scope; a Core channel cannot create a project. */
+    {
+        stnlabz_module_host_t host={0};
+        char owner_org[64],owner_project[64];
+        host.invoke_service=mock_host_service;
+        check(!digit_project_channel_create_host(root,"stn-labz","absent",
+              "updates","sysadmin",registry,&host,id,sizeof(id)),
+              "unprovisioned project denied");
+        check(!digit_project_channel_create_host(root,"stn-labz","second",
+              "updates","poe",registry,&host,id,sizeof(id)),
+              "ordinary user cannot create project channel");
+        check(digit_project_channel_create_host(root,"stn-labz","second",
+              "updates","sysadmin",registry,&host,id,sizeof(id)),
+              "SA creates ordinary channel inside existing project");
+        check(!strcmp(id,"channel-123-3"),"Core channel ID returned");
+        check(digit_project_channel_match(root,"stn-labz","second",id),
+              "ordinary binding independently verified");
+        check(digit_project_security_owner(root,id,owner_org,sizeof(owner_org),
+              owner_project,sizeof(owner_project))==1&&
+              !strcmp(owner_org,"stn-labz")&&!strcmp(owner_project,"second"),
+              "ordinary channel has unique organization/project owner");
+        check(!digit_project_channel_create_host(root,"stn-labz","second",
+              "updates","sysadmin",registry,&host,id,sizeof(id)),
+              "duplicate ordinary channel denied");
+    }
     {
         char binding[256];
         check(digit_project_provision(root,"stn-labz","fourth","poe","sysadmin",registry),
