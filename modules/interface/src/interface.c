@@ -199,6 +199,33 @@ static int interface_dispatch_private(const char *body,const char *identity,inte
  * Interface owns the authenticated request and volatile session boundary.
  * This does not persist a profile, assert legal identity or confer authority.
  * Only private /ask can write or read this state. */
+/* [AI:GPT-6 | 2026-10-09] Bounded private preferred-name recall phrasing. */
+static int interface_private_name_recall(const char *body){
+ char words[32][32];size_t count=0,i,n=0;
+ int my=0,name=0,question=0,recall=0;
+ if(!body)return 0;
+ while(*body){
+  unsigned char c=(unsigned char)*body++;
+  if(isalpha(c)){
+   if(count>=32||n>=sizeof(words[0])-1)return 0;
+   words[count][n++]=(char)tolower(c);
+  }else if(n){
+   words[count][n]=0;count++;n=0;
+  }
+ }
+ if(n){words[count][n]=0;count++;}
+ for(i=0;i<count;i++){
+  const char *w=words[i];
+  if(!strcmp(w,"my"))my=1;
+  if(!strcmp(w,"name"))name=1;
+  if(!strcmp(w,"what")||!strcmp(w,"who"))question=1;
+  if(!strcmp(w,"tell")||!strcmp(w,"told")||!strcmp(w,"tel")||
+     !strcmp(w,"call")||!strcmp(w,"called")||
+     !strcmp(w,"is")||!strcmp(w,"was"))recall=1;
+ }
+ return count>=3&&my&&name&&question&&recall;
+}
+
 static int interface_private_name(const char *body,const char *request,
  const char *identity,char *answer,size_t capacity){
  static const char *const prefixes[]={"my name is ","call me ","i am ","i'm "};
@@ -219,9 +246,7 @@ static int interface_private_name(const char *body,const char *request,
  }
  memset(token,0,sizeof(token));
  if(!entry)return 0;
- if(!strcasecmp(body,"what did i tell you my name was?")||
-    !strcasecmp(body,"what is my name?")||
-    !strcasecmp(body,"what's my name?")){
+ if(interface_private_name_recall(body)){
   if(entry->preferred_name[0])
    snprintf(answer,capacity,"You told me to call you %s.",entry->preferred_name);
   else snprintf(answer,capacity,"You haven't told me what to call you in this session.");
@@ -1295,5 +1320,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
