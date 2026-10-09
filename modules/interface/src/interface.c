@@ -470,7 +470,7 @@ if(strncmp(request,"GET /knowledge/record/",22)==0){
                          &out,sizeof(out),&used)||used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;
     }
-    if(!digit_interface_corpus_exact_valid(&out.record,out.found,rid)){
+    if(!digit_interface_corpus_exact_valid(&out.record,out.found,id)){
         interface_reply(client,503,"{\"error\":\"corpus response invalid\"}\n");return;
     }
     if(out.found && strcmp(out.record.id,id)!=0){
@@ -523,7 +523,7 @@ if(strncmp(request,"GET /corpus/",12)==0){
                          &out,sizeof(out),&used) || used!=sizeof(out)){
         interface_reply(client,503,"{\"error\":\"corpus retrieval unavailable\"}\n");return;
     }
-    if(out.found!=0 && out.found!=1){
+    if(!digit_interface_corpus_exact_valid(&out.record,out.found,rid)){
         interface_reply(client,503,"{\"error\":\"invalid corpus result\"}\n");return;
     }
     if(!digit_knowledge_single_json(&out.record,out.found,json,sizeof(json))){
