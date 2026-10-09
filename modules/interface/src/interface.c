@@ -430,14 +430,14 @@ if(strncmp(request,"GET /admin/access HTTP/1.1",26)==0){
     size_t used=0;
     memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));
     if(strlen(identity)>=sizeof(in.identity)){
-        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+        interface_reply(client,403,"{\"error\":\"forbidden\"}\n");return;
     }
     snprintf(in.identity,sizeof(in.identity),"%s",identity);
     if(!interface_invoke(DIGIT_ADMIN_SA_SERVICE,&in,sizeof(in),&out,sizeof(out),&used) ||
        used!=sizeof(out) || out.authorized!=1){
-        interface_reply(client,403,"{\\"error\\":\\"forbidden\\"}\\n");return;
+        interface_reply(client,403,"{\"error\":\"forbidden\"}\n");return;
     }
-    interface_reply(client,200,"{\\"authorized\\":true,\\"scope\\":\\"digit-operations-read\\"}\\n");return;
+    interface_reply(client,200,"{\"authorized\":true,\"scope\":\"digit-operations-read\"}\n");return;
 }
 /* [AI:GPT-6 | 2026-10-08] Authenticated, SA-only project binding.
  * The actor is always the resolved active account, never request data.
