@@ -124,17 +124,19 @@ int main(void){
     fprintf(stderr,"Dispatcher unestablished action gate FAILED\\n");return 1;
    }
   }
-  /* [AI:GPT-6 | 2026-10-09] Bounded interaction-context regression. */
+  /* [AI:GPT-6 | 2026-10-09] No unscoped cross-operator follow-up.
+   * Until authenticated identity reaches Dispatcher, prior equation state
+   * will not be retained or reused, even after a successful answer. */
   if(!dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
-                    "no retained equation") ||
+                    "without authenticated, account-bound conversation context") ||
      !dispatch_case("solve 3*x - 6 = 0",DIGIT_INTENT_FACT,1,"x = 2.") ||
      !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
-                    "Re-evaluation agrees") ||
-     arithmetic_calls!=1 ||
+                    "without authenticated, account-bound conversation context") ||
+     arithmetic_calls!=0 ||
      !dispatch_case("Who are you?",DIGIT_INTENT_FACT,1,"Bounded response") ||
      !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
-                    "no retained equation")){
-   fprintf(stderr,"Dispatcher bounded follow-up context FAILED\\n");return 1;
+                    "without authenticated, account-bound conversation context")){
+   fprintf(stderr,"Dispatcher unscoped follow-up rejection FAILED\\n");return 1;
   }
   if(!d->stop||d->stop()!=STNLABZ_MODULE_OK){
    fprintf(stderr,"Dispatcher mock shutdown FAILED\\n");return 1;
