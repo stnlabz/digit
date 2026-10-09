@@ -35,7 +35,7 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
 {
     FILE *file;
     int fd;
-    struct stat st;
+    struct stat st,after;
     char line[1024];
     int matched=0,ok=0,malformed=0;
     if(!path || !acl_id(verified_user) || !acl_id(channel_id))return 0;
@@ -118,8 +118,20 @@ int digit_channel_acl_check_scoped(const char *path,const char *project_root,
             }
         }
     }
-    if(ferror(file))malformed=1;
-    fclose(file);
+    /* [AI:GPT-6 | 2026-10-08] Validate that the protected ACL stayed
+     * the same regular, private, singly linked file through parsing.
+     * A concurrent in-place write or truncation invalidates this read. */
+    if(ferror(file) || fstat(fileno(file),&after)!=0 ||
+       !S_ISREG(after.st_mode) || after.st_nlink!=1 ||
+       (after.st_mode&077)!=0 ||
+       (after.st_uid!=0 && after.st_uid!=geteuid()) ||
+       after.st_dev!=st.st_dev || after.st_ino!=st.st_ino ||
+       after.st_size!=st.st_size ||
+       after.st_mtim.tv_sec!=st.st_mtim.tv_sec ||
+       after.st_mtim.tv_nsec!=st.st_mtim.tv_nsec ||
+       after.st_ctim.tv_sec!=st.st_ctim.tv_sec ||
+       after.st_ctim.tv_nsec!=st.st_ctim.tv_nsec)malformed=1;
+    if(fclose(file)!=0)malformed=1;
     return !malformed && matched==1 && ok;
 }
 
