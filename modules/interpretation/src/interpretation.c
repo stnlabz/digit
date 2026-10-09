@@ -37,41 +37,70 @@ static int has_word(const char *text, const char *word)
     return 0;
 }
 
+/* [AI:GPT-6 | 2026-10-09] Interpret only explicit, unambiguous
+ * learned definitions. A conflicting lesson cannot silently win by rank. */
+static int parse_learned_definition(const digit_corpus_record_t *record,
+                                    const char *word,char *out,size_t capacity)
+{
+    const char *start,*meaning,*p;
+    size_t subject_length,n=0;
+    if(!record||!word||!out||capacity==0||
+       strcmp(record->category,"OPERATOR_LEARNED")!=0||
+       strcmp(record->source,"interface:learn")!=0)return 0;
+    start=record->text;
+    meaning=strstr(start," means ");
+    if(!meaning)return 0;
+    while(start<meaning&&isspace((unsigned char)*start))++start;
+    subject_length=(size_t)(meaning-start);
+    while(subject_length&&isspace((unsigned char)start[subject_length-1]))--subject_length;
+    if(!word_equal_ci(start,subject_length,word))return 0;
+    p=meaning+strlen(" means ");
+    while(*p&&isspace((unsigned char)*p))++p;
+    if(!isalnum((unsigned char)*p)&&*p!='_'&&*p!='-')return 0;
+    while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-'))++n;
+    while(isspace((unsigned char)p[n]))++n;
+    /* No partial-phrase substitution: a definition with multiple words
+     * does not authorize replacing an input token with its first word. */
+    if(p[n]!='\\0'&&p[n]!='.')return 0;
+    if(p[n]=='.'&&p[n+1]!='\\0')return 0;
+    n=0;
+    while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-'))++n;
+    if(n==0||n>=capacity)return 0;
+    memcpy(out,p,n);
+    out[n]='\\0';
+    return 1;
+}
+
+static int unique_learned_meaning(const digit_corpus_search_result_t *result,
+                                  const char *word,char *out,size_t capacity)
+{
+    char candidate[128],resolved[128];
+    size_t i;int found=0;
+    if(!result||!word||!out||!capacity)return 0;
+    for(i=0;i<result->count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
+        if(!parse_learned_definition(&result->records[i],word,candidate,sizeof(candidate)))continue;
+        if(found&&strcmp(resolved,candidate)!=0)return 0;
+        snprintf(resolved,sizeof(resolved),"%s",candidate);
+        found=1;
+    }
+    if(!found||strlen(resolved)>=capacity)return 0;
+    snprintf(out,capacity,"%s",resolved);
+    return 1;
+}
+
 static int learned_meaning(const char *word, char *out, size_t out_size)
 {
     digit_corpus_search_request_t request;
     digit_corpus_search_result_t result;
-    size_t used = 0, i;
-    if (word == NULL || out == NULL || out_size == 0 || interpretation_host == NULL ||
-        interpretation_host->invoke_service == NULL) return 0;
-    memset(&request, 0, sizeof(request));
-    memset(&result, 0, sizeof(result));
-    snprintf(request.query, sizeof(request.query), "%s", word);
-    if (interpretation_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE, &request, sizeof(request),
-                                            &result, sizeof(result), &used) != STNLABZ_MODULE_OK ||
-        used != sizeof(result)) return 0;
-    for (i = 0; i < result.count && i < DIGIT_CORPUS_SEARCH_MAX; ++i)
-    {
-        const char *meaning, *p, *start;
-        size_t n = 0, subject_length;
-        if (strcmp(result.records[i].category, "OPERATOR_LEARNED") != 0 ||
-            strcmp(result.records[i].source, "interface:learn") != 0) continue;
-        start = result.records[i].text;
-        meaning = strstr(start, " means ");
-        if (meaning == NULL) continue;
-        while (start < meaning && isspace((unsigned char)*start)) ++start;
-        subject_length = (size_t)(meaning - start);
-        while (subject_length > 0 && isspace((unsigned char)start[subject_length - 1])) --subject_length;
-        if (!word_equal_ci(start, subject_length, word)) continue;
-        p = meaning + strlen(" means ");
-        while (*p && !isalnum((unsigned char)*p) && *p != '_' && *p != '-') ++p;
-        while (p[n] && (isalnum((unsigned char)p[n]) || p[n] == '_' || p[n] == '-') && n + 1 < out_size) ++n;
-        if (n == 0) continue;
-        memcpy(out, p, n);
-        out[n] = '\0';
-        return 1;
-    }
-    return 0;
+    size_t used=0;
+    if(word==NULL||out==NULL||out_size==0||interpretation_host==NULL||
+       interpretation_host->invoke_service==NULL)return 0;
+    memset(&request,0,sizeof(request));
+    memset(&result,0,sizeof(result));
+    snprintf(request.query,sizeof(request.query),"%s",word);
+    if(interpretation_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&request,sizeof(request),
+       &result,sizeof(result),&used)!=STNLABZ_MODULE_OK||used!=sizeof(result))return 0;
+    return unique_learned_meaning(&result,word,out,out_size);
 }
 
 static void trim_trailing_space(char *text)
@@ -231,6 +260,35 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
             result->tests_executed++;
             if(ok&&strcmp(output,samples[i])==0&&changes==0)result->tests_passed++;
         }
+        /* [AI:GPT-6 | 2026-10-09] Definition interpretation gates:
+         * exact learned subject, conflicting evidence, and multiword safety. */
+        {
+            digit_corpus_record_t record={0};
+            digit_corpus_search_result_t evidence={0};
+            char meaning[128]={0};
+            snprintf(record.category,sizeof(record.category),"OPERATOR_LEARNED");
+            snprintf(record.source,sizeof(record.source),"interface:learn");
+            snprintf(record.text,sizeof(record.text),"wut means what");
+            result->tests_executed++;
+            if(parse_learned_definition(&record,"wut",meaning,sizeof(meaning))&&
+               strcmp(meaning,"what")==0)result->tests_passed++;
+            result->tests_executed++;
+            if(!parse_learned_definition(&record,"who",meaning,sizeof(meaning)))result->tests_passed++;
+            evidence.count=2;evidence.records[0]=record;evidence.records[1]=record;
+            snprintf(evidence.records[1].text,sizeof(evidence.records[1].text),"wut means which");
+            result->tests_executed++;
+            if(!unique_learned_meaning(&evidence,"wut",meaning,sizeof(meaning)))result->tests_passed++;
+            snprintf(evidence.records[1].text,sizeof(evidence.records[1].text),"wut means what");
+            result->tests_executed++;
+            if(unique_learned_meaning(&evidence,"wut",meaning,sizeof(meaning))&&
+               strcmp(meaning,"what")==0)result->tests_passed++;
+            snprintf(record.text,sizeof(record.text),"wut means what exactly");
+            result->tests_executed++;
+            if(!parse_learned_definition(&record,"wut",meaning,sizeof(meaning)))result->tests_passed++;
+            snprintf(record.source,sizeof(record.source),"untrusted:source");
+            result->tests_executed++;
+            if(!parse_learned_definition(&record,"wut",meaning,sizeof(meaning)))result->tests_passed++;
+        }
         result->negative_test_executed=1;
         result->negative_test_passed=!resolve_text("oversized", (char[2]){0}, 2, NULL);
     }
@@ -262,7 +320,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 3,
+    "interpretation", "Digit Interpretation", 1, 0, 4,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
