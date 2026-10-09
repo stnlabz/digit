@@ -86,10 +86,9 @@ static const char *interface_category_string(interface_context_category_t v){swi
 static const char *interface_alert_severity_string(digit_alert_severity_t v){switch(v){case DIGIT_ALERT_INFO:return "INFO";case DIGIT_ALERT_WARNING:return "WARNING";case DIGIT_ALERT_ERROR:return "ERROR";case DIGIT_ALERT_CRITICAL:return "CRITICAL";default:return "UNKNOWN";}}
 static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
 static void interface_reply(int c,int status,const char *body){
-    /* [AI:GPT-6 | 2026-10-08] 1.4.6: retain sanitized audit events,
-     * send complete HTTP reply through SIGPIPE-safe bounded writer. */
+    /* [AI:GPT-6 | 2026-10-09] Suppress routine HTTP success audit noise.\n     * Keep rejected requests and server errors visible to operations. */
     char audit[160];
-    if(interface_host && interface_host->send_message &&
+    if(status>=400 && interface_host && interface_host->send_message &&
        digit_interface_audit_format(interface_audit_request,status,
                                     audit,sizeof(audit))){
         (void)interface_host->send_message(audit);
@@ -1225,5 +1224,5 @@ failed:
 }
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
