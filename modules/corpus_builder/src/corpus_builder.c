@@ -157,8 +157,8 @@ static stnlabz_module_result_t builder_qualify(stnlabz_module_qualification_resu
     passed += (unsigned int)(strcmp(category_string(CB_RULE), "RULE") == 0);
     passed += (unsigned int)(strcmp(category_string(CB_HYPOTHESIS), "HYPOTHESIS") == 0);
     passed += (unsigned int)(strcmp(category_string(CB_UNKNOWN), "UNKNOWN") == 0);
-    passed += (unsigned int)(builder_service(&input, sizeof(input), &output,
-                    sizeof(output), &used, NULL) == STNLABZ_MODULE_ERR_INVALID_STATE);
+    passed += (unsigned int)(builder_service(&input, sizeof(input) - 1, &output,
+                    sizeof(output), &used, NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT);
     result->tests_executed = 10;
     result->tests_passed = passed;
     result->tests_failed = result->tests_executed - passed;
