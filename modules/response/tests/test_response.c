@@ -17,6 +17,8 @@ static void check(int condition, const char *name)
  * deterministic mock Validator input; prevent fabricated math evidence. */
 static stnlabz_module_service_handler_fn response_handler;
 static unsigned int unexpected_services;
+static unsigned int corpus_queries;
+static unsigned int outbound_validations;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -29,6 +31,16 @@ static int unregister_response(const char *name,void *ctx){
 }
 static stnlabz_module_result_t test_invoke(const char *name,const void *request,size_t request_size,
  void *response,size_t response_size,size_t *used){
+ if(!strcmp(name,"corpus.search")){
+  corpus_queries++;
+  memset(response,0,response_size);
+  *used=response_size;
+  return STNLABZ_MODULE_OK;
+ }
+ if(!strcmp(name,"validator.outbound")){
+  outbound_validations++;
+  return STNLABZ_MODULE_ERR_NOT_FOUND;
+ }
  if(!strcmp(name,"validator.inbound")){
   const inbound_request_t *in=request;inbound_result_t *out=response;
   if(request_size!=sizeof(*in)||response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -56,6 +68,18 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        answer.answered&&strstr(answer.answer,"cannot verify that calculation")!=NULL,
        "arithmetic question cannot return unrelated evidence");
  check(unexpected_services==0,"unsupported calculation does not invoke Corpus or Reasoning");
+ /* [AI:GPT-6 | 2026-10-09] A valid knowledge request with zero
+  * retrieved evidence must not invoke outbound factual validation. */
+ memset(&request,0,sizeof(request));
+ memset(&answer,0,sizeof(answer));
+ used=0;corpus_queries=0;outbound_validations=0;
+ snprintf(request.question,sizeof(request.question),"What is the mission?");
+ check(response_handler(&request,sizeof(request),&answer,sizeof(answer),
+       &used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
+       answer.answered&&strstr(answer.answer,"don't have enough grounded information")!=NULL,
+       "missing evidence reports uncertainty");
+ check(corpus_queries==1&&outbound_validations==0,
+       "missing evidence does not enter outbound factual validation");
  check(descriptor->stop()==STNLABZ_MODULE_OK,"response service unregisters");
 }
 
@@ -70,7 +94,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 0, "internal version is 1.7.0");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 7 && descriptor->version_patch == 1, "internal version is 1.7.1");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
