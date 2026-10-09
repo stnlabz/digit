@@ -20,7 +20,7 @@ int main(void)
 
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "reasoning") == 0, "module identity is reasoning");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 8, "internal version is 1.0.8");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 0 && descriptor->version_patch == 9, "internal version is 1.0.9");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(NULL) == STNLABZ_MODULE_ERR_INVALID_ARGUMENT, "qualification rejects null result");
     check(digit_reasoning_evaluate("Digit module qualification must pass before load.", &result) && result.relevance == DIGIT_RELEVANCE_RELEVANT && result.category == DIGIT_CONTEXT_RULE, "Digit must requirement is classified as rule");
@@ -29,6 +29,18 @@ int main(void)
     check(digit_reasoning_evaluate("coffee tastes terrible today", &result) && result.relevance != DIGIT_RELEVANCE_RELEVANT, "unrelated conversation is not promoted to relevant");
     check(!digit_reasoning_evaluate(NULL, &result) && !digit_reasoning_evaluate("", &result) && !digit_reasoning_evaluate("Digit", NULL), "invalid reasoning input is rejected");
 
+    {
+        stnlabz_module_qualification_result_t qualification;
+        memset(&qualification, 0, sizeof(qualification));
+        check(descriptor->qualify(&qualification) == STNLABZ_MODULE_OK &&
+              qualification.tests_executed >= 10 &&
+              qualification.tests_passed == qualification.tests_executed &&
+              qualification.tests_failed == 0,
+              "measured qualification passes");
+        check(qualification.negative_test_executed >= 2 &&
+              qualification.negative_test_passed == qualification.negative_test_executed,
+              "negative comparison validation passes");
+    }
     printf("\nReasoning module tests: %u executed, %u failed\n", executed, failed);
     return failed == 0 ? 0 : 1;
 }
