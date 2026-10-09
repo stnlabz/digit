@@ -1,10 +1,9 @@
 #include <ctype.h>
-#include <stdint.h>
-#include <strings.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "response.h"
+#include "arithmetic.h"
 #include "reasoning.h"
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T21:32:00Z] Removed operational LLM generation; Response now renders selected authorized evidence deterministically and submits output to Validator. */
@@ -101,83 +100,6 @@ static int arithmetic_question(const char *text){
 /* [AI:GPT-6 | 2026-10-09] Bounded two-operand arithmetic is computed,
  * never retrieved as lexical evidence. Limit operands to one billion so
  * addition, subtraction, and multiplication remain within signed int64. */
-static int arithmetic_operand(const char **cursor,int64_t *value){
- static const char *const names[]={"zero","one","two","three","four","five","six","seven","eight","nine","ten"};
- const char *p=*cursor;int sign=1;int64_t number=0;size_t i;
- while(isspace((unsigned char)*p))++p;
- if(*p=='-'){sign=-1;++p;}else if(*p=='+')++p;
- if(isdigit((unsigned char)*p)){
-  do{
-   int digit=*p-'0';
-   if(number>1000000000/10 || (number==1000000000/10 && digit>1000000000%10))return 0;
-   number=number*10+digit;++p;
-  }while(isdigit((unsigned char)*p));
- }else{
-  for(i=0;i<sizeof(names)/sizeof(names[0]);++i){
-   size_t n=strlen(names[i]);
-   if(strncasecmp(p,names[i],n)==0&&!isalnum((unsigned char)p[n])&&p[n]!='_'){
-    number=(int64_t)i;p+=n;break;
-   }
-  }
-  if(i==sizeof(names)/sizeof(names[0]))return 0;
- }
- *value=number*sign;*cursor=p;return 1;
-}
-static int arithmetic_calculate(const char *text,char *answer,size_t cap){
- const char *p=text;int64_t a,b,result;char operation=0;
- if(!p||!answer||cap==0)return 0;
- while(isspace((unsigned char)*p))++p;
- /* [AI:GPT-6 | 2026-10-09] Live requests address Digit by name.
-  * Strip only the explicit wake word, never arbitrary leading text. */
- if(strncasecmp(p,"digit",5)==0 &&
-    (isspace((unsigned char)p[5])||p[5]==','||p[5]==':')){
-  p+=5;
-  if(*p==','||*p==':')++p;
-  while(isspace((unsigned char)*p))++p;
- }
- if(strncasecmp(p,"what is ",8)==0)p+=8;
- else if(strncasecmp(p,"calculate ",10)==0)p+=10;
- else if(strncasecmp(p,"compute ",8)==0)p+=8;
- if(!arithmetic_operand(&p,&a))return 0;
- while(isspace((unsigned char)*p))++p;
- if(*p=='+'||*p=='-'||*p=='*'||*p=='/'){operation=*p++;}
- else if((unsigned char)p[0]==0xC3 && (unsigned char)p[1]==0xB7){operation='/';p+=2;}
- else if((unsigned char)p[0]==0xC3 && (unsigned char)p[1]==0x97){operation='*';p+=2;}
- else{
-  static const struct {const char *word;char operation;} ops[]={
-   {"plus", '+'},{"minus",'-'},{"times",'*'},{"x",'*'},{"multiplied by",'*'},{"multiply by",'*'},{"divided by",'/'},{"divide by",'/'},{"over",'/'}
-  };
-  size_t i;
-  for(i=0;i<sizeof(ops)/sizeof(ops[0]);++i){
-   size_t n=strlen(ops[i].word);
-   if(strncasecmp(p,ops[i].word,n)==0&&!isalpha((unsigned char)p[n])){
-    operation=ops[i].operation;p+=n;break;
-   }
-  }
- }
- if(!operation||!arithmetic_operand(&p,&b))return 0;
- while(isspace((unsigned char)*p))++p;
- if(*p=='?')++p;
- while(isspace((unsigned char)*p))++p;
- if(*p!='\0')return 0;
- if(operation=='/'&&b==0){
-  snprintf(answer,cap,"Division by zero is undefined.");return 1;
- }
- switch(operation){
- case '+':result=a+b;break;
- case '-':result=a-b;break;
- case '*':result=a*b;break;
- case '/':result=a/b;break;
- default:return 0;
- }
- if(operation=='/'&&a%b!=0)
-  snprintf(answer,cap,"%lld / %lld = %lld remainder %lld.",
-   (long long)a,(long long)b,(long long)result,(long long)(a%b));
- else
-  snprintf(answer,cap,"%lld %c %lld = %lld.",
-   (long long)a,operation,(long long)b,(long long)result);
- return 1;
-}
 static int conversational_greeting(const char *input,char *answer,size_t answer_size){char normalized[128];size_t i=0,o=0;const char *reply=NULL;if(input==NULL||answer==NULL||answer_size==0)return 0;while(input[i]!='\0'&&isspace((unsigned char)input[i]))++i;while(input[i]!='\0'&&o+1<sizeof(normalized)){unsigned char ch=(unsigned char)input[i++];if(isalnum(ch))normalized[o++]=(char)tolower(ch);else if(isspace(ch)&&o>0&&normalized[o-1]!=' ')normalized[o++]=' ';}while(o>0&&normalized[o-1]==' ')--o;normalized[o]='\0';if(strcmp(normalized,"good morning")==0)reply="Good morning.";else if(strcmp(normalized,"good afternoon")==0)reply="Good afternoon.";else if(strcmp(normalized,"good evening")==0)reply="Good evening.";else if(strcmp(normalized,"hello")==0||strcmp(normalized,"hi")==0||strcmp(normalized,"hey")==0||strcmp(normalized,"hello digit")==0||strcmp(normalized,"hi digit")==0||strcmp(normalized,"hey digit")==0)reply="Hello.";if(reply==NULL)return 0;snprintf(answer,answer_size,"%s",reply);return 1;}
 typedef struct { char intent[32]; char target[32]; char subject[256]; char request[DIGIT_RESPONSE_QUESTION_MAX]; int structured; } response_intent_t;
 static void trim_line(char *text){size_t n;if(text==NULL)return;n=strlen(text);while(n>0&&(text[n-1]=='\r'||text[n-1]=='\n'||isspace((unsigned char)text[n-1])))text[--n]='\0';}
@@ -324,11 +246,41 @@ static void validator_evidence(ranked_record_t selected[SELECTED_MAX],size_t sel
 static int validate_outbound_evidence(const char *raw,const char *normalized,const char *candidate,const char *evidence,unsigned int attempt,validator_outbound_result_t *validation){validator_outbound_request_t request;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||candidate==NULL||validation==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(validation,0,sizeof(*validation));snprintf(request.raw,sizeof(request.raw),"%s",raw);snprintf(request.normalized,sizeof(request.normalized),"%s",normalized);snprintf(request.candidate,sizeof(request.candidate),"%s",candidate);if(evidence!=NULL)snprintf(request.evidence,sizeof(request.evidence),"%s",evidence);request.attempt=attempt;status=response_host->invoke_service(VALIDATOR_OUTBOUND_SERVICE,&request,sizeof(request),validation,sizeof(*validation),&used);return status==STNLABZ_MODULE_OK&&used==sizeof(*validation);}
 static int validate_outbound(const char *raw,const char *normalized,const char *candidate,ranked_record_t selected[SELECTED_MAX],size_t selected_count,unsigned int attempt,validator_outbound_result_t *validation){char evidence[VALIDATOR_TEXT_MAX];memset(evidence,0,sizeof(evidence));validator_evidence(selected,selected_count,evidence,sizeof(evidence));return validate_outbound_evidence(raw,normalized,candidate,evidence,attempt,validation);}
 static stnlabz_module_result_t answer_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* Bounded refusal rather than a wrong numeric answer from lexical evidence. */
+ /* [AI:GPT-6 | 2026-10-09] Arithmetic is a shared capability.
+  * Response formats the service result, never calculates independently. */
  if(arithmetic_question(normalized)){
+  digit_arithmetic_request_t arithmetic_request;
+  digit_arithmetic_result_t arithmetic_result;
+  stnlabz_module_result_t arithmetic_sr;
+  size_t arithmetic_used=0;
+  int written;
+  memset(&arithmetic_request,0,sizeof(arithmetic_request));
+  memset(&arithmetic_result,0,sizeof(arithmetic_result));
   output.answered=1;
-  if(!arithmetic_calculate(normalized,output.answer,sizeof(output.answer)))
-   snprintf(output.answer,sizeof(output.answer),
-    "I cannot evaluate that arithmetic expression within the supported two-operand integer limits.");
+  written=snprintf(arithmetic_request.expression,sizeof(arithmetic_request.expression),"%s",normalized);
+  if(written<0||(size_t)written>=sizeof(arithmetic_request.expression)){
+   snprintf(output.answer,sizeof(output.answer),"Arithmetic expression exceeds the supported input limit.");
+  }else{
+   arithmetic_sr=response_host->invoke_service(DIGIT_ARITHMETIC_SERVICE,
+    &arithmetic_request,sizeof(arithmetic_request),
+    &arithmetic_result,sizeof(arithmetic_result),&arithmetic_used);
+   if(arithmetic_sr!=STNLABZ_MODULE_OK||arithmetic_used!=sizeof(arithmetic_result)){
+    snprintf(output.answer,sizeof(output.answer),"Arithmetic service is unavailable.");
+   }else if(arithmetic_result.status==DIGIT_ARITHMETIC_DIVIDE_BY_ZERO){
+    snprintf(output.answer,sizeof(output.answer),"Division by zero is undefined.");
+   }else if(arithmetic_result.status!=DIGIT_ARITHMETIC_OK){
+    snprintf(output.answer,sizeof(output.answer),
+     "I cannot evaluate that arithmetic expression within the supported two-operand integer limits.");
+   }else if(arithmetic_result.operation=='/'&&arithmetic_result.remainder!=0){
+    snprintf(output.answer,sizeof(output.answer),"%lld / %lld = %lld remainder %lld.",
+     (long long)arithmetic_result.left,(long long)arithmetic_result.right,
+     (long long)arithmetic_result.value,(long long)arithmetic_result.remainder);
+   }else{
+    snprintf(output.answer,sizeof(output.answer),"%lld %c %lld = %lld.",
+     (long long)arithmetic_result.left,arithmetic_result.operation,
+     (long long)arithmetic_result.right,(long long)arithmetic_result.value);
+   }
+  }
   memcpy(response,&output,sizeof(output));*response_used=sizeof(output);
   return STNLABZ_MODULE_OK;
  }
@@ -393,5 +345,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,7,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
