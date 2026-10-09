@@ -28,6 +28,7 @@
 #include "alert_results.h"
 #include "knowledge_query.h"
 #include "corpus_response.h"
+#include "builder_response.h"
 #include "project_admin_route.h"
 #include "security_sa.h"
 #include "core_services.h"
@@ -47,7 +48,7 @@ typedef enum { DIGIT_RELEVANCE_IRRELEVANT=0,DIGIT_RELEVANCE_UNCERTAIN=1,DIGIT_RE
 typedef enum { DIGIT_CONTEXT_UNKNOWN=0,DIGIT_CONTEXT_CONVERSATION,DIGIT_CONTEXT_ENGINEERING,DIGIT_CONTEXT_RULE,DIGIT_CONTEXT_DECISION,DIGIT_CONTEXT_OBSERVATION,DIGIT_CONTEXT_HYPOTHESIS } interface_context_category_t;
 typedef struct { interface_relevance_t relevance; interface_context_category_t category; unsigned int confidence; char reason[256]; } interface_reasoning_result_t;
 typedef struct { char text[CORPUS_BUILDER_TEXT_MAX]; char source[256]; } interface_builder_request_t;
-typedef struct { int candidate; int stored; unsigned int confidence; char category[64]; char record_id[65]; char reason[256]; } interface_builder_result_t;
+typedef digit_interface_builder_result_t interface_builder_result_t;
 typedef digit_knowledge_record_t interface_corpus_record_t;
 typedef struct { int found; interface_corpus_record_t record; } interface_corpus_get_result_t;
 typedef struct { char query[4096]; } interface_corpus_search_request_t;
@@ -121,7 +122,7 @@ static int interface_path_two(const char *request,const char *prefix,char *first
 static int interface_invoke(const char *service,const void *in,size_t in_size,void *out,size_t out_size,size_t *used){if(!interface_host||!interface_host->invoke_service)return 0;return interface_host->invoke_service(service,in,in_size,out,out_size,used)==STNLABZ_MODULE_OK;}
 static void interface_dispatch(const char *body,interface_dispatcher_result_t *out){interface_dispatcher_request_t in;size_t used=0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.request,sizeof(in.request),"%s",body);if(!interface_invoke(DISPATCHER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because my dispatcher is unavailable.");if(interface_host&&interface_host->send_message)(void)interface_host->send_message("[INTERFACE] dispatcher.handle unavailable; returned conversational failure instead of HTTP 503");}}
 
-static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
+static int interface_process_learn(const char *text,interface_builder_result_t *out,char *answer,size_t answer_size){interface_builder_request_t in;size_t used=0;if(!text||!text[0]||!out||!answer||answer_size==0||strlen(text)>=sizeof(in.text))return 0;memset(&in,0,sizeof(in));memset(out,0,sizeof(*out));snprintf(in.text,sizeof(in.text),"%s",text);snprintf(in.source,sizeof(in.source),"interface:learn");if(!interface_invoke(CORPUS_BUILDER_SERVICE,&in,sizeof(in),out,sizeof(*out),&used)||used!=sizeof(*out)||!digit_interface_builder_result_valid(out))return -1;if(out->stored)snprintf(answer,answer_size,"Learned.");else if(out->candidate)snprintf(answer,answer_size,"I evaluated that learning input, but it was not stored: %s",out->reason);else snprintf(answer,answer_size,"I did not retain that learning input: %s",out->reason);return 1;}
 static void interface_learn(int client,const char *text){interface_builder_result_t out;char answer[768],escaped[1600],er[512],eid[160],json[3000];int result=interface_process_learn(text,&out,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}interface_json_escape(out.reason,er,sizeof(er));interface_json_escape(out.record_id,eid,sizeof(eid));interface_json_escape(answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",escaped,out.stored?"true":"false",eid,out.category,out.confidence,er);interface_reply(client,200,json);}
 
 /* [AI:GPT-6 | 2026-10-08] 1.4.10: validate all Core
