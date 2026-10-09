@@ -435,7 +435,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[12];
+    int tests[14];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -455,6 +455,9 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     tests[9]=!digit_knowledge_result_json(NULL,1,json,sizeof(json));
     tests[10]=!digit_interface_http_write(-1,200,"{}");
     tests[11]=!digit_interface_http_write(-1,200,NULL);
+    /* [AI:GPT-6 | 2026-10-08] 1.4.8: execute alert boundary smoke checks. */
+    tests[12]=digit_interface_alerts_valid(NULL,0,0,0);
+    tests[13]=!digit_interface_alerts_valid(NULL,1,0,0);
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -462,7 +465,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     }
     r->negative_test_executed=1;
     r->negative_test_passed=tests[1] && tests[2] && tests[4] &&
-                            tests[9] && tests[10] && tests[11];
+                            tests[9] && tests[10] && tests[11] && tests[13];
     return r->tests_failed==0 && r->negative_test_passed?
            STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
 }
