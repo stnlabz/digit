@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "grant_request.h"
+#include "grant_store.h"
 /* [AI:GPT-6 | 2026-10-09] 1.6.0 positive and negative input tests. */
 static unsigned tests,failures;
 static void check(int valid,const char *label){
@@ -31,6 +32,12 @@ int main(void){
  check(!digit_grant_request_parse("stn-labz\toperations\tchannel-01\tbad\ruser",&r),"carriage return denied");
  check(!digit_grant_request_parse(long_name,&r),"oversize denied");
  check(!digit_grant_request_parse("stn-labz\toperations\tchannel-01\tpoemei\t",&r),"trailing tab denied");
+ check(!digit_grant_security_scoped(NULL,"/tmp","/tmp","poemei",&r),"missing registry denied");
+ check(!digit_grant_security_scoped("/tmp/channel_grants.tsv",NULL,"/tmp","poemei",&r),"missing project root denied");
+ check(!digit_grant_security_scoped("/tmp/channel_grants.tsv","/tmp",NULL,"poemei",&r),"missing SA roster denied");
+ check(!digit_grant_security_scoped("/tmp/channel_grants.tsv","/tmp","/tmp",NULL,&r),"missing actor denied");
+ check(!digit_grant_security_scoped("/tmp/channel_grants.tsv","/tmp","/tmp","poemei",NULL),"missing grant denied");
+ check(!digit_grant_security_scoped("/tmp/channel_grants.tsv","/tmp","/tmp","poemei",&r),"unverified actor and target denied");
  printf("Interface 1.6.0 scope parser: %u tests, %u failed\n",tests,failures);
  return failures?1:0;
 }
