@@ -13,6 +13,9 @@
 #ifndef SACRIFICIAL_HANG_QUALIFY
 #define SACRIFICIAL_HANG_QUALIFY 0
 #endif
+#ifndef SACRIFICIAL_FAIL_STOP
+#define SACRIFICIAL_FAIL_STOP 0
+#endif
 
 static stnlabz_module_result_t sacrificial_qualify(
     stnlabz_module_qualification_result_t *result
@@ -47,7 +50,7 @@ static stnlabz_module_result_t sacrificial_start(
 
 static stnlabz_module_result_t sacrificial_stop(void)
 {
-    return STNLABZ_MODULE_OK;
+    return SACRIFICIAL_FAIL_STOP ? STNLABZ_MODULE_ERR_STOP_FAILED : STNLABZ_MODULE_OK;
 }
 
 static const stnlabz_module_descriptor_t sacrificial_descriptor =
