@@ -236,6 +236,31 @@ static void digit_report_red_candidate(digit_module_manager_t *manager, const di
     }
 }
 
+/* [AI:GPT-6 | 2026-10-08] Preserve every ABI lifecycle audit entry
+ * in the persistent Core log before recycling the fixed-capacity cache.
+ * Sequence numbers remain monotonic. On any write/sync error, retain
+ * the original array and safely defer the replacement. */
+static int digit_hotload_checkpoint_audit(stnlabz_module_registry_t *registry)
+{
+    size_t i;
+    char detail[256];
+    if (registry == NULL || registry->audit_count > STNLABZ_MODULE_AUDIT_MAX) return 0;
+    for (i = 0; i < registry->audit_count; ++i)
+    {
+        const stnlabz_module_audit_entry_t *entry = &registry->audit[i];
+        int n = snprintf(detail, sizeof(detail),
+                         "sequence=%lu module=%s event=%d previous=%d resulting=%d result=%d",
+                         entry->sequence, entry->module_id, (int)entry->event,
+                         (int)entry->previous_state, (int)entry->resulting_state,
+                         (int)entry->result);
+        if (n < 0 || (size_t)n >= sizeof(detail) ||
+            !digit_audit_event("MODULE_ABI", "LIFECYCLE", detail)) return 0;
+    }
+    if (!digit_audit_sync()) return 0;
+    registry->audit_count = 0;
+    return 1;
+}
+
 static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_file_t *candidate)
 {
     digit_module_manager_t *manager = hotload->manager;
@@ -308,6 +333,14 @@ static int digit_hotload_promote(digit_hotload_t *hotload, const digit_hotload_f
      * touching a running incumbent. Seven normal lifecycle transitions
      * follow: stop, unregister, discover, verify, qualify restore,
      * authorize, activate. Keep one spare entry for a failure record. */
+    if (manager->registry.audit_count <= STNLABZ_MODULE_AUDIT_MAX &&
+        STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count < 8U)
+    {
+        if (digit_hotload_checkpoint_audit(&manager->registry))
+            digit_hotload_audit("AUDIT_CHECKPOINT_COMMITTED", candidate->module_id, NULL);
+        else
+            digit_hotload_audit("AUDIT_CHECKPOINT_FAILED", candidate->module_id, NULL);
+    }
     if (manager->registry.audit_count > STNLABZ_MODULE_AUDIT_MAX ||
         STNLABZ_MODULE_AUDIT_MAX - manager->registry.audit_count < 8U)
     {
