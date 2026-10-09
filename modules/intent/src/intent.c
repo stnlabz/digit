@@ -191,7 +191,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
                 if(c=='=')equation=1;
                 else if(c=='x'||c=='X')variable=1;
                 else if(!(isdigit(c)||isspace(c)||c=='.'||c=='+'||
-                          c=='-'||c=='*'||c=='/'||c=='('||c==')'||c=='?'))
+                          c=='-'||c=='*'||c=='/'||c=='^'||c=='('||c==')'||c=='?'))
                     valid=0;
             }
             if(equation&&variable&&valid){
@@ -306,6 +306,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"why did qualification fail", DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
+        {"solve x^2 - 5*x + 6 = 0", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"solve 3*x - 6 = 0", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"solve x + 1 = x + 2", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"build a module", DIGIT_INTENT_ACTION, DIGIT_INTENT_TARGET_CAPABILITY, 1U},
@@ -357,7 +358,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 6,
+    "intent", "Digit Intent", 1, 1, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
