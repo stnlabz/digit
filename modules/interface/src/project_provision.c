@@ -67,16 +67,16 @@ static int project_metadata_matches(int dir,const char *org,const char *project)
        (st.st_mode&077)!=0 || (st.st_uid!=0 && st.st_uid!=geteuid()))
         goto finish;
     n=read(fd,row,sizeof(row));
-    if(n<5 || n>=(ssize_t)sizeof(row) || row[n-1]!='\\n')goto finish;
-    row[n-1]='\\0';
-    first=strchr(row,'\\t');
+    if(n<5 || n>=(ssize_t)sizeof(row) || row[n-1]!='\n')goto finish;
+    row[n-1]='\0';
+    first=strchr(row,'\t');
     if(!first)goto finish;
-    *first++='\\0';
-    second=strchr(first,'\\t');
+    *first++='\0';
+    second=strchr(first,'\t');
     if(!second)goto finish;
-    *second++='\\0';
+    *second++='\0';
     admin=second;
-    if(strchr(admin,'\\t') || !project_name(admin))goto finish;
+    if(strchr(admin,'\t') || !project_name(admin))goto finish;
     ok=strcmp(row,org)==0 && strcmp(first,project)==0;
 finish:
     if(close(fd)!=0)ok=0;
