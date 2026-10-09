@@ -242,10 +242,167 @@ static digit_arithmetic_status_t evaluate_algebra(const char *expression,digit_a
  if(*parser.p)return DIGIT_ARITHMETIC_INVALID;
  return DIGIT_ARITHMETIC_OK;
 }
+/* [AI:GPT-6 | 2026-10-09] Degree-two fixed-point polynomial engine.
+ * Polynomial coefficients use scale 1000; no heap, floats, or evaluator code execution. */
+typedef struct {int64_t c[3];} polynomial_t;
+typedef struct {const char *p;unsigned depth;digit_arithmetic_status_t status;} poly_parser_t;
+#define POLY_COEFF_LIMIT INT64_C(10000000)
+static polynomial_t poly_zero(void){polynomial_t p={{0,0,0}};return p;}
+static int poly_bounds(polynomial_t p){
+ unsigned i;for(i=0;i<3;i++)if(p.c[i]>POLY_COEFF_LIMIT||p.c[i]<-POLY_COEFF_LIMIT)return 0;
+ return 1;
+}
+static polynomial_t poly_expression(poly_parser_t *parser);
+static polynomial_t poly_primary(poly_parser_t *parser){
+ polynomial_t v=poly_zero();const char *start;
+ skip_spaces(&parser->p);
+ if(*parser->p=='+'||*parser->p=='-'){
+  char sign=*parser->p++;
+  v=poly_primary(parser);
+  if(sign=='-'){unsigned i;for(i=0;i<3;i++)v.c[i]=-v.c[i];}
+  return v;
+ }
+ if(*parser->p=='('){
+  ++parser->p;
+  if(++parser->depth>16){parser->status=DIGIT_ARITHMETIC_INVALID;return v;}
+  v=poly_expression(parser);skip_spaces(&parser->p);
+  if(*parser->p!=')')parser->status=DIGIT_ARITHMETIC_INVALID;
+  else ++parser->p;
+  --parser->depth;
+  return v;
+ }
+ if((*parser->p=='x'||*parser->p=='X')&&!isalnum((unsigned char)parser->p[1])){
+  ++parser->p;v.c[1]=DECIMAL_SCALE;return v;
+ }
+ start=parser->p;
+ if(!decimal_operand(&parser->p,&v.c[0])){
+  parser->p=start;parser->status=DIGIT_ARITHMETIC_INVALID;
+ }
+ return v;
+}
+static polynomial_t poly_power(poly_parser_t *parser){
+ polynomial_t v=poly_primary(parser);
+ skip_spaces(&parser->p);
+ if(*parser->p=='^'){
+  unsigned degree=0;polynomial_t square=poly_zero();
+  ++parser->p;skip_spaces(&parser->p);
+  if(*parser->p!='2'){parser->status=DIGIT_ARITHMETIC_INVALID;return v;}
+  ++parser->p;degree=2;
+  (void)degree;
+  if(v.c[2]||v.c[1]*v.c[1]>POLY_COEFF_LIMIT*DECIMAL_SCALE){
+   parser->status=DIGIT_ARITHMETIC_OUT_OF_RANGE;return v;
+  }
+  square.c[2]=v.c[1]*v.c[1]/DECIMAL_SCALE;
+  square.c[1]=2*v.c[1]*v.c[0]/DECIMAL_SCALE;
+  square.c[0]=v.c[0]*v.c[0]/DECIMAL_SCALE;
+  v=square;
+ }
+ return v;
+}
+static polynomial_t poly_term(poly_parser_t *parser){
+ polynomial_t left=poly_power(parser);
+ while(!parser->status){
+  char op;polynomial_t right,next=poly_zero();unsigned i,j;
+  skip_spaces(&parser->p);
+  if(*parser->p!='*'&&*parser->p!='/')break;
+  op=*parser->p++;right=poly_power(parser);
+  if(parser->status)break;
+  if(op=='/'){
+   if(right.c[1]||right.c[2]){parser->status=DIGIT_ARITHMETIC_INVALID;break;}
+   if(!right.c[0]){parser->status=DIGIT_ARITHMETIC_DIVIDE_BY_ZERO;break;}
+   for(i=0;i<3;i++)next.c[i]=left.c[i]*DECIMAL_SCALE/right.c[0];
+  }else{
+   for(i=0;i<3;i++)for(j=0;j<3;j++)if(left.c[i]&&right.c[j]){
+    if(i+j>2){parser->status=DIGIT_ARITHMETIC_INVALID;break;}
+    next.c[i+j]+=left.c[i]*right.c[j]/DECIMAL_SCALE;
+   }
+  }
+  if(parser->status)break;
+  if(!poly_bounds(next)){parser->status=DIGIT_ARITHMETIC_OUT_OF_RANGE;break;}
+  left=next;
+ }
+ return left;
+}
+static polynomial_t poly_expression(poly_parser_t *parser){
+ polynomial_t lhs=poly_term(parser);
+ while(!parser->status){
+  char op;polynomial_t rhs;unsigned i;
+  skip_spaces(&parser->p);
+  if(*parser->p!='+'&&*parser->p!='-')break;
+  op=*parser->p++;rhs=poly_term(parser);
+  if(parser->status)break;
+  for(i=0;i<3;i++)lhs.c[i]+=(op=='+'?rhs.c[i]:-rhs.c[i]);
+  if(!poly_bounds(lhs))parser->status=DIGIT_ARITHMETIC_OUT_OF_RANGE;
+ }
+ return lhs;
+}
+static uint64_t poly_isqrt(uint64_t n){
+ uint64_t lo=0,hi=UINT64_C(1000000000),mid;
+ while(lo<hi){
+  mid=lo+(hi-lo+1)/2;
+  if(mid<=n/mid)lo=mid;else hi=mid-1;
+ }
+ return lo;
+}
+static digit_arithmetic_status_t evaluate_polynomial(const char *expression,digit_arithmetic_result_t *result){
+ poly_parser_t parser={0};polynomial_t lhs,rhs;unsigned i;
+ int64_t a,b,c,delta,root1,root2;uint64_t square_root;
+ char first[48],second[48];
+ parser.p=expression;skip_spaces(&parser.p);
+ if(strncasecmp(parser.p,"digit",5)==0 &&
+   (isspace((unsigned char)parser.p[5])||parser.p[5]==','||parser.p[5]==':')){
+  parser.p+=5;if(*parser.p==','||*parser.p==':')++parser.p;skip_spaces(&parser.p);
+ }
+ if(strncasecmp(parser.p,"what is ",8)==0)parser.p+=8;
+ else if(strncasecmp(parser.p,"calculate ",10)==0)parser.p+=10;
+ else if(strncasecmp(parser.p,"compute ",8)==0)parser.p+=8;
+ else if(strncasecmp(parser.p,"solve ",6)==0)parser.p+=6;
+ lhs=poly_expression(&parser);
+ if(parser.status)return parser.status;
+ skip_spaces(&parser.p);
+ if(*parser.p!='=')return DIGIT_ARITHMETIC_INVALID;
+ ++parser.p;rhs=poly_expression(&parser);
+ if(parser.status)return parser.status;
+ for(i=0;i<3;i++)lhs.c[i]-=rhs.c[i];
+ if(!poly_bounds(lhs))return DIGIT_ARITHMETIC_OUT_OF_RANGE;
+ skip_spaces(&parser.p);if(*parser.p=='?')++parser.p;skip_spaces(&parser.p);
+ if(*parser.p)return DIGIT_ARITHMETIC_INVALID;
+ a=lhs.c[2];b=lhs.c[1];c=lhs.c[0];
+ if(a==0){
+  if(b==0)snprintf(result->decimal_answer,sizeof(result->decimal_answer),"%s",
+   c==0?"Infinitely many solutions.":"No solution.");
+  else{
+   root1=-c*DECIMAL_SCALE/b;
+   fixed_text(root1,first,sizeof(first));
+   snprintf(result->decimal_answer,sizeof(result->decimal_answer),"x = %s.",first);
+  }
+  return DIGIT_ARITHMETIC_OK;
+ }
+ /* Coefficients are bounded to prevent overflow of b*b - 4*a*c. */
+ delta=b*b-4*a*c;
+ if(delta<0){
+  snprintf(result->decimal_answer,sizeof(result->decimal_answer),"No real solutions.");
+  return DIGIT_ARITHMETIC_OK;
+ }
+ square_root=poly_isqrt((uint64_t)delta);
+ root1=(-b-(int64_t)square_root)*DECIMAL_SCALE/(2*a);
+ root2=(-b+(int64_t)square_root)*DECIMAL_SCALE/(2*a);
+ if(root1>root2){int64_t temp=root1;root1=root2;root2=temp;}
+ fixed_text(root1,first,sizeof(first));fixed_text(root2,second,sizeof(second));
+ if(root1==root2)
+  snprintf(result->decimal_answer,sizeof(result->decimal_answer),"x = %s.",first);
+ else snprintf(result->decimal_answer,sizeof(result->decimal_answer),
+  "%sx = %s and x = %s.",
+  square_root*square_root==(uint64_t)delta?"":"Approximately: ",first,second);
+ return DIGIT_ARITHMETIC_OK;
+}
 static digit_arithmetic_status_t evaluate(const char *expression,digit_arithmetic_result_t *result){
  const char *p=expression;int64_t a,b;
  memset(result,0,sizeof(*result));
  if(!expression||!*expression)return DIGIT_ARITHMETIC_INVALID;
+ if(strchr(expression,'^')||strstr(expression,"x*x")||strstr(expression,"X*X")||
+    strstr(expression,"x * x")||strstr(expression,"X * X"))
+  return evaluate_polynomial(expression,result);
  /* [AI:GPT-6 | 2026-10-09] Unary signs are not binary operators.
   * Keep signed two-operand integer expressions on the original exact path. */
  {
@@ -344,7 +501,7 @@ static stnlabz_module_result_t arithmetic_stop(void){
  arithmetic_host=NULL;return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "arithmetic","Digit Arithmetic",1,2,0,
+ "arithmetic","Digit Arithmetic",1,3,0,
  STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  arithmetic_qualify,arithmetic_start,arithmetic_stop
 };
