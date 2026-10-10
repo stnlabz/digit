@@ -6,6 +6,7 @@
 #include "response.h"
 #include "arithmetic.h"
 #include "reasoning.h"
+#include "../../interpretation/includes/interpretation.h"
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T21:32:00Z] Removed operational LLM generation; Response now renders selected authorized evidence deterministically and submits output to Validator. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T22:33:00Z] Removed subject-specific PHP query expansion. Response retrieval is subject-agnostic; knowledge comes from authorized sources, not hard-coded domain facts. */
@@ -183,7 +184,30 @@ static void render_intent_answer(const response_intent_t *intent,const char *que
  used=0;status=response_host->invoke_service(DIGIT_REASONING_COMPARE_SERVICE,&cr,sizeof(cr),&co,sizeof(co),&used);output->answered=1;if(status!=STNLABZ_MODULE_OK||used!=sizeof(co)||!co.compared||co.comparison[0]=='\0'){snprintf(output->answer,sizeof(output->answer),"I don't have enough grounded information to compare those subjects.");return;}snprintf(output->answer,sizeof(output->answer),"%s",co.comparison);return;}if(intent!=NULL&&(strcmp(intent->intent,"EXPLAIN")==0||strcmp(intent->intent,"DEFINE")==0)&&selected_count>0&&render_lesson_definition(question,selected,selected_count,output->answer,sizeof(output->answer))){output->answered=1;return;}/* [AI:GPT-6 | 2026-10-10] A DEFINE operation requires an actual
  * definition relation. An overlapping corpus excerpt is not an answer. */
 if(intent!=NULL&&strcmp(intent->intent,"DEFINE")==0){
+ digit_interpretation_definition_request_t lookup={0};
+ digit_interpretation_definition_result_t definition={0};
+ size_t definition_used=0;
  output->answered=1;
+ /* The subject and teaching grammar belong to Interpretation. */
+ if(response_host&&response_host->invoke_service&&question&&question[0]&&
+    strlen(question)<sizeof(lookup.term)){
+  size_t k=0;int valid=1;
+  for(k=0;question[k];++k)
+   if(!isalnum((unsigned char)question[k])&&
+      question[k]!='_'&&question[k]!='-')valid=0;
+  if(valid){
+   snprintf(lookup.term,sizeof(lookup.term),"%s",question);
+   if(response_host->invoke_service(DIGIT_INTERPRETATION_DEFINITION_SERVICE,
+          &lookup,sizeof(lookup),&definition,sizeof(definition),
+          &definition_used)==STNLABZ_MODULE_OK&&
+      definition_used==sizeof(definition)&&definition.established&&
+      definition.meaning[0]){
+     snprintf(output->answer,sizeof(output->answer),"%s means %s.",
+              question,definition.meaning);
+     return;
+   }
+  }
+ }
  snprintf(output->answer,sizeof(output->answer),
           "I don't have enough grounded information to define that.");
  return;
@@ -559,5 +583,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,11,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,12,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
