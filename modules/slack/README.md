@@ -71,3 +71,9 @@ Socket Mode connected, real `@Digit` replies observed, DMs verified (if
 enabled), workspace isolation tests, repeated-event deduplication, reconnect
 testing, and authorization negative tests. In particular, confirm that the
 scoped Dispatcher denies protected organization data to Slack actors.
+
+## Revision 1.0.1 — Autonomous intelligence alerts
+
+When `intel_channel_id` is configured, a separate Slack-module worker invokes the existing STN-2 `gen intel` service every five minutes (following the initial five-minute wait). It uses the already-authorized service bus and the configured intelligence channel; no Core changes, new secret configuration keys, or new endpoint are introduced. It posts the generated intelligence brief to `#Intel-Briefs` **only** if STN-2 reports at least one newly opened investigation or at least one distinct evidence ID admitted to a case. Unchanged routine collections remain quiet. A Slack delivery failure is logged by the host. The manual mention command continues to work.
+
+This revision does not establish that all HIGH-relevance events will be delivered instantly; notification is polling-based (approximately five-minute cadence plus collection duration). It does not yet evaluate severity escalations or reassessed conclusions when the existing investigation counters remain unchanged. The initial baseline and historical cases should not be confused with newly arrived observations. Concurrent manual and scheduled invocations are not yet serialized at the STN-2 state layer; production qualification must validate coordination, service availability during module reload, thread shutdown, Slack delivery and duplicate-notification behavior. Live notification acceptance is pending.
