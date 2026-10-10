@@ -42,14 +42,14 @@ static int has_word(const char *text, const char *word)
 
 /* [AI:GPT-6 | 2026-10-09] Command verbs embedded in knowledge
  * questions are not operator instructions. */
-static int starts_with_command(const char *text,const char *const *words,size_t count){
+/* [AI:GPT-6 | 2026-10-10] Recognize comma-delimited leading address\n * consistently with whitespace/colon delimiters. */\nstatic int starts_with_command(const char *text,const char *const *words,size_t count){
  const char *p=text;size_t i;
  if(!p)return 0;
  while(*p&&isspace((unsigned char)*p))++p;
  if(strncmp(p,"please ",7)==0||strncmp(p,"Please ",7)==0)p+=7;
  for(i=0;i<count;i++){
   size_t n=strlen(words[i]);
-  if(word_equal_ci(p,n,words[i])&&(!p[n]||isspace((unsigned char)p[n])||p[n]==':'))return 1;
+  if(word_equal_ci(p,n,words[i])&&(!p[n]||isspace((unsigned char)p[n])||p[n]==':'||p[n]==','))return 1;
  }
  return 0;
 }
@@ -358,7 +358,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 1,
+    "intent", "Digit Intent", 1, 2, 2,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
