@@ -124,8 +124,8 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(high,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 1 opened; 1 distinct")!=NULL);
-  assert(strstr(brief,"Case 1: source IP=192.0.2.9; opening relevance=HIGH; severity=MEDIUM; evidence IDs=1")!=NULL);
-  assert(strstr(brief,"Observation ID: high")!=NULL);
+  assert(strstr(brief,"*Investigation 1* | Source IP: `192.0.2.9` | HIGH relevance | MEDIUM severity | 1 evidence IDs")!=NULL);
+  assert(strstr(brief,"Evidence: `high`")!=NULL);
   assert(strstr(brief,"Activity=pattern_match; observed=2026-04-22 14:05:46")!=NULL);
   assert(strstr(brief,"Request=/xmlrpc.php?rsd")!=NULL);
   assert(strstr(brief,"Domain=stn-labz.com")!=NULL);
@@ -140,8 +140,8 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 1 distinct")!=NULL);
-  assert(strstr(brief,"evidence IDs=2")!=NULL);
-  assert(strstr(brief,"Observation ID: follow")!=NULL);
+  assert(strstr(brief,"2 evidence IDs")!=NULL);
+  assert(strstr(brief,"Evidence: `follow`")!=NULL);
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 0 distinct")!=NULL);
