@@ -15,7 +15,7 @@ bin:
 $(TARGET): src/slack.c includes/slack.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@ $(LDLIBS)
 $(TEST_TARGET): tests/test_slack.c src/slack.c includes/slack.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< src/slack.c -o $@ $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ $(LDLIBS)
 test: check-abi $(TEST_TARGET)
 	./$(TEST_TARGET)
 install: all
