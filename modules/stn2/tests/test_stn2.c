@@ -66,13 +66,35 @@ int main(void){
   const char *next="{\"threats\":[{\"id\":\"t_a\"},{\"id\":\"t_b\",\"type\":\"bot_probe\",\"created_at\":\"2026-10-10 17:10:00\"},{\"id\":\"t_b\"}]}";
   assert(mkdtemp(dir)!=NULL);
   assert(snprintf(path,sizeof(path),"%s/threat-ids.json",dir)<(int)sizeof(path));
-  assert(threat_records(first,report,sizeof(report),path));
+  assert(threat_records(first,report,sizeof(report),path,NULL));
   assert(strstr(report,"initial baseline of 1 records")!=NULL);
   report[0]=0;
-  assert(threat_records(next,report,sizeof(report),path));
+  assert(threat_records(next,report,sizeof(report),path,NULL));
   assert(strstr(report,"2 records; 1 absent from previous snapshot")!=NULL);
   assert(strstr(report,"New record t_b type=bot_probe")!=NULL);
   assert(unlink(path)==0);
+  assert(rmdir(dir)==0);
+ }
+ {
+  char dir[]="/tmp/stn2-corr-XXXXXX",baseline[256],log[256],out[4096]={0};
+  FILE *f;
+  const char *a="{\"threats\":[{\"id\":\"a\"}]}";
+  const char *b="{\"threats\":[{\"id\":\"a\"},{\"id\":\"b\",\"ip\":\"192.0.2.9\",\"type\":\"bot_probe\"}]}";
+  assert(mkdtemp(dir)!=NULL);
+  assert(snprintf(baseline,sizeof(baseline),"%s/ids.json",dir)<(int)sizeof(baseline));
+  assert(snprintf(log,sizeof(log),"%s/rictus.log",dir)<(int)sizeof(log));
+  f=fopen(log,"w");assert(f);
+  assert(fputs("WARN probe from 192.0.2.9 at path /xmlrpc.php\n",f)>=0);
+  assert(fclose(f)==0);
+  assert(same_ip_token("src=192.0.2.9","192.0.2.9"));
+  assert(!same_ip_token("src=1192.0.2.9","192.0.2.9"));
+  assert(!same_ip_token("src=192.0.2.90","192.0.2.9"));
+  assert(threat_records(a,out,sizeof(out),baseline,log));
+  out[0]=0;
+  assert(threat_records(b,out,sizeof(out),baseline,log));
+  assert(strstr(out,"Rictus: matching IP token")!=NULL);
+  assert(unlink(baseline)==0);
+  assert(unlink(log)==0);
   assert(rmdir(dir)==0);
  }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
