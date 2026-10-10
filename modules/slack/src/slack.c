@@ -354,7 +354,8 @@ static int process_event(struct json_object *root){
     digit_memory_record_t memory={0};
     digit_memory_result_t stored={0};
     const char *payload=NULL;
-    const int recalling=!strcasecmp(message,"what do you remember about me?")||
+    const int recalling=digit_memory_name_question(message)||
+                        !strcasecmp(message,"what do you remember about me?")||
                         !strcasecmp(message,"what do you remember about me");
     size_t memory_used=0;
     if(!recalling){
@@ -372,7 +373,10 @@ static int process_event(struct json_object *root){
      if(recalling){
       char natural[DIGIT_DISPATCHER_ANSWER_MAX]={0};
       if(!stored.ok)return reply(channel,ts?ts:field(event,"ts"),"I have no saved personal memory for this account.");
-      if(!digit_memory_natural_reply(stored.text,natural,sizeof(natural)))
+      if(digit_memory_name_question(message)){
+       if(!digit_memory_name_reply(stored.text,natural,sizeof(natural)))
+        return reply(channel,ts?ts:field(event,"ts"),"I do not have an established name in your saved memory.");
+      }else if(!digit_memory_natural_reply(stored.text,natural,sizeof(natural)))
        return reply(channel,ts?ts:field(event,"ts"),"I could not format that saved memory.");
       return reply(channel,ts?ts:field(event,"ts"),natural);
      }
@@ -577,7 +581,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,1,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
