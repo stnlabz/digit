@@ -561,7 +561,8 @@ static int case_contains(struct json_object *ids,const char *id){
 }
 static int investigation_update(const char *raw,const char *path,char *report,size_t cap){
  struct json_object *root=NULL,*threats=NULL,*store=NULL,*cases=NULL;
- struct stat st;char tmp[600],line[180];FILE *fp=NULL;
+ struct stat st;char tmp[600],line[180],watch[720]={0};FILE *fp=NULL;
+ size_t watch_events=0;
  int fd=-1,ok=0,persist=0;size_t opened=0,added=0,i,j;
  if(!raw||!path||!report||!cap)return 0;
  root=json_tokener_parse(raw);
@@ -614,6 +615,13 @@ static int investigation_update(const char *raw,const char *path,char *report,si
    struct json_object *newid=json_object_new_string(id);
    if(!newid||json_object_array_add(ids,newid)!=0){if(newid)json_object_put(newid);goto done;}
    added++;persist=1;
+   if(watch_events<5){
+    snprintf(line,sizeof(line),"  Watch: source IP=%.*s; new observation=%.*s; type=%.*s; relevance=%.*s\n",
+             45,ip,64,id,32,json_text_member(item,"type")?json_text_member(item,"type"):"unknown",
+             12,relevance?relevance:"unknown");
+    append(watch,sizeof(watch),line);
+    watch_events++;
+   }
   }
  }
  if(persist){
@@ -629,6 +637,7 @@ static int investigation_update(const char *raw,const char *path,char *report,si
  snprintf(line,sizeof(line),"Investigations: %zu active; %zu opened; %zu distinct evidence IDs added\n",
           (size_t)json_object_array_length(cases),opened,added);
  append(report,cap,line);
+ if(added){append(report,cap,"*Investigation evidence changes*\n");append(report,cap,watch);}
  append(report,cap,"Admission: explicit HIGH relevance; case linkage by source IP (provisional).\n");
  for(i=0;i<(size_t)json_object_array_length(cases);i++){
   struct json_object *entry=json_object_array_get_idx(cases,(int)i),*evidence=NULL;
@@ -867,7 +876,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,2,5,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,6,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
