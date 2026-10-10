@@ -120,8 +120,8 @@ static int reply(const char *channel,const char *timestamp,const char *message){
 }
 static int process_event(struct json_object *root){
  struct json_object *payload=object(root,"payload"),*event=object(payload,"event");
- const char *event_id=field(root,"event_id"),*type=field(event,"type");
- const char *team=field(root,"team_id"),*user=field(event,"user");
+ const char *event_id=field(payload,"event_id"),*type=field(event,"type");
+ const char *team=field(payload,"team_id"),*user=field(event,"user");
  const char *channel=field(event,"channel"),*text=field(event,"text");
  const char *ts=field(event,"thread_ts"),*subtype=field(event,"subtype"),*bot=field(event,"bot_id");
  const char *kind=field(event,"channel_type");char mention[80];
