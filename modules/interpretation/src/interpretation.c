@@ -290,6 +290,30 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
     return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-10] Expose bounded Corpus-authorized
+ * lexical meaning as data; Response must not parse lesson prose. */
+static stnlabz_module_result_t interpretation_definition_service(
+    const void *request,size_t request_size,void *response,
+    size_t response_size,size_t *response_used,void *context)
+{
+ const digit_interpretation_definition_request_t *in=request;
+ digit_interpretation_definition_result_t result;
+ size_t i;
+ (void)context;
+ if(!in||request_size!=sizeof(*in)||!response||!response_used||
+    response_size<sizeof(result)||!memchr(in->term,0,sizeof(in->term))||
+    !in->term[0])return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ for(i=0;in->term[i];++i)
+  if(!isalnum((unsigned char)in->term[i])&&
+     in->term[i]!='_'&&in->term[i]!='-')
+   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memset(&result,0,sizeof(result));
+ result.established=learned_meaning(in->term,result.meaning,sizeof(result.meaning));
+ memcpy(response,&result,sizeof(result));
+ *response_used=sizeof(result);
+ return STNLABZ_MODULE_OK;
+}
+
 static stnlabz_module_result_t interpretation_service(const void *request, size_t request_size,
                                                        void *response, size_t response_size,
                                                        size_t *response_used, void *handler_context)
@@ -401,6 +425,17 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
             if(!definition_target_span("What does example do?",&begin,&end))
                 result->tests_passed++;
         }
+        /* [AI:GPT-6 | 2026-10-10] Definition-service rejects
+         * unbounded and non-token subjects. */
+        {
+            digit_interpretation_definition_request_t req={0};
+            digit_interpretation_definition_result_t res={0};
+            size_t used=0;
+            snprintf(req.term,sizeof(req.term),"two words");
+            result->tests_executed++;
+            if(interpretation_definition_service(&req,sizeof(req),&res,sizeof(res),&used,NULL)==
+               STNLABZ_MODULE_ERR_INVALID_ARGUMENT)result->tests_passed++;
+        }
         result->negative_test_executed=1;
         result->negative_test_passed=!resolve_text("oversized", (char[2]){0}, 2, NULL);
     }
@@ -416,6 +451,12 @@ static stnlabz_module_result_t interpretation_start(const stnlabz_module_host_t 
     if (!host->register_service(DIGIT_INTERPRETATION_SERVICE, interpretation_service, NULL))
         return STNLABZ_MODULE_ERR_START_FAILED;
     interpretation_host = host;
+    if (!host->register_service(DIGIT_INTERPRETATION_DEFINITION_SERVICE,
+                                interpretation_definition_service, NULL)) {
+        (void)host->unregister_service(DIGIT_INTERPRETATION_SERVICE, NULL);
+        interpretation_host=NULL;
+        return STNLABZ_MODULE_ERR_START_FAILED;
+    }
     if (host->send_message != NULL)
         (void)host->send_message("[INTERPRETATION] active: authorized learned meanings resolve before Intent");
     return STNLABZ_MODULE_OK;
@@ -423,16 +464,19 @@ static stnlabz_module_result_t interpretation_start(const stnlabz_module_host_t 
 
 static stnlabz_module_result_t interpretation_stop(void)
 {
-    if (interpretation_host != NULL && interpretation_host->unregister_service != NULL)
-        if (!interpretation_host->unregister_service(DIGIT_INTERPRETATION_SERVICE, NULL))
-            return STNLABZ_MODULE_ERR_STOP_FAILED;
+    if (interpretation_host != NULL && interpretation_host->unregister_service != NULL) {
+        int a=interpretation_host->unregister_service(DIGIT_INTERPRETATION_DEFINITION_SERVICE,NULL);
+        int b=interpretation_host->unregister_service(DIGIT_INTERPRETATION_SERVICE,NULL);
+        interpretation_host=NULL;
+        return a&&b?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
+    }
     interpretation_host = NULL;
     return STNLABZ_MODULE_OK;
 }
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 8,
+    "interpretation", "Digit Interpretation", 1, 0, 9,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
