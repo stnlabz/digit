@@ -35,6 +35,10 @@ int main(void){
  assert(stnlabz_module_get_descriptor()->qualify(&result)==STNLABZ_MODULE_OK);
  assert(result.tests_executed>=10&&result.tests_failed==0);
  test_config();test_fail_closed();
+ assert(!intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 2 active; 0 opened; 0 distinct evidence IDs added\n"));
+ assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
+ assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
+ assert(!intelligence_change("Investigations: unavailable"));
  puts("Digit Slack module offline tests passed");
  return 0;
 }
