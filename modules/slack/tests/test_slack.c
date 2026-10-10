@@ -68,6 +68,11 @@ static void test_dm_auth_commands(void){
  assert(authenticate_dm("T_1","U_1","login fake/incorrect",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"failed")!=NULL);
  assert(strstr(reply_text,"incorrect")==NULL);
+ {
+  char identity[DIGIT_ACCOUNT_ID_MAX]={0},prior[DIGIT_DISPATCHER_ANSWER_MAX]={0};
+  assert(!dm_session_snapshot("T_1","U_1",identity,sizeof(identity),prior,sizeof(prior)));
+  assert(!identity[0]&&!prior[0]);
+ }
  assert(authenticate_dm("T_2","U_2","whoami",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"No active")!=NULL);
 }
