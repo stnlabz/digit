@@ -1,0 +1,40 @@
+name: Digit module qualification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Digit
+        uses: actions/checkout@v4
+        with:
+          path: digit
+      - name: Checkout external STN-LABZ ABI
+        uses: actions/checkout@v4
+        with:
+          repository: stnlabz/ABI
+          path: ABI
+      - name: Compile and qualify language pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in corpus interpretation intent response validator dispatcher; do
+            echo "::group::$module"
+            make -C "digit/modules/$module" clean
+            make -C "digit/modules/$module" all
+            make -C "digit/modules/$module" test
+            echo "::endgroup::"
+          done
+      - name: Compile and qualify authenticated Interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C digit/modules/interface clean
+          make -C digit/modules/interface all
+          make -C digit/modules/interface test
