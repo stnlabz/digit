@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.7 (record-level change detection)
+# STN-2 Intelligence Module — version 1.0.8 (initial Rictus correlation)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -75,3 +75,9 @@ The Digit runtime user must have write access to `/opt/digit/auth/stn2/`. This i
 On successful `/threats` retrieval, capture the response within the existing 8 MiB limit, validate the `threats` array, and compare stable `id` fields against a prior private snapshot at `/opt/digit/auth/stn2/threat-ids.json` (0600). The first collection establishes a baseline; subsequent reports show how many IDs are absent from the prior snapshot and list up to four new record IDs with reported type and timestamp. Duplicate IDs within a single collection are not double-counted. `/events` is *not* treated as an independent corroborating record set.
 
 Scope and limits: maximum 4,096 threat array entries per snapshot; a larger or malformed feed fails closed for record comparison and leaves the previous ID baseline unchanged. State updates use same-directory temporary files and atomic rename. A separate aggregate baseline remains in `intel-state.json`. These IDs are snapshot comparisons, not a durable evidentiary journal or automated investigations. Full Rictus correlation, case management, continuous autonomous watches, investigative outcomes, and non-blocking Slack progress acknowledgements remain **unimplemented**. Concurrent snapshot writers are not serialized. Testing on the actual host is required before qualification.
+
+## Revision 1.0.8
+
+For the first four threat IDs absent from the prior snapshot, compares each record's top-level `ip` value with whole IP-like tokens in the most recent 120 readable Rictus log records. The report explicitly labels an exact text match as a candidate correlation, **not proof of a shared incident, attacker identity, successful compromise, or an independent confirmed event**. It distinguishes no match from unavailable log collection. Prefix/suffix digit and period boundaries avoid basic substring collisions. The trusted source IP role remains subject to the Threat API schema; `details.ip_address` is not conflated with top-level `ip`. New offline tests exercise exact matching, nonmatching substrings, and a second-run cross-source report.
+
+This revision performs no active probes and does not mutate Rictus, Sentinel or Digit Core. This is limited evidence correlation, **not** a durable investigative case system, automated case watches, full record timelines, source-concordance verification, or non-blocking Slack job control. Concurrent snapshots are still not serialized. Linux build and live verification required.
