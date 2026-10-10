@@ -575,7 +575,7 @@ static int authorized_command(const char *s){
 static stnlabz_module_result_t execute(const void *request,size_t req_size,void *output,size_t output_size,size_t *used,void *ctx){
  static const char *const endpoints[]={"/threats","/events","/intel","/patterns","/rss"};
  const digit_stn2_request_t *in=request;digit_stn2_result_t r={0};response_t *buf;size_t i;long http=0;fetch_status_t status;
- FILE *list;char url[1024],line[1024],log_summary[256];
+ FILE *list;char url[1024],line[1024],log_summary[256]={0};
  char intel_section[DIGIT_STN2_TEXT_MAX]={0},record_section[DIGIT_STN2_TEXT_MAX]={0};
  (void)ctx;
  if(!owner||!in||req_size!=sizeof(*in)||!output||output_size<sizeof(r)||!used||
