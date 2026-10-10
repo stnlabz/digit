@@ -242,6 +242,42 @@ static int evidence_divergence(const char *question, const char *candidate, cons
     return 0;
 }
 
+/* [AI:GPT-6 | 2026-10-10] A definition answer needs a subject-to-
+ * definition relation in evidence. Merely mentioning the subject is not
+ * evidence that the sentence defines it. Conservative: reject if unclear. */
+static int unsupported_definition(const char *question,const char *evidence)
+{
+ const char *p=question,*subject;char token[VALIDATOR_TERM_MAX];
+ size_t n;
+ if(!question||!evidence)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(!contains_ci(p," mean?")&&!contains_ci(p," means?"))return 0;
+ if(strncasecmp(p,"what does ",10)!=0)return 0;
+ p+=10;subject=p;
+ while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+ n=(size_t)(p-subject);
+ if(!n||n>=sizeof(token))return 1;
+ memcpy(token,subject,n);token[n]=0;
+ /* The subject must be in the attested relation, not just anywhere
+  * in a surrounding technical paragraph. */
+ {const char *e=evidence;size_t k;
+  while(*e){
+   while(*e&&!isalnum((unsigned char)*e)&&*e!='_'&&*e!='-')++e;
+   if(!*e)break;
+   if(strncasecmp(e,token,n)==0 &&
+      !isalnum((unsigned char)e[n])&&e[n]!='_'&&e[n]!='-'){
+    const char *after=e+n;
+    while(isspace((unsigned char)*after))++after;
+    if(*after=='='||strncasecmp(after,"means ",6)==0||
+       strncasecmp(after,"is ",3)==0)return 0;
+   }
+   while(*e&&(isalnum((unsigned char)*e)||*e=='_'||*e=='-'))++e;
+  }
+  (void)k;
+ }
+ return 1;
+}
+
 static stnlabz_module_result_t inbound_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *context)
 {
     const digit_validator_inbound_request_t *in;
@@ -285,6 +321,7 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
     out->retry_allowed = in->attempt < DIGIT_VALIDATOR_MAX_ATTEMPTS;
 
     if (in->candidate[0] == '\0') snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
+    else if (unsupported_definition(question, in->evidence)) snprintf(out->reason, sizeof(out->reason), "DEFINITION_RELATION_MISSING");
     else if (nearly_echo(question, in->candidate)) snprintf(out->reason, sizeof(out->reason), "ECHO");
     else if (asks_explain(question) && weak_explanation(in->candidate)) snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
     else if (contradictory_relationship(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
@@ -314,7 +351,9 @@ static stnlabz_module_result_t validator_qualify(stnlabz_module_qualification_re
         {"Is authentication needed?","Authentication is never needed.","Authentication is required.",1},
         {"What is the service state?","The service is active.","The service is active.",0},
         {"What is the service state?","","The service is active.",1},
-        {"What is the service state?","The service is broken.","The service is active.",1}
+        {"What is the service state?","The service is broken.","The service is active.",1},
+        {"What does widget mean?","An object has a type.","An object does not mean it has no type.",1},
+        {"What does widget mean?","A widget is a component.","widget means component",0}
     };
     size_t i;unsigned int passed=0;
     if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -368,7 +407,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 5,
+        "validator", "Validator", 1, 0, 6,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
