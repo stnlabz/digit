@@ -116,3 +116,7 @@ Core, external ABI and common autonomous-agent architecture changes require expl
 See [Development Roadmap](docs/ROADMAP.md) for detailed evidence, development phases and outstanding gates.
 
 *Engineering systems worthy of trust when trust matters most.*
+
+### Context-speaker classification correction (Intent 1.2.7 / Dispatcher 1.3.6)
+
+A contextual question such as `What did I just tell you about myself?` is now classified as requesting a prior **user** message, not Digit's previous reply. Dispatcher will no longer repeat its previous reply as though that were the user's statement. Where no verified prior user-message context is available, Dispatcher explicitly reports that limitation. The current scoped-context ABI provides only `previous_answer`; full previous-user-message recall remains unimplemented and needs separately authorized history/context-contract work. This correction does not alter Core, persistence, source retrieval or access permissions. Source committed; Linux build/tests and live verification pending.
