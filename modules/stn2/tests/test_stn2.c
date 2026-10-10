@@ -12,8 +12,10 @@ int main(void){
  {response_t stream={0};char chunk[8192]={0};size_t i;
   for(i=0;i<75;i++)assert(capture(chunk,1,sizeof(chunk),&stream)==sizeof(chunk));
   assert(stream.len==614400&&!stream.exceeded);
-  {size_t remaining=SOURCE_LIMIT-stream.len;
-   assert(capture(chunk,1,remaining,&stream)==remaining);
+  while(stream.len<SOURCE_LIMIT){
+   size_t remaining=SOURCE_LIMIT-stream.len;
+   size_t next=remaining<sizeof(chunk)?remaining:sizeof(chunk);
+   assert(capture(chunk,1,next,&stream)==next);
   }
   assert(stream.len==SOURCE_LIMIT);
   assert(capture(chunk,1,1,&stream)==0&&stream.exceeded);
