@@ -786,22 +786,34 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
   char *change=strstr(record_section,"Sentinel records tracked:");
   char *tail=r.report+strlen("STN-2 Intelligence Brief\n");
   append(ordered,sizeof(ordered),"*STN-2 INTELLIGENCE BRIEF*\n\n");
-  append(ordered,sizeof(ordered),"*1. CURRENT INTELLIGENCE*\n");
-  append(ordered,sizeof(ordered),intel_section);
+  append(ordered,sizeof(ordered),"*1. EXECUTIVE SUMMARY*\n");
+  {
+   char *recent=strstr(intel_section,"Sentinel reported last 24h:");
+   char *active=strstr(record_section,"Investigations:");
+   if(recent){
+    char *end=strchr(recent,'\n');
+    if(end){char saved=*end;*end=0;append(ordered,sizeof(ordered),recent);append(ordered,sizeof(ordered),"\n");*end=saved;}
+   }
+   if(active){
+    char *end=strchr(active,'\n');
+    if(end){char saved=*end;*end=0;append(ordered,sizeof(ordered),active);append(ordered,sizeof(ordered),"\n");*end=saved;}
+   }
+  }
   append(ordered,sizeof(ordered),"\n*2. ACTIVE INVESTIGATIONS*\n");
   if(cases){
    char *end=cross&&cross>cases?cross:NULL;
    if(end){char saved=*end;*end=0;append(ordered,sizeof(ordered),cases);*end=saved;}
    else append(ordered,sizeof(ordered),cases);
   }else append(ordered,sizeof(ordered),"No case evidence details available.\n");
-  append(ordered,sizeof(ordered),"\n*3. COLLECTION CHANGES*\n");
+  append(ordered,sizeof(ordered),"\n*3. THREAT INTELLIGENCE OVERVIEW*\n");
+  append(ordered,sizeof(ordered),intel_section);
   if(change)append(ordered,sizeof(ordered),change);
-  append(ordered,sizeof(ordered),"\n*4. CROSS-SOURCE CORRELATION*\n");
+  append(ordered,sizeof(ordered),"\n*4. CROSS-SOURCE INTELLIGENCE*\n");
   if(cross)append(ordered,sizeof(ordered),cross);
   if(log_summary[0])append(ordered,sizeof(ordered),log_summary);
-  append(ordered,sizeof(ordered),"\n*5. EVIDENCE GAPS*\n");
+  append(ordered,sizeof(ordered),"\n*5. INTELLIGENCE GAPS*\n");
   if(tail[0])append(ordered,sizeof(ordered),tail);
-  append(ordered,sizeof(ordered),"\n*6. ASSESSMENT*\n");
+  append(ordered,sizeof(ordered),"\n*6. FINAL ASSESSMENT*\n");
   append(ordered,sizeof(ordered),"Observed indicators do not establish compromise or confirmed incident linkage.\n");
   memcpy(r.report,ordered,sizeof(r.report));
  }
