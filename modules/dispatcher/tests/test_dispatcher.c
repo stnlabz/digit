@@ -16,6 +16,7 @@ static stnlabz_module_service_handler_fn scoped_context_handler;
 static unsigned response_calls;
 static digit_intent_class_t chosen_intent;
 static unsigned int chosen_established=1;
+static const char *chosen_context_subject;
 static unsigned int lesson_calls=0;
 static unsigned int arithmetic_calls=0;
 
@@ -47,7 +48,9 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   memset(out,0,sizeof(*out));out->intent=chosen_intent;
   out->target=chosen_intent==DIGIT_INTENT_ACTION?DIGIT_INTENT_TARGET_CAPABILITY:
               DIGIT_INTENT_TARGET_KNOWLEDGE;
-  out->established=chosen_established;*used=sizeof(*out);return STNLABZ_MODULE_OK;
+  out->established=chosen_established;
+  if(chosen_context_subject)snprintf(out->subject,sizeof(out->subject),"%s",chosen_context_subject);
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  if(!strcmp(name,DIGIT_LESSON_INGEST_SERVICE)){
   lesson_calls++;
@@ -143,6 +146,27 @@ int main(void){
      !dispatch_case("verify your answer",DIGIT_INTENT_UNKNOWN,0,
                     "without authenticated, account-bound conversation context")){
    fprintf(stderr,"Dispatcher unscoped follow-up rejection FAILED\\n");return 1;
+  }
+  {
+   digit_dispatcher_scoped_context_request_t ctx={0};
+   digit_dispatcher_result_t out={0};
+   size_t used=0;
+   chosen_intent=DIGIT_INTENT_CONTEXT;chosen_established=1;
+   chosen_context_subject="prior_user_message";
+   snprintf(ctx.scoped.actor,sizeof(ctx.scoped.actor),"verified_user");
+   snprintf(ctx.scoped.request,sizeof(ctx.scoped.request),"What did I just tell you?");
+   ctx.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   snprintf(ctx.previous_user_message,sizeof(ctx.previous_user_message),"I created the project.");
+   if(!scoped_context_handler||
+      scoped_context_handler(&ctx,sizeof(ctx),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+      strcmp(out.answer,"I created the project.")!=0){
+    fprintf(stderr,"Dispatcher previous-user-message context FAILED\\n");return 1;
+   }
+   ctx.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_CHANNEL;
+   if(scoped_context_handler(&ctx,sizeof(ctx),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT){
+    fprintf(stderr,"Dispatcher private history escaped into channel scope\\n");return 1;
+   }
+   chosen_context_subject=NULL;
   }
   /* [AI:GPT-6 | 2026-10-09] Scoped ABI acceptance and denial. */
   {
