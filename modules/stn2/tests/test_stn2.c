@@ -86,6 +86,12 @@ int main(void){
   f=fopen(log,"w");assert(f);
   assert(fputs("WARN probe from 192.0.2.9 at path /xmlrpc.php\n",f)>=0);
   assert(fclose(f)==0);
+  {rictus_window_t window={0};
+   assert(rictus_load(log,&window));
+   assert(window.available&&window.count==1);
+   assert(rictus_window_match(&window,"192.0.2.9")==1);
+   assert(rictus_window_match(&window,"192.0.2.10")==0);
+  }
   assert(same_ip_token("src=192.0.2.9","192.0.2.9"));
   assert(!same_ip_token("src=1192.0.2.9","192.0.2.9"));
   assert(!same_ip_token("src=192.0.2.90","192.0.2.9"));
