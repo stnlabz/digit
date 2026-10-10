@@ -320,6 +320,14 @@ static int complete_phrase_match(const char *phrase,const char *record)
 static unsigned int record_score(const char *question,const corpus_record_t *record,unsigned int *matches_out){char qt[TERM_COUNT][TERM_MAX],rt[TERM_COUNT][TERM_MAX];size_t qn,rn,q;unsigned int matches=0,coverage=0,precision=0,score;int qr,rr;memset(qt,0,sizeof(qt));memset(rt,0,sizeof(rt));qn=terms(question,qt);rn=terms(record->text,rt);for(q=0;q<qn;++q)if(has_term(rt,rn,qt[q]))++matches;if(matches_out)*matches_out=matches;/* [AI:GPT-6 | 2026-10-09] Reject evidence backed by only one shared term in a multi-term request; lexical coincidence is not sufficient grounding. */if(matches==0||(qn>=2&&matches<2))return 0;if(qn>0)coverage=(unsigned int)((matches*200U)/qn);if(rn>0)precision=(unsigned int)((matches*100U)/rn);score=matches*100U+coverage+precision+lesson_bonus(question,record)+phrase_match_bonus(question,record->text);qr=reference_value(question);rr=reference_value(record->text);if(qr>0&&rr>0){if(qr==rr)score+=600U;else score=score>400U?score-400U:1U;}if(strcmp(record->category,"source")==0&&source_intent(question))score+=25U;return score;}
 static size_t select_evidence(const char *question,const corpus_result_t *evidence,ranked_record_t selected[SELECTED_MAX]){ranked_record_t ranked[CORPUS_MAX];size_t count=evidence->count>CORPUS_MAX?CORPUS_MAX:evidence->count,i,j,out=0;int qr=reference_value(question);unsigned int reference_matches=0;for(i=0;i<count;++i){int rr;ranked[i].record=evidence->records[i];/* [AI:GPT-6 | 2026-10-10] An authorized learned relation
   * may use only stopwords in its predicate; it is not a question echo. */
+/* A verified operator-taught social rule can match a trigger word
+ * inside a longer utterance. It is not factual evidence. */
+{
+ char social_reply[128];
+ if(learned_social_reply(question,&evidence->records[i],social_reply,sizeof(social_reply))){
+  ranked[i].score=1200;ranked[i].matches=1;continue;
+ }
+}
 if(question_like_record(question,evidence->records[i].text)&&
    !(strcmp(evidence->records[i].category,"OPERATOR_LEARNED")==0&&
      strcmp(evidence->records[i].source,"interface:learn")==0&&
@@ -696,7 +704,21 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   snprintf(lesson.source,sizeof(lesson.source),"untrusted");
   passed+=(unsigned)!learned_social_reply("Bish?",&lesson,answer,sizeof(answer));
  }
- result->tests_executed=38;result->tests_passed=passed;
+ /* Multiword requests retain matched authorized social evidence
+  * without diluting the factual two-term evidence threshold. */
+ {
+  corpus_result_t source={0};
+  ranked_record_t selected[SELECTED_MAX]={{0}};
+  snprintf(source.records[0].category,sizeof(source.records[0].category),"OPERATOR_LEARNED");
+  snprintf(source.records[0].source,sizeof(source.records[0].source),"interface:learn");
+  snprintf(source.records[0].text,sizeof(source.records[0].text),
+    "being playful: includes occasionally saying \"bish\" or \"dude\" , specifically in resonse to \"bish\" and then follow up with normal conversation.");
+  source.count=1;
+  passed+=(unsigned)(select_evidence("WTF Bish?",&source,selected)==1);
+  passed+=(unsigned)(select_evidence("wut now bish",&source,selected)==1);
+  passed+=(unsigned)(select_evidence("What is a compiler?",&source,selected)==0);
+ }
+ result->tests_executed=41;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -705,5 +727,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
