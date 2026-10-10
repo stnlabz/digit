@@ -39,6 +39,51 @@ static int has_word(const char *text, const char *word)
 
 /* [AI:GPT-6 | 2026-10-09] Interpret only explicit, unambiguous
  * learned definitions. A conflicting lesson cannot silently win by rank. */
+/* [AI:GPT-6 | 2026-10-09] Parse learned token-equivalence records as
+ * data. Both sides must consist solely of comma-separated tokens, and all
+ * right-side tokens must agree; ambiguity fails closed. */
+static int learned_token_list(const char *start,size_t size,const char *match,
+                              char *canonical,size_t capacity)
+{
+ size_t pos=0;int found=0;
+ if(!start||!canonical||!capacity||size==0)return 0;
+ canonical[0]=0;
+ while(pos<size){
+  size_t begin,end,len,i;
+  while(pos<size&&isspace((unsigned char)start[pos]))++pos;
+  begin=pos;
+  while(pos<size&&(isalnum((unsigned char)start[pos])||
+      start[pos]=='_'||start[pos]=='-'))++pos;
+  end=pos;len=end-begin;
+  if(!len||len>=capacity)return 0;
+  while(pos<size&&isspace((unsigned char)start[pos]))++pos;
+  if(pos<size&&start[pos]!=',')return 0;
+  if(match){
+   if(word_equal_ci(start+begin,len,match))found=1;
+  }else{
+   if(canonical[0]&&!word_equal_ci(start+begin,len,canonical))return 0;
+   if(!canonical[0]){memcpy(canonical,start+begin,len);canonical[len]=0;}
+  }
+  if(pos<size){++pos;if(pos==size)return 0;}
+  /* Reject any punctuation or empty list component. */
+  for(i=begin;i<end;++i)if((unsigned char)start[i]<32)return 0;
+ }
+ return match?found:canonical[0]!=0;
+}
+
+static int parse_learned_equivalence(const digit_corpus_record_t *record,
+                                     const char *word,char *out,size_t capacity)
+{
+ const char *text,*eq;char aliases[128]={0};
+ if(!record||!word||!out||!capacity||
+    strcmp(record->category,"OPERATOR_LEARNED")||
+    strcmp(record->source,"interface:learn"))return 0;
+ text=record->text;eq=strchr(text,'=');
+ if(!eq||strchr(eq+1,'='))return 0;
+ if(!learned_token_list(text,(size_t)(eq-text),word,aliases,sizeof(aliases)))return 0;
+ return learned_token_list(eq+1,strlen(eq+1),NULL,out,capacity);
+}
+
 static int parse_learned_definition(const digit_corpus_record_t *record,
                                     const char *word,char *out,size_t capacity)
 {
@@ -78,7 +123,8 @@ static int unique_learned_meaning(const digit_corpus_search_result_t *result,
     size_t i;int found=0;
     if(!result||!word||!out||!capacity)return 0;
     for(i=0;i<result->count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
-        if(!parse_learned_definition(&result->records[i],word,candidate,sizeof(candidate)))continue;
+        if(!parse_learned_definition(&result->records[i],word,candidate,sizeof(candidate))&&
+           !parse_learned_equivalence(&result->records[i],word,candidate,sizeof(candidate)))continue;
         if(found&&strcmp(resolved,candidate)!=0)return 0;
         snprintf(resolved,sizeof(resolved),"%s",candidate);
         found=1;
@@ -289,6 +335,27 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
             result->tests_executed++;
             if(!parse_learned_definition(&record,"wut",meaning,sizeof(meaning)))result->tests_passed++;
         }
+        /* [AI:GPT-6 | 2026-10-09] Corpus-format equivalence tests
+         * use fixtures; nothing is hardcoded into production vocabulary. */
+        {
+            digit_corpus_record_t record={0};
+            digit_corpus_search_result_t records={0};
+            char value[128]={0};
+            snprintf(record.category,sizeof(record.category),"OPERATOR_LEARNED");
+            snprintf(record.source,sizeof(record.source),"interface:learn");
+            snprintf(record.text,sizeof(record.text),"Wut, wut, = What, what");
+            result->tests_executed++;
+            if(parse_learned_equivalence(&record,"wut",value,sizeof(value))&&
+               word_equal_ci(value,strlen(value),"what"))result->tests_passed++;
+            snprintf(record.text,sizeof(record.text),"Wut = What, which");
+            result->tests_executed++;
+            if(!parse_learned_equivalence(&record,"wut",value,sizeof(value)))result->tests_passed++;
+            snprintf(record.text,sizeof(record.text),"Wut = What");
+            records.count=2;records.records[0]=record;records.records[1]=record;
+            snprintf(records.records[1].text,sizeof(records.records[1].text),"Wut means which");
+            result->tests_executed++;
+            if(!unique_learned_meaning(&records,"wut",value,sizeof(value)))result->tests_passed++;
+        }
         result->negative_test_executed=1;
         result->negative_test_passed=!resolve_text("oversized", (char[2]){0}, 2, NULL);
     }
@@ -320,7 +387,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 5,
+    "interpretation", "Digit Interpretation", 1, 0, 6,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
