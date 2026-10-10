@@ -255,14 +255,15 @@ static int dm_session_snapshot(const char *team,const char *user,
  }
  pthread_mutex_unlock(&mutex);return found;
 }
-static void dm_session_set_reply(const char *team,const char *user,const char *answer){
+static void dm_session_set_reply(const char *team,const char *user,const char *message,const char *answer){
  size_t i;time_t now=time(NULL);
- if(!team||!user||!answer)return;
+ if(!team||!user||!message||!answer)return;
  pthread_mutex_lock(&mutex);
  for(i=0;i<32;i++){
   if(sessions[i].expires<=now||strcmp(sessions[i].team,team)||
      strcmp(sessions[i].user,user))continue;
   (void)bounded(sessions[i].previous_answer,sizeof(sessions[i].previous_answer),answer);
+  (void)bounded(sessions[i].previous_user_message,sizeof(sessions[i].previous_user_message),message);
   break;
  }
  pthread_mutex_unlock(&mutex);
@@ -337,7 +338,7 @@ static int process_event(struct json_object *root){
                            &contextual,sizeof(contextual),&answer,sizeof(answer),&used)!=STNLABZ_MODULE_OK||
       used!=sizeof(answer)||!memchr(answer.answer,0,sizeof(answer.answer))||
       !answer.answer[0])return 0;
-   dm_session_set_reply(team,user,answer.answer);
+   dm_session_set_reply(team,user,message,answer.answer);
   }else{
    if(!host||!host->invoke_service||
       host->invoke_service(DIGIT_DISPATCHER_SCOPED_SERVICE,&query,sizeof(query),
