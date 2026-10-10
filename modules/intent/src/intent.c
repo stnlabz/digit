@@ -173,6 +173,45 @@ static int contextual_reference(const char *text,char *subject,size_t capacity)
  return 0;
 }
 
+/* [AI:GPT-6 | 2026-10-10] A retained operator lesson can establish
+ * non-operational social context. No slang is defined inside Intent.
+ * This is deliberately not a capability or authorization path. */
+static int learned_social_context(const char *text)
+{
+ digit_corpus_search_request_t query={0};
+ digit_corpus_search_result_t found={0};
+ size_t used=0,i;
+ if(!intent_host||!intent_host->invoke_service||!text||!*text)return 0;
+ if(strlen(text)>=sizeof(query.query))return 0;
+ snprintf(query.query,sizeof(query.query),"%s",text);
+ if(intent_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&query,
+    sizeof(query),&found,sizeof(found),&used)!=STNLABZ_MODULE_OK||
+    used!=sizeof(found))return 0;
+ for(i=0;i<found.count&&i<DIGIT_CORPUS_SEARCH_MAX;i++){
+  const corpus_record_t *r=&found.records[i];
+  const char *p;size_t matches=0;
+  if(strcmp(r->category,"OPERATOR_LEARNED")||
+     strcmp(r->source,"interface:learn"))continue;
+  if(!strstr(r->text,"playful")&&!strstr(r->text,"respond to")&&
+     !strstr(r->text,"resonse to")&&!strstr(r->text,"can be responded to with")&&
+     !strstr(r->text,"may use"))continue;
+  p=r->text;
+  while((p=strchr(p,'"'))!=NULL){
+   const char *end=strchr(++p,'"');
+   char token[128];size_t n;
+   if(!end)break;
+   n=(size_t)(end-p);
+   if(n&&n<sizeof(token)){
+    memcpy(token,p,n);token[n]=0;
+    if(has_word(text,token))matches++;
+   }
+   p=end+1;
+  }
+  if(matches)return 1;
+ }
+ return 0;
+}
+
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
                        digit_intent_target_t target, unsigned int established,
                        const char *reason)
@@ -263,6 +302,13 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if(compare){if(find_word(text,"compare",&after)){semantic_subject(after,result->subject,sizeof(result->subject));}else{snprintf(result->subject,sizeof(result->subject),"%.*s",(int)sizeof(result->subject)-1,text);}set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a comparison.");return;}
     if(why){set_result(result,DIGIT_INTENT_WHY,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a supported reason or cause.");return;}
     if(how){set_result(result,DIGIT_INTENT_HOW,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks how something works or is done.");return;}
+    /* Retained conversation is considered only after all recognized
+     * operational, definition, comparison, and context requests. */
+    if(!action&&!status&&!explain&&!define&&!compare&&!why&&!how&&
+       learned_social_context(text)){
+        set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
+                   "Established learned social expression.");return;
+    }
     if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
     if(social){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Request is conversational rather than an operational or knowledge task.");return;}
     /* [AI:GPT-6 | 2026-10-09] First-person identity/work descriptions are\n     * conversational data, never proof of account identity or authority.\n     * Do not override recognized operational intent above this point. */
@@ -426,7 +472,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 8,
+    "intent", "Digit Intent", 1, 2, 9,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
