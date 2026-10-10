@@ -30,7 +30,7 @@ static int watch_active;
 static int active,stop_flag;
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t intel_mutex=PTHREAD_MUTEX_INITIALIZER;
-typedef struct {char user[64],team[64],identity[DIGIT_ACCOUNT_ID_MAX];time_t expires;char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];} slack_session_t;
+typedef struct {char user[64],team[64],identity[DIGIT_ACCOUNT_ID_MAX];time_t expires;char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];char previous_user_message[DIGIT_DISPATCHER_REQUEST_MAX];} slack_session_t;
 static slack_session_t sessions[32];
 static char bot_id[64];
 static char last_events[128][128];static unsigned int event_cursor;
