@@ -64,7 +64,16 @@ static int learned_token_list(const char *start,size_t size,const char *match,
    if(canonical[0]&&!word_equal_ci(start+begin,len,canonical))return 0;
    if(!canonical[0]){memcpy(canonical,start+begin,len);canonical[len]=0;}
   }
-  if(pos<size){++pos;if(pos==size)return 0;}
+  if(pos<size){
+   ++pos;
+   if(pos==size)return 0;
+   /* [AI:GPT-6 | 2026-10-10] Corpus's comma-equals syntax may
+    * terminate the alias list with a comma before '='. */
+   {size_t tail=pos;
+    while(tail<size&&isspace((unsigned char)start[tail]))++tail;
+    if(tail==size){if(match)return found;return 0;}
+   }
+  }
   /* Reject any punctuation or empty list component. */
   for(i=begin;i<end;++i)if((unsigned char)start[i]<32)return 0;
  }
@@ -387,7 +396,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 6,
+    "interpretation", "Digit Interpretation", 1, 0, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
