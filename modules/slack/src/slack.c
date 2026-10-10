@@ -120,7 +120,7 @@ static int alert_load(const char *path,char *message,size_t cap){
  if(!path||!message||cap<2)return -1;
  message[0]=0;
  if(lstat(path,&st)<0)return errno==ENOENT?0:-1;
- if(!private_file(path)||st.st_size<2||st.st_size>ALERT_CAP+512)return -1;
+ if(!private_file(path)||st.st_size<2||st.st_size>6*ALERT_CAP+512)return -1;
  root=json_object_from_file(path);
  if(!root||!json_object_is_type(root,json_type_object))goto done;
  channel=field(root,"channel");body=field(root,"message");
