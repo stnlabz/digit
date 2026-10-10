@@ -383,10 +383,10 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path)
  }
  if(fclose(fp)!=0){fp=NULL;unlink(tmp);goto done;}fp=NULL;
  if(rename(tmp,path)!=0){unlink(tmp);goto done;}
- snprintf(line,sizeof(line),
-          present?"Threat IDs: %zu distinct in current feed; %zu not in previous snapshot\n":
-                  "Threat IDs: baseline established with %zu distinct records\n",
-          seen,new_count);
+ if(present)
+  snprintf(line,sizeof(line),"Threat IDs: %zu records; %zu absent from previous snapshot\n",seen,new_count);
+ else
+  snprintf(line,sizeof(line),"Threat IDs: initial baseline of %zu records\n",seen);
  append(out,cap,line);
  append(out,cap,"Record comparison: new means absent from prior snapshot, not independently verified or newly exploited.\n");
  ok=1;
