@@ -180,7 +180,15 @@ static void render_intent_answer(const response_intent_t *intent,const char *que
    off+=(size_t)n;
   }
  }
- used=0;status=response_host->invoke_service(DIGIT_REASONING_COMPARE_SERVICE,&cr,sizeof(cr),&co,sizeof(co),&used);output->answered=1;if(status!=STNLABZ_MODULE_OK||used!=sizeof(co)||!co.compared||co.comparison[0]=='\0'){snprintf(output->answer,sizeof(output->answer),"I don't have enough grounded information to compare those subjects.");return;}snprintf(output->answer,sizeof(output->answer),"%s",co.comparison);return;}if(intent!=NULL&&(strcmp(intent->intent,"EXPLAIN")==0||strcmp(intent->intent,"DEFINE")==0)&&selected_count>0&&render_lesson_definition(question,selected,selected_count,output->answer,sizeof(output->answer))){output->answered=1;return;}if(intent==NULL||strcmp(intent->intent,"EXPLAIN")!=0){grounded_fallback(question,selected,selected_count,output);return;}output->answered=1;if(selected_count==0||response_host==NULL||response_host->invoke_service==NULL){snprintf(output->answer,sizeof(output->answer),"I don't have enough information to answer that.");return;}memset(&request,0,sizeof(request));memset(&result,0,sizeof(result));/* [AI:GPT-6 | 2026-10-08] EXPLAIN must use the same resolved subject as evidence retrieval. */snprintf(request.subject,sizeof(request.subject),"%.*s",(int)(sizeof(request.subject)-1U),question);count=selected_count>DIGIT_REASONING_EVIDENCE_MAX?DIGIT_REASONING_EVIDENCE_MAX:selected_count;for(i=0;i<count;++i)snprintf(request.evidence[i],sizeof(request.evidence[i]),"%s",selected[i].record.text);request.evidence_count=count;status=response_host->invoke_service(DIGIT_REASONING_EXPLAIN_SERVICE,&request,sizeof(request),&result,sizeof(result),&used);if(status!=STNLABZ_MODULE_OK||used!=sizeof(result)||!result.explained||result.explanation[0]=='\0'){snprintf(output->answer,sizeof(output->answer),"I don't have enough grounded information to explain that.");return;}snprintf(output->answer,sizeof(output->answer),"%s",result.explanation);}
+ used=0;status=response_host->invoke_service(DIGIT_REASONING_COMPARE_SERVICE,&cr,sizeof(cr),&co,sizeof(co),&used);output->answered=1;if(status!=STNLABZ_MODULE_OK||used!=sizeof(co)||!co.compared||co.comparison[0]=='\0'){snprintf(output->answer,sizeof(output->answer),"I don't have enough grounded information to compare those subjects.");return;}snprintf(output->answer,sizeof(output->answer),"%s",co.comparison);return;}if(intent!=NULL&&(strcmp(intent->intent,"EXPLAIN")==0||strcmp(intent->intent,"DEFINE")==0)&&selected_count>0&&render_lesson_definition(question,selected,selected_count,output->answer,sizeof(output->answer))){output->answered=1;return;}/* [AI:GPT-6 | 2026-10-10] A DEFINE operation requires an actual
+ * definition relation. An overlapping corpus excerpt is not an answer. */
+if(intent!=NULL&&strcmp(intent->intent,"DEFINE")==0){
+ output->answered=1;
+ snprintf(output->answer,sizeof(output->answer),
+          "I don't have enough grounded information to define that.");
+ return;
+}
+if(intent==NULL||strcmp(intent->intent,"EXPLAIN")!=0){grounded_fallback(question,selected,selected_count,output);return;}output->answered=1;if(selected_count==0||response_host==NULL||response_host->invoke_service==NULL){snprintf(output->answer,sizeof(output->answer),"I don't have enough information to answer that.");return;}memset(&request,0,sizeof(request));memset(&result,0,sizeof(result));/* [AI:GPT-6 | 2026-10-08] EXPLAIN must use the same resolved subject as evidence retrieval. */snprintf(request.subject,sizeof(request.subject),"%.*s",(int)(sizeof(request.subject)-1U),question);count=selected_count>DIGIT_REASONING_EVIDENCE_MAX?DIGIT_REASONING_EVIDENCE_MAX:selected_count;for(i=0;i<count;++i)snprintf(request.evidence[i],sizeof(request.evidence[i]),"%s",selected[i].record.text);request.evidence_count=count;status=response_host->invoke_service(DIGIT_REASONING_EXPLAIN_SERVICE,&request,sizeof(request),&result,sizeof(result),&used);if(status!=STNLABZ_MODULE_OK||used!=sizeof(result)||!result.explained||result.explanation[0]=='\0'){snprintf(output->answer,sizeof(output->answer),"I don't have enough grounded information to explain that.");return;}snprintf(output->answer,sizeof(output->answer),"%s",result.explanation);}
 static int evidence_requested(const char *question){char qt[TERM_COUNT][TERM_MAX];size_t qn,i;static const char *words[]={"evidence","prove","proof","provenance","citation","citations","source","sources"};memset(qt,0,sizeof(qt));qn=terms(question,qt);for(i=0;i<qn;++i){size_t j;for(j=0;j<sizeof(words)/sizeof(words[0]);++j)if(strcmp(qt[i],words[j])==0)return 1;}return 0;}
 static int source_intent(const char *question){char qt[TERM_COUNT][TERM_MAX];size_t qn,i;static const char *engineering[]={"abi","code","source","function","functions","module","modules","implementation","file","files","header","headers","struct","service","services","compile","compiler","build","engineering","evidence"};memset(qt,0,sizeof(qt));qn=terms(question,qt);for(i=0;i<qn;++i){size_t j;for(j=0;j<sizeof(engineering)/sizeof(engineering[0]);++j)if(strcmp(qt[i],engineering[j])==0)return 1;}return 0;}
 static int collect_corpus(const char *question,corpus_result_t *evidence){corpus_search_request_t request;stnlabz_module_result_t result;size_t used=0;char query_terms[TERM_COUNT][TERM_MAX];size_t count,i,offset=0;if(question==NULL||evidence==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(query_terms,0,sizeof(query_terms));count=terms(question,query_terms);if(count==0)return 1;for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);}
@@ -509,7 +517,22 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
    passed+=(unsigned)(select_evidence("What is a variable?",&sample,matched)==0);
   }
  }
- result->tests_executed=27;result->tests_passed=passed;
+ /* [AI:GPT-6 | 2026-10-10] DEFINE must reject a topical distractor
+  * instead of copying the top-ranked lexical match. */
+ {
+  ranked_record_t misleading[SELECTED_MAX]={{0}};
+  response_intent_t definition={0};
+  digit_response_result_t rendered={0};
+  snprintf(definition.intent,sizeof(definition.intent),"DEFINE");
+  snprintf(misleading[0].record.text,sizeof(misleading[0].record.text),
+           "An object does not mean it has no type.");
+  render_intent_answer(&definition,"an expression",misleading,1,
+                       &rendered,NULL,0);
+  passed+=(unsigned)(rendered.answered&&
+      strstr(rendered.answer,"don't have enough grounded information")!=NULL&&
+      strstr(rendered.answer,"object")==NULL);
+ }
+ result->tests_executed=28;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -518,5 +541,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
