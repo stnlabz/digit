@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.10 (single-pass Rictus snapshot correlation)
+# STN-2 Intelligence Module — version 1.1.0 (multi-indicator historical assessment)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -91,3 +91,7 @@ This is **not** yet persistent case management, automatically scheduled watching
 ## Revision 1.0.10
 
 Historical correlation now reads and validates the Rictus log **once per STN-2 threat-record comparison**, retaining only the most recent 120 complete log lines in a bounded in-memory window. Every deduplicated Sentinel record is matched against that same snapshot, avoiding the previous per-record repeated file scans. Existing evidence caveats and per-source permissions remain unchanged. Unavailable Rictus input is explicitly reported as an incomplete correlation rather than as zero evidence. Additional regression checks exercise loaded-window matches and nonmatches. This change does not introduce durable investigations, watch scheduling, active probes or Slack background dispatch; these capabilities remain outstanding. Live build, performance and end-to-end qualification are required.
+
+## Version 1.1.0 — Initial structured investigation assessments
+
+STN-2 correlates the historical, deduplicated Sentinel threat records against a single bounded window of recent Rictus observations, using two independent textual candidates: the top-level `ip` token and `details.request_url` literal path. It reports checked and matching record counts separately, up to three IP examples and two path examples, and an explicit outcome: candidate overlap, no overlap in the bounded window, or insufficient evidence when Rictus is inaccessible. These are *candidate investigative assessments*, not verified incidents or successful exploitation. Request paths may contain query strings and are compared literally, not normalized. Timestamp chronology, domain identity, IP role attribution, provenance validation, evidence retention, durable case records, scheduled watches, and asynchronous Slack progress are **not implemented** in this release. Testing and operational qualification remain necessary.
