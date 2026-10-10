@@ -121,6 +121,28 @@ static int personal_introduction(const char *text)
     return 0;
 }
 
+/* [AI:GPT-6 | 2026-10-10] Parse a definition question as an
+ * operation with a bounded cited term, not a generic lexical search. */
+static int definition_question(const char *text,char *subject,size_t capacity)
+{
+ const char *p=text,*begin;size_t n;
+ if(!p||!subject||!capacity)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"what",4)||!isspace((unsigned char)p[4]))return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"does",4)||!isspace((unsigned char)p[4]))return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;begin=p;
+ while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+ n=(size_t)(p-begin);
+ if(!n||n>=capacity||!isspace((unsigned char)*p))return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"mean",4))return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;
+ if(*p!='?'&&*p!='.'&&*p!='\0')return 0;
+ if(*p&&p[1])return 0;
+ memcpy(subject,begin,n);subject[n]='\0';return 1;
+}
+
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
                        digit_intent_target_t target, unsigned int established,
                        const char *reason)
@@ -148,6 +170,10 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,
                    "Request exceeds the intent input boundary.");
         return;
+    }
+    if(definition_question(text,result->subject,sizeof(result->subject))){
+        set_result(result,DIGIT_INTENT_DEFINE,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,
+                   "Request asks for the meaning of a cited expression.");return;
     }
     if(personal_introduction(text)){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Operator self-introduction is conversational, not authentication.");return;}
     /* [AI:GPT-6 | 2026-10-09] A bounded solve-equation request is
@@ -297,6 +323,7 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"hello Digit", DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U},
         {"what is the first General Order", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"define deterministic behavior", DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"What does example mean?", DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"explain deterministic behavior", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Explain what running on fumes means in your own words.", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Explain what it means when a server is toast without using the word ruined.", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
@@ -360,7 +387,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 2,
+    "intent", "Digit Intent", 1, 2, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
