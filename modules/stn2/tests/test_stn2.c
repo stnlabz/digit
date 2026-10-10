@@ -32,6 +32,20 @@ int main(void){
   assert(strcmp(parsed.cves[0],"CVE-2026-12345")==0);
   assert(strcmp(parsed.cves[1],"CVE-2025-4321")==0);
  }
+ {
+  const char *sample="{\"stats\":{\"total_threats\":1394,\"by_type\":{\"pattern_match\":1195,\"wp_admin_scan\":176}},\"analysis\":{\"total_24h\":1,\"trending\":{\"probe\":1}},\"patterns\":[\"wp-admin\",\"xmlrpc\"]}";
+  char output[4096]={0};
+  response_t intel={0};
+  assert(capture((char *)sample,1,strlen(sample),&intel)==strlen(sample));
+  finish_scan(&intel);
+  assert(intel_report(intel.intel_json,output,sizeof(output)));
+  assert(strstr(output,"1394 observations")!=NULL);
+  assert(strstr(output,"wp_admin_scan: 176")!=NULL);
+  assert(strstr(output,"last 24h: 1")!=NULL);
+  assert(strstr(output,"xmlrpc")!=NULL);
+  output[0]=0;
+  assert(!intel_report("{\"stats\":{}}",output,sizeof(output)));
+ }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
  assert(strcmp(fetch_label(FETCH_HTTP),"HTTP_ERROR")==0);
  assert(strcmp(fetch_label(FETCH_EMPTY),"EMPTY_RESPONSE")==0);
