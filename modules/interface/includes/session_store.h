@@ -11,6 +11,7 @@
 #define DIGIT_SESSION_CAPACITY 128U
 #define DIGIT_SESSION_TOKEN_SIZE 65U
 #define DIGIT_SESSION_ID_SIZE 64U
+#define DIGIT_SESSION_LAST_REPLY_MAX 4096U
 #define DIGIT_SESSION_LIFETIME 3600
 
 typedef struct {
@@ -18,6 +19,8 @@ typedef struct {
     char identity[DIGIT_SESSION_ID_SIZE];
     /* [AI:GPT-6 | 2026-10-09] Volatile, per-session preferred name; never persisted. */
     char preferred_name[64];
+    /* [AI:GPT-6 | 2026-10-10] Volatile authenticated-session reply context. */
+    char last_reply[DIGIT_SESSION_LAST_REPLY_MAX];
     time_t expires_at;
     int active;
 } digit_session_entry_t;
