@@ -238,7 +238,8 @@ if(strcmp(canonical,"who are you")==0){
  }
  return 1;
 }}
-if(count==0)return 1;for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);}
+if(count==0)return 1;
+for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);}
 static int duplicate_source(const corpus_result_t *evidence,const char *source,const char *text){size_t i;for(i=0;i<evidence->count;++i)if(strcmp(evidence->records[i].category,"source")==0&&strcmp(evidence->records[i].source,source)==0&&strcmp(evidence->records[i].text,text)==0)return 1;return 0;}
 static void collect_source(const char *question,corpus_result_t *evidence){source_projects_result_t projects;char qt[TERM_COUNT][TERM_MAX];size_t qn,p,q,used=0;stnlabz_module_result_t result;if(question==NULL||evidence==NULL||response_host==NULL||response_host->invoke_service==NULL||!source_intent(question)||evidence->count>=CORPUS_MAX)return;memset(&projects,0,sizeof(projects));result=response_host->invoke_service(SOURCE_PROJECTS_SERVICE,NULL,0,&projects,sizeof(projects),&used);if(result!=STNLABZ_MODULE_OK||used!=sizeof(projects))return;memset(qt,0,sizeof(qt));qn=terms(question,qt);for(q=0;q<qn&&evidence->count<CORPUS_MAX;++q){if(strlen(qt[q])<3)continue;for(p=0;p<projects.count&&p<SOURCE_PROJECTS_MAX&&evidence->count<CORPUS_MAX;++p){source_search_request_t request;source_search_result_t found;size_t search_used=0,m;memset(&request,0,sizeof(request));snprintf(request.project,sizeof(request.project),"%s",projects.projects[p].name);snprintf(request.query,sizeof(request.query),"%s",qt[q]);memset(&found,0,sizeof(found));result=response_host->invoke_service(SOURCE_SEARCH_SERVICE,&request,sizeof(request),&found,sizeof(found),&search_used);if(result!=STNLABZ_MODULE_OK||search_used!=sizeof(found))continue;for(m=0;m<found.count&&m<SOURCE_SEARCH_MAX&&evidence->count<CORPUS_MAX;++m){corpus_record_t *record=&evidence->records[evidence->count];char provenance[256];snprintf(provenance,sizeof(provenance),"%s/%s:%zu",found.matches[m].project,found.matches[m].path,found.matches[m].line);if(duplicate_source(evidence,provenance,found.matches[m].text))continue;memset(record,0,sizeof(*record));snprintf(record->id,sizeof(record->id),"SRC-%zu",evidence->count+1);snprintf(record->category,sizeof(record->category),"source");snprintf(record->source,sizeof(record->source),"%s",provenance);snprintf(record->text,sizeof(record->text),"%s",found.matches[m].text);++evidence->count;}}}}
 static unsigned int lesson_bonus(const char *question,const corpus_record_t *record){char topic[TERM_MAX];const char *start,*end;size_t len;if(record==NULL||strncmp(record->source,"lesson:",7)!=0)return 0;start=record->source+7;end=strstr(start,".txt");if(end==NULL||end<=start)return 150U;len=(size_t)(end-start);if(len>=sizeof(topic))len=sizeof(topic)-1;memcpy(topic,start,len);topic[len]='\0';if(question!=NULL){char qt[TERM_COUNT][TERM_MAX];size_t qn;memset(qt,0,sizeof(qt));qn=terms(question,qt);if(has_term(qt,qn,topic))return 300U;}return 150U;}
@@ -583,7 +584,8 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   passed+=(unsigned)!learned_self_identity_answer("Operator, delete logs",&lesson,answer,sizeof(answer));
   {
    corpus_result_t sample={0};
-   ranked_record_t matched[SELECTED_MAX]={{0}};
+   ranked_record_t matched[SELECTED_MAX];
+   memset(matched,0,sizeof(matched));
    sample.count=1;
    sample.records[0]=lesson;
    passed+=(unsigned)(select_evidence("Who are you?",&sample,matched)==1);
@@ -593,7 +595,8 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
  /* [AI:GPT-6 | 2026-10-10] DEFINE must reject a topical distractor
   * instead of copying the top-ranked lexical match. */
  {
-  ranked_record_t misleading[SELECTED_MAX]={{0}};
+  ranked_record_t misleading[SELECTED_MAX];
+  memset(misleading,0,sizeof(misleading));
   response_intent_t definition={0};
   digit_response_result_t rendered={0};
   snprintf(definition.intent,sizeof(definition.intent),"DEFINE");
@@ -609,7 +612,8 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   * collapse to a false question-echo rejection. */
  {
   corpus_result_t sample={0};
-  ranked_record_t found[SELECTED_MAX]={{0}};
+  ranked_record_t found[SELECTED_MAX];
+  memset(found,0,sizeof(found));
   sample.count=1;
   snprintf(sample.records[0].category,sizeof(sample.records[0].category),"OPERATOR_LEARNED");
   snprintf(sample.records[0].source,sizeof(sample.records[0].source),"interface:learn");
