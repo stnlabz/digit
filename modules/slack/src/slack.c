@@ -170,7 +170,7 @@ static void socket_session(const char *url){
  while(!stop_flag){
   const struct curl_ws_frame *frame=NULL;size_t received=0;CURLcode rc;
   rc=curl_ws_recv(ws,data+count,sizeof(data)-count-1,&received,&frame);
-  if(rc==CURLE_AGAIN){usleep(100000);if(++idle>3000)break;continue;}
+  if(rc==CURLE_AGAIN){{struct timespec pause_time={0,100000000};nanosleep(&pause_time,NULL);}if(++idle>3000)break;continue;}
   if(rc!=CURLE_OK||!frame||frame->flags&CURLWS_CLOSE)break;
   idle=0;count+=received;
   if(count>=sizeof(data)-1)break;
@@ -225,7 +225,7 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *h){
  if(!identity||!yes(identity,"ok")||!id||!bounded(bot_id,sizeof(bot_id),id))goto fail_curl;
  json_object_put(identity);identity=NULL;host=h;stop_flag=0;
  if(pthread_create(&thread,NULL,worker_main,NULL))goto fail_curl;
- active=1;host->send_message&&host->send_message("[SLACK] Socket Mode module started");
+ active=1;if(host->send_message)(void)host->send_message("[SLACK] Socket Mode module started");
  return STNLABZ_MODULE_OK;
 fail_curl:
  if(identity)json_object_put(identity);curl_global_cleanup();
