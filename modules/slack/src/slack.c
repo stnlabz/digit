@@ -5,6 +5,8 @@
 #include <json-c/json.h>
 #include <pthread.h>
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +18,8 @@
 #include "../../stn2/includes/stn2.h"
 #define SLACK_PATH "/opt/digit/auth/slack/slack.conf"
 #define BUF_CAP 65536
+#define INTEL_OUTBOX_PATH "/opt/digit/auth/slack/intel-outbox.json"
+#define ALERT_CAP 4096
 typedef struct {int enabled;char workspace[64],app[512],bot[512],intel_channel[64];} slack_config_t;
 typedef struct {char data[BUF_CAP];size_t used;} buffer_t;
 static slack_config_t cfg;
@@ -105,6 +109,63 @@ static struct json_object *post(const char *endpoint,const char *bearer,struct j
 done:
  erase(authorization,sizeof(authorization));curl_slist_free_all(headers);
  if(curl)curl_easy_cleanup(curl);erase(buf,sizeof(*buf));free(buf);return result;
+}
+/* One-slot crash-recoverable outbox. Restrict to the configured channel.
+ * Refuse unsafe/corrupt state instead of silently overwriting lost evidence. */
+static int alert_load(const char *path,char *message,size_t cap){
+ struct json_object *root=NULL;
+ const char *channel,*body;
+ struct stat st;
+ int result=0;
+ if(!path||!message||cap<2)return -1;
+ message[0]=0;
+ if(lstat(path,&st)<0)return errno==ENOENT?0:-1;
+ if(!private_file(path)||st.st_size<2||st.st_size>ALERT_CAP+512)return -1;
+ root=json_object_from_file(path);
+ if(!root||!json_object_is_type(root,json_type_object))goto done;
+ channel=field(root,"channel");body=field(root,"message");
+ if(!channel||strcmp(channel,cfg.intel_channel)||!body||!body[0]||
+    strlen(body)>=cap)goto done;
+ memcpy(message,body,strlen(body)+1);result=1;
+done:
+ if(root)json_object_put(root);
+ return result?result:-1;
+}
+static int alert_save(const char *path,const char *message){
+ struct json_object *root=NULL;
+ const char *serialized;
+ char tmp[600];
+ int fd=-1,ok=0;
+ FILE *fp=NULL;
+ struct stat st;
+ if(!path||!message||!*message||strlen(message)>=ALERT_CAP||!cfg.intel_channel[0])return 0;
+ if(lstat(path,&st)==0){if(!private_file(path))return 0;}
+ else if(errno!=ENOENT)return 0;
+ if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))return 0;
+ fd=open(tmp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+ if(fd<0)return 0;
+ fp=fdopen(fd,"w");if(!fp)goto done;
+ fd=-1;
+ root=json_object_new_object();if(!root)goto done;
+ json_object_object_add(root,"channel",json_object_new_string(cfg.intel_channel));
+ json_object_object_add(root,"message",json_object_new_string(message));
+ serialized=json_object_to_json_string_ext(root,JSON_C_TO_STRING_PLAIN);
+ if(!serialized||fputs(serialized,fp)==EOF||fflush(fp)||fsync(fileno(fp)))goto done;
+ if(fclose(fp)){fp=NULL;goto done;}fp=NULL;
+ if(rename(tmp,path))goto done;
+ ok=1;
+done:
+ if(fp)fclose(fp);
+ if(fd>=0)close(fd);
+ if(root)json_object_put(root);
+ if(!ok)unlink(tmp);
+ return ok;
+}
+static int alert_clear(const char *path){
+ struct stat st;
+ if(lstat(path,&st)<0)return errno==ENOENT;
+ if(!private_file(path))return 0;
+ return unlink(path)==0;
 }
 static int seen_event(const char *id){
  unsigned int i;if(!id||!*id)return 1;
@@ -218,20 +279,29 @@ static int intelligence_change(const char *report){
  return opened>0||added>0;
 }
 static void *intel_watch_main(void *arg){
- char pending[sizeof(((digit_stn2_result_t *)0)->report)]={0};
+ char pending[ALERT_CAP]={0};
  (void)arg;
  while(!stop_flag){
   unsigned int i;
+  int pending_state;
   for(i=0;i<300&&!stop_flag;i++)sleep(1);
   if(stop_flag)break;
   if(!cfg.intel_channel[0])continue;
-  /* Retry unsent intelligence before collecting and advancing case state. */
-  if(pending[0]){
-   if(reply(cfg.intel_channel,NULL,pending))pending[0]=0;
-   else{
-    if(host&&host->send_message)(void)host->send_message("[SLACK] Intelligence alert pending; delivery retry scheduled");
+  pending_state=alert_load(INTEL_OUTBOX_PATH,pending,sizeof(pending));
+  if(pending_state<0){
+   if(host&&host->send_message)(void)host->send_message("[SLACK] Intelligence outbox invalid or unavailable; collection paused");
+   continue;
+  }
+  if(pending_state>0){
+   if(!reply(cfg.intel_channel,NULL,pending)){
+    if(host&&host->send_message)(void)host->send_message("[SLACK] Pending intelligence alert delivery failed; retry scheduled");
     continue;
    }
+   if(!alert_clear(INTEL_OUTBOX_PATH)){
+    if(host&&host->send_message)(void)host->send_message("[SLACK] Delivered alert but outbox clear failed; collection paused to avoid duplicate");
+    continue;
+   }
+   pending[0]=0;
   }
   if(host&&host->invoke_service){
    digit_stn2_request_t request={0};
@@ -246,10 +316,15 @@ static void *intel_watch_main(void *arg){
    pthread_mutex_unlock(&intel_mutex);
    if(ok&&used==sizeof(result)&&memchr(result.report,0,sizeof(result.report))&&
       intelligence_change(result.report)){
-    if(!reply(cfg.intel_channel,NULL,result.report)){
-     snprintf(pending,sizeof(pending),"%s",result.report);
-     if(host->send_message)(void)host->send_message("[SLACK] Intelligence alert pending; delivery retry scheduled");
+    if(!alert_save(INTEL_OUTBOX_PATH,result.report)){
+     if(host->send_message)(void)host->send_message("[SLACK] CRITICAL: intelligence changed but outbox persistence failed");
+     continue;
     }
+    if(reply(cfg.intel_channel,NULL,result.report)){
+     if(!alert_clear(INTEL_OUTBOX_PATH)&&host->send_message)
+      (void)host->send_message("[SLACK] Intelligence delivered; outbox clear failed");
+    }else if(host->send_message)
+     (void)host->send_message("[SLACK] Intelligence alert persisted for retry");
    }
   }
  }
@@ -330,7 +405,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
