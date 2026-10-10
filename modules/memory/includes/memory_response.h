@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include "memory.h"
 
 /* [AI:GPT-6 | 2026-10-10] Account-scoped memory name retrieval.
@@ -16,11 +17,11 @@ static int digit_memory_name_question(const char *text){
  if(n&&text[n-1]=='?')--n;
  return (n==15&&!strncasecmp(text,"what is my name",n))||
         (n==14&&!strncasecmp(text,"what's my name",n))||
-        (n==20&&!strncasecmp(text,"what should you call me",n));
+        (n==23&&!strncasecmp(text,"what should you call me",n));
 }
 static int digit_memory_name_reply(const char *saved,char *out,size_t cap){
  static const char *const forms[]={"I am ","My name is ","Call me ","You can call me "};
- size_t i,n=0;const char *p=NULL;char name[64];
+ size_t i,n=0;const char *p=NULL;char name[64];int written;
  if(!saved||!out||!cap||!memchr(saved,0,DIGIT_MEMORY_TEXT_MAX))return 0;
  for(i=0;i<sizeof(forms)/sizeof(forms[0]);++i){
   size_t length=strlen(forms[i]);
@@ -31,8 +32,8 @@ static int digit_memory_name_reply(const char *saved,char *out,size_t cap){
   name[n++]=*p++;
  if(n<2||(*p&&*p!=','&&*p!='.'&&*p!=';'&&!isspace((unsigned char)*p)))return 0;
  name[n]=0;
- return snprintf(out,cap,"You told me your name is %s.",name)>0&&
-        strlen(name)+strlen("You told me your name is .")<cap;
+ written=snprintf(out,cap,"You told me your name is %s.",name);
+ return written>0&&(size_t)written<cap;
 }
 /* Bounded presentation of a verified memory; never adds unsupported facts. */
 static int digit_memory_natural_reply(const char *saved,char *out,size_t cap){
