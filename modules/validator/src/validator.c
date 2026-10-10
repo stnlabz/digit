@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #include "validator.h"
 
@@ -260,8 +261,7 @@ static int unsupported_definition(const char *question,const char *evidence)
  memcpy(token,subject,n);token[n]=0;
  /* The subject must be in the attested relation, not just anywhere
   * in a surrounding technical paragraph. */
- {const char *e=evidence;size_t k;
-  while(*e){
+ {const char *e=evidence;while(*e){
    while(*e&&!isalnum((unsigned char)*e)&&*e!='_'&&*e!='-')++e;
    if(!*e)break;
    if(strncasecmp(e,token,n)==0 &&
@@ -273,7 +273,6 @@ static int unsupported_definition(const char *question,const char *evidence)
    }
    while(*e&&(isalnum((unsigned char)*e)||*e=='_'||*e=='-'))++e;
   }
-  (void)k;
  }
  return 1;
 }
