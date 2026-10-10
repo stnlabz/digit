@@ -46,6 +46,20 @@ int main(void){
   output[0]=0;
   assert(!intel_report("{\"stats\":{}}",output,sizeof(output)));
  }
+ {
+  char dir[]="/tmp/stn2-test-XXXXXX",path[256],report[4096]={0};
+  const char *one="{\"stats\":{\"total_threats\":10}}";
+  const char *two="{\"stats\":{\"total_threats\":13}}";
+  assert(mkdtemp(dir)!=NULL);
+  assert(snprintf(path,sizeof(path),"%s/intel-state.json",dir)<(int)sizeof(path));
+  assert(intel_state(one,report,sizeof(report),path));
+  assert(strstr(report,"initial baseline")!=NULL);
+  report[0]=0;
+  assert(intel_state(two,report,sizeof(report),path));
+  assert(strstr(report,"+3 historical records")!=NULL);
+  assert(unlink(path)==0);
+  assert(rmdir(dir)==0);
+ }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
  assert(strcmp(fetch_label(FETCH_HTTP),"HTTP_ERROR")==0);
  assert(strcmp(fetch_label(FETCH_EMPTY),"EMPTY_RESPONSE")==0);
