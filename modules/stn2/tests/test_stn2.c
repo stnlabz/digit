@@ -79,7 +79,7 @@ int main(void){
   char dir[]="/tmp/stn2-corr-XXXXXX",baseline[256],log[256],out[4096]={0};
   FILE *f;
   const char *a="{\"threats\":[{\"id\":\"a\"}]}";
-  const char *b="{\"threats\":[{\"id\":\"a\"},{\"id\":\"b\",\"ip\":\"192.0.2.9\",\"type\":\"bot_probe\"}]}";
+  const char *b="{\"threats\":[{\"id\":\"a\"},{\"id\":\"b\",\"ip\":\"192.0.2.9\",\"type\":\"bot_probe\",\"details\":{\"request_url\":\"/xmlrpc.php\"}}]}";
   assert(mkdtemp(dir)!=NULL);
   assert(snprintf(baseline,sizeof(baseline),"%s/ids.json",dir)<(int)sizeof(baseline));
   assert(snprintf(log,sizeof(log),"%s/rictus.log",dir)<(int)sizeof(log));
@@ -101,6 +101,8 @@ int main(void){
   assert(strstr(out,"Rictus: matching IP token")!=NULL);
   assert(strstr(out,"Historical correlation: 1 distinct records checked by IP; 1 matching Rictus IP tokens")!=NULL);
   assert(strstr(out,"Historical candidate: record=b IP=192.0.2.9")!=NULL);
+  assert(strstr(out,"Historical path assessment: 1 usable request paths checked; 1 literal Rictus matches")!=NULL);
+  assert(strstr(out,"Investigation outcome: CANDIDATE OVERLAP")!=NULL);
   out[0]=0;
   assert(threat_records(b,out,sizeof(out),baseline,log));
   assert(strstr(out,"0 absent from previous snapshot")!=NULL);
