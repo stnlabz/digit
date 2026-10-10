@@ -191,6 +191,19 @@ int main(int argc, char **argv)
             fprintf(stderr,"FAIL invalid solve instruction boundary\n");++failures;
         }else printf("PASS invalid solve instruction boundary\n");
     }
+    {
+        digit_intent_result_t context;
+        digit_intent_interpret("What did I just tell you about myself?",&context);
+        if(context.intent!=DIGIT_INTENT_CONTEXT||
+           strcmp(context.subject,"prior_user_message")!=0){
+            fprintf(stderr,"FAIL prior user message context classification\n");++failures;
+        }
+        digit_intent_interpret("What did you just tell me?",&context);
+        if(context.intent!=DIGIT_INTENT_CONTEXT||
+           strcmp(context.subject,"prior_answer")!=0){
+            fprintf(stderr,"FAIL prior assistant reply context classification\n");++failures;
+        }
+    }
     expect_intent("negative-unknown", "flibbertigibbet",
                   DIGIT_INTENT_UNKNOWN, DIGIT_INTENT_TARGET_UNKNOWN, 0U);
 
