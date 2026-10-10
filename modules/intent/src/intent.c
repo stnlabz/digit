@@ -188,7 +188,7 @@ static int learned_social_context(const char *text)
     sizeof(query),&found,sizeof(found),&used)!=STNLABZ_MODULE_OK||
     used!=sizeof(found))return 0;
  for(i=0;i<found.count&&i<DIGIT_CORPUS_SEARCH_MAX;i++){
-  const corpus_record_t *r=&found.records[i];
+  const digit_corpus_record_t *r=&found.records[i];
   const char *p;size_t matches=0;
   if(strcmp(r->category,"OPERATOR_LEARNED")||
      strcmp(r->source,"interface:learn"))continue;
