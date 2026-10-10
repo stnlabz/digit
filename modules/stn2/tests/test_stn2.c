@@ -140,11 +140,14 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 1 distinct")!=NULL);
+  assert(strstr(brief,"Investigation evidence changes")!=NULL);
+  assert(strstr(brief,"new observation=follow")!=NULL);
   assert(strstr(brief,"2 evidence IDs")!=NULL);
   assert(strstr(brief,"Evidence: `follow`")!=NULL);
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 0 distinct")!=NULL);
+  assert(strstr(brief,"Investigation evidence changes")==NULL);
   assert(unlink(path)==0);
   assert(rmdir(dir)==0);
  }
