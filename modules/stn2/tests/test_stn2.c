@@ -42,6 +42,7 @@ int main(void){
   assert(strstr(output,"1394 observations")!=NULL);
   assert(strstr(output,"wp_admin_scan: 176")!=NULL);
   assert(strstr(output,"last 24h: 1")!=NULL);
+  assert(strstr(output,"last 24h: 1")<strstr(output,"1394 observations"));
   assert(strstr(output,"xmlrpc")!=NULL);
   output[0]=0;
   assert(!intel_report("{\"stats\":{}}",output,sizeof(output)));
