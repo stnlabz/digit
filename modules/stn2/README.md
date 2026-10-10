@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.2.3 (investigation evidence context)
+# STN-2 Intelligence Module — version 1.2.4 (sectioned intelligence brief)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -121,3 +121,7 @@ The intelligence brief now lists every stored active investigation with a report
 ## Revision 1.2.3 — Evidence context in case briefs
 
 For each of up to three displayed stored observation IDs per active case, STN-2 resolves that ID against the current retrieved Sentinel `/threats` snapshot. When present, the brief displays the record's reported activity type, original `created_at` string, request URL and target domain, with length-bounded fields. If an older ID is absent from the current snapshot, the brief explicitly states that details are unavailable rather than fabricating or inferring them. No case admission, evidence storage, correlation, collection, Core or Slack changes are made. These are source-reported fields and are not independent validation or a persistent full evidence archive. Linux build and live qualification required.
+
+## Revision 1.2.4 — Slack intelligence brief structure
+
+The existing STN-2 report is organized with six Slack-formatted sections: current intelligence, active investigations (each visually separated), collection changes, cross-source correlation, evidence gaps, and assessment. The renderer uses the findings already produced by the existing collectors and investigation service. This is an output presentation change only: case admission, persisted records, source parsing, correlation, permissions and Digit Core are unchanged. Slack message size remains bounded by the existing result ABI; long reports require live visual verification. Linux compilation and tests remain pending.
