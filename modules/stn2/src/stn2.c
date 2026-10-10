@@ -319,24 +319,45 @@ static int same_ip_token(const char *line,const char *ip){
  }
  return 0;
 }
-static int rictus_ip_match(const char *path,const char *ip){
- FILE *f;char line[2048],last[LOG_TAIL_LINES][512];
- size_t n=0,start,i;struct stat st;
- if(!path||!ip||lstat(path,&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1)return -1;
- f=fopen(path,"r");if(!f)return -1;
+typedef struct {
+ char lines[LOG_TAIL_LINES][512];
+ size_t count;
+ int available;
+} rictus_window_t;
+static int rictus_load(const char *path,rictus_window_t *window){
+ FILE *f;char line[2048];size_t n=0;struct stat st;
+ if(!window)return 0;
+ memset(window,0,sizeof(*window));
+ if(!path||lstat(path,&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1)return 0;
+ f=fopen(path,"r");if(!f)return 0;
  while(fgets(line,sizeof(line),f)){
   size_t len=strlen(line);
   if(!strchr(line,'\n')&&!feof(f)){
    int c;while((c=fgetc(f))!=EOF&&c!='\n'){}
    continue;
   }
-  if(len>=sizeof(last[0]))len=sizeof(last[0])-1;
-  memcpy(last[n%LOG_TAIL_LINES],line,len);
-  last[n%LOG_TAIL_LINES][len]=0;n++;
+  if(len>=sizeof(window->lines[0]))len=sizeof(window->lines[0])-1;
+  memcpy(window->lines[n%LOG_TAIL_LINES],line,len);
+  window->lines[n%LOG_TAIL_LINES][len]=0;
+  n++;
  }
- if(ferror(f)){fclose(f);return -1;}
- fclose(f);start=n>LOG_TAIL_LINES?n-LOG_TAIL_LINES:0;
- for(i=start;i<n;i++)if(same_ip_token(last[i%LOG_TAIL_LINES],ip))return 1;
+ if(ferror(f)){fclose(f);return 0;}
+ fclose(f);
+ if(n>LOG_TAIL_LINES){
+  size_t i;
+  char ordered[LOG_TAIL_LINES][512];
+  for(i=0;i<LOG_TAIL_LINES;i++)
+   memcpy(ordered[i],window->lines[(n-LOG_TAIL_LINES+i)%LOG_TAIL_LINES],sizeof(ordered[i]));
+  memcpy(window->lines,ordered,sizeof(ordered));
+ }
+ window->count=n<LOG_TAIL_LINES?n:LOG_TAIL_LINES;
+ window->available=1;
+ return 1;
+}
+static int rictus_window_match(const rictus_window_t *window,const char *ip){
+ size_t i;
+ if(!window||!window->available)return -1;
+ for(i=0;i<window->count;i++)if(same_ip_token(window->lines[i],ip))return 1;
  return 0;
 }
 /* Record-level inventory is intentionally separate from aggregate /intel.
@@ -346,10 +367,15 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  struct stat st;
  char line[256],tmp[600],idbuf[80];
  size_t i,new_count=0,seen=0,reported=0,ip_checked=0,ip_matches=0,ip_samples=0;
+ rictus_window_t *window=NULL;
  int rictus_available=1;
  int present=0,fd=-1,ok=0;
  FILE *fp=NULL;
  if(!raw||!out||!path)return 0;
+ if(rictus_path){
+  window=calloc(1,sizeof(*window));
+  if(!window||!rictus_load(rictus_path,window))rictus_available=0;
+ }
  root=json_tokener_parse(raw);
  if(!root||!json_object_is_type(root,json_type_object))goto done;
  if(!json_object_object_get_ex(root,"threats",&records)||
@@ -390,7 +416,7 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
    if(json_object_object_get_ex(item,"ip",&ipfield)&&
       json_object_is_type(ipfield,json_type_string)){
     const char *ip=json_object_get_string(ipfield);
-    int match=rictus_ip_match(rictus_path,ip);
+    int match=rictus_window_match(window,ip);
     if(match<0)rictus_available=0;
     else {
      ip_checked++;
@@ -431,7 +457,7 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
         json_object_is_type(ipfield,json_type_string))
       ip=json_object_get_string(ipfield);
      if(ip){
-      match=rictus_ip_match(rictus_path,ip);
+      match=rictus_window_match(window,ip);
       if(match==1)append(out,cap,"    Rictus: matching IP token in last 120 log records (not verified linkage)\n");
       else if(match==0)append(out,cap,"    Rictus: no matching IP token in last 120 records\n");
       else append(out,cap,"    Rictus: unavailable for correlation\n");
@@ -471,6 +497,7 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  append(out,cap,"Record comparison: new means absent from prior snapshot, not independently verified or newly exploited.\n");
  ok=1;
  done:
+ free(window);
  if(fp)fclose(fp);
  if(fd>=0)close(fd);
  if(ids)json_object_put(ids);
@@ -604,7 +631,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,9,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,10,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
