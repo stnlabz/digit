@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.8 (initial Rictus correlation)
+# STN-2 Intelligence Module — version 1.0.9 (historical Rictus correlation)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -81,3 +81,9 @@ Scope and limits: maximum 4,096 threat array entries per snapshot; a larger or m
 For the first four threat IDs absent from the prior snapshot, compares each record's top-level `ip` value with whole IP-like tokens in the most recent 120 readable Rictus log records. The report explicitly labels an exact text match as a candidate correlation, **not proof of a shared incident, attacker identity, successful compromise, or an independent confirmed event**. It distinguishes no match from unavailable log collection. Prefix/suffix digit and period boundaries avoid basic substring collisions. The trusted source IP role remains subject to the Threat API schema; `details.ip_address` is not conflated with top-level `ip`. New offline tests exercise exact matching, nonmatching substrings, and a second-run cross-source report.
 
 This revision performs no active probes and does not mutate Rictus, Sentinel or Digit Core. This is limited evidence correlation, **not** a durable investigative case system, automated case watches, full record timelines, source-concordance verification, or non-blocking Slack job control. Concurrent snapshots are still not serialized. Linux build and live verification required.
+
+## Revision 1.0.9
+
+STN-2 now compares **all distinct valid threat IDs in each retrieved /threats snapshot**, not only newly appearing IDs, against whole IP tokens in the latest 120 Rictus log records. It reports the number of records with usable IPs checked, the number with matching Rictus tokens, and up to three illustrative candidate ID/IP matches even when zero IDs are new. This is a read-only historical correlation pass, distinct from snapshot change detection. A missing Rictus source is explicitly marked incomplete; missing IP fields are not counted as matches. Repeated threat IDs are skipped. Matching text alone is not incident confirmation, attribution, or evidence of exploitation.
+
+This is **not** yet persistent case management, automatically scheduled watching, deep investigation, or complete source-evidence retention. Repeated log rescans per ID have a performance cost; benchmarking and concurrent snapshot serialization are outstanding before production-scale qualification. Offline tests include second and third snapshots with no new IDs to verify historical correlations persist.
