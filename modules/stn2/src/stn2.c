@@ -810,6 +810,11 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    }
   }
   append(ordered,sizeof(ordered),"\n*2. ACTIVE INVESTIGATIONS*\n");
+  {
+   char *watch=strstr(record_section,"*Investigation evidence changes*");
+   char *end=watch?strstr(watch,"Admission:"):NULL;
+   if(watch&&end){char saved=*end;*end=0;append(ordered,sizeof(ordered),watch);*end=saved;}
+  }
   if(cases){
    char *end=cross&&cross>cases?cross:NULL;
    if(end){char saved=*end;*end=0;append(ordered,sizeof(ordered),cases);*end=saved;}
