@@ -24,6 +24,7 @@ static pthread_t thread,watch_thread;
 static int watch_active;
 static int active,stop_flag;
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t intel_mutex=PTHREAD_MUTEX_INITIALIZER;
 static char bot_id[64];
 static char last_events[128][128];static unsigned int event_cursor;
 static void erase(void *p,size_t n){volatile unsigned char *v=p;while(n--)*v++=0;}
@@ -149,10 +150,15 @@ static int process_event(struct json_object *root){
   if(strlen(user)>=sizeof(intel.actor))return 0;
   snprintf(intel.actor,sizeof(intel.actor),"%s",user);
   snprintf(intel.command,sizeof(intel.command),"%s",message);
-  if(!host||!host->invoke_service||
-    host->invoke_service(DIGIT_STN2_SERVICE,&intel,sizeof(intel),&report,sizeof(report),&used)!=STNLABZ_MODULE_OK||
-    used!=sizeof(report)||!memchr(report.report,0,sizeof(report.report))||!report.report[0])
-   return reply(channel,ts?ts:field(event,"ts"),"STN-2 intelligence collection is unavailable.");
+  {
+   int result_ok;
+   pthread_mutex_lock(&intel_mutex);
+   result_ok=host&&host->invoke_service&&
+    host->invoke_service(DIGIT_STN2_SERVICE,&intel,sizeof(intel),&report,sizeof(report),&used)==STNLABZ_MODULE_OK;
+   pthread_mutex_unlock(&intel_mutex);
+   if(!result_ok||used!=sizeof(report)||!memchr(report.report,0,sizeof(report.report))||!report.report[0])
+    return reply(channel,ts?ts:field(event,"ts"),"STN-2 intelligence collection is unavailable.");
+  }
   return reply(channel,ts?ts:field(event,"ts"),report.report);
  }
  /* A distinct, non-administrative Slack actor scope; no SA or org claims. */
@@ -212,24 +218,38 @@ static int intelligence_change(const char *report){
  return opened>0||added>0;
 }
 static void *intel_watch_main(void *arg){
+ char pending[sizeof(((digit_stn2_result_t *)0)->report)]={0};
  (void)arg;
  while(!stop_flag){
   unsigned int i;
-  /* Wait for services to finish startup; interruptible at shutdown. */
   for(i=0;i<300&&!stop_flag;i++)sleep(1);
   if(stop_flag)break;
-  if(cfg.intel_channel[0]&&host&&host->invoke_service){
+  if(!cfg.intel_channel[0])continue;
+  /* Retry unsent intelligence before collecting and advancing case state. */
+  if(pending[0]){
+   if(reply(cfg.intel_channel,NULL,pending))pending[0]=0;
+   else{
+    if(host&&host->send_message)(void)host->send_message("[SLACK] Intelligence alert pending; delivery retry scheduled");
+    continue;
+   }
+  }
+  if(host&&host->invoke_service){
    digit_stn2_request_t request={0};
    digit_stn2_result_t result={0};
    size_t used=0;
+   int ok;
    snprintf(request.actor,sizeof(request.actor),"slack:scheduled");
    snprintf(request.command,sizeof(request.command),"gen intel");
-   if(host->invoke_service(DIGIT_STN2_SERVICE,&request,sizeof(request),
-                           &result,sizeof(result),&used)==STNLABZ_MODULE_OK&&
-      used==sizeof(result)&&memchr(result.report,0,sizeof(result.report))&&
+   pthread_mutex_lock(&intel_mutex);
+   ok=host->invoke_service(DIGIT_STN2_SERVICE,&request,sizeof(request),
+                           &result,sizeof(result),&used)==STNLABZ_MODULE_OK;
+   pthread_mutex_unlock(&intel_mutex);
+   if(ok&&used==sizeof(result)&&memchr(result.report,0,sizeof(result.report))&&
       intelligence_change(result.report)){
-    if(!reply(cfg.intel_channel,NULL,result.report)&&host->send_message)
-     (void)host->send_message("[SLACK] Intelligence alert delivery failed");
+    if(!reply(cfg.intel_channel,NULL,result.report)){
+     snprintf(pending,sizeof(pending),"%s",result.report);
+     if(host->send_message)(void)host->send_message("[SLACK] Intelligence alert pending; delivery retry scheduled");
+    }
    }
   }
  }
@@ -310,7 +330,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
