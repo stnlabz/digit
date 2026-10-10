@@ -7,7 +7,7 @@
 
 /* Bounded presentation of a verified memory; never adds unsupported facts. */
 static int digit_memory_natural_reply(const char *saved,char *out,size_t cap){
- char name[64]={0};size_t i=0,pos=0,n=0;const char *p=saved;
+ char name[64]={0};size_t pos=0,n=0;const char *p=saved;
  int first=1;
  if(!saved||!out||cap<64||!memchr(saved,0,DIGIT_MEMORY_TEXT_MAX)||!saved[0])return 0;
  out[0]=0;
