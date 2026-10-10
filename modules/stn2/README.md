@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — initial collection capability
+# STN-2 Intelligence Module — version 1.0.1 (collection transport revision)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -19,7 +19,7 @@ assuming each is a verified threat.
 
 `api_base=https://api.stn-labz.com`: fetches
 `/threats`, `/events`, `/intel`, `/patterns`, `/rss` read-only.
-HTTP failures and empty responses are marked unavailable.
+HTTPS retrieval uses a streaming byte-count callback with an 8 MiB per-response safety limit, rather than buffering a fixed 32 KiB payload. Reports distinguish RETRIEVED, SIZE_LIMIT, HTTP_ERROR, NETWORK_ERROR, EMPTY_RESPONSE, and INVALID_URL, including observed byte count and HTTP status. HTTP 200 alone does not establish content validity or verified intelligence.
 
 `advisory_list=/opt/digit/auth/stn2/advisories.list`: separate private
 (mode 0600) UTF-8 file with one operator-approved absolute HTTPS advisory URL
@@ -43,3 +43,7 @@ does not claim those capabilities or fabricate intelligence.
 Deployment acceptance requires valid feeds, source-content analysis,
 operator authorization testing, network failure recovery, evidence retention,
 and an actual `@Digit gen intel` Slack report.
+
+## Revision 1.0.1
+
+Corrected false UNAVAILABLE results for large Threat API responses (such as ~613,400-byte /threats and /events feeds). Incoming bytes are counted incrementally, with a bounded 8 MiB ceiling and explicit failure classification. No claim of JSON/RSS interpretation or security evidence verification is made. Offline regression tests include >600 KiB receipt and over-limit rejection. Qualification and deployment must still be verified on the running Linux host.
