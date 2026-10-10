@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.2.2 (investigation evidence visibility)
+# STN-2 Intelligence Module — version 1.2.3 (investigation evidence context)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -117,3 +117,7 @@ Investigation opening now requires the API's explicit top-level `relevance: "HIG
 ## Revision 1.2.2 — Investigation visibility
 
 The intelligence brief now lists every stored active investigation with a report-local case number, provisional source-IP grouping indicator, opening HIGH relevance, stored opening severity where present, evidence ID count, and up to three stable observation IDs. Evidence beyond the displayed sample remains stored; the brief does not imply that three is a case-size limit. A report-local case number is **not** a durable case ID. The existing state format, admission criteria, deduplication, collection sources, permissions and Core remain unchanged. The current persistence layer retains only observation IDs and opening metadata: full underlying evidence, source timestamps, a durable case identifier, and an investigation conclusion are not available in that file and are not represented as such. Linux build and live report qualification pending.
+
+## Revision 1.2.3 — Evidence context in case briefs
+
+For each of up to three displayed stored observation IDs per active case, STN-2 resolves that ID against the current retrieved Sentinel `/threats` snapshot. When present, the brief displays the record's reported activity type, original `created_at` string, request URL and target domain, with length-bounded fields. If an older ID is absent from the current snapshot, the brief explicitly states that details are unavailable rather than fabricating or inferring them. No case admission, evidence storage, correlation, collection, Core or Slack changes are made. These are source-reported fields and are not independent validation or a persistent full evidence archive. Linux build and live qualification required.
