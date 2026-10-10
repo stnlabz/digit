@@ -112,6 +112,27 @@ int main(void){
   assert(unlink(log)==0);
   assert(rmdir(dir)==0);
  }
+ {
+  char dir[]="/tmp/stn2-cases-XXXXXX",path[256],brief[4096]={0};
+  const char *low="{\"threats\":[{\"id\":\"low\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\"}]}";
+  const char *high="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\"}]}";
+  const char *follow="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\"},{\"id\":\"follow\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\"}]}";
+  assert(mkdtemp(dir)!=NULL);
+  assert(snprintf(path,sizeof(path),"%s/cases.json",dir)<(int)sizeof(path));
+  assert(investigation_update(low,path,brief,sizeof(brief)));
+  assert(strstr(brief,"0 active; 0 opened")!=NULL);
+  brief[0]=0;
+  assert(investigation_update(high,path,brief,sizeof(brief)));
+  assert(strstr(brief,"1 active; 1 opened; 1 distinct")!=NULL);
+  brief[0]=0;
+  assert(investigation_update(follow,path,brief,sizeof(brief)));
+  assert(strstr(brief,"1 active; 0 opened; 1 distinct")!=NULL);
+  brief[0]=0;
+  assert(investigation_update(follow,path,brief,sizeof(brief)));
+  assert(strstr(brief,"1 active; 0 opened; 0 distinct")!=NULL);
+  assert(unlink(path)==0);
+  assert(rmdir(dir)==0);
+ }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
  assert(strcmp(fetch_label(FETCH_HTTP),"HTTP_ERROR")==0);
  assert(strcmp(fetch_label(FETCH_EMPTY),"EMPTY_RESPONSE")==0);
