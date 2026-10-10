@@ -13,9 +13,10 @@
 #include <unistd.h>
 #include "slack.h"
 #include "dispatcher.h"
+#include "../../stn2/includes/stn2.h"
 #define SLACK_PATH "/opt/digit/auth/slack/slack.conf"
 #define BUF_CAP 65536
-typedef struct {int enabled;char workspace[64],app[512],bot[512];} slack_config_t;
+typedef struct {int enabled;char workspace[64],app[512],bot[512],intel_channel[64];} slack_config_t;
 typedef struct {char data[BUF_CAP];size_t used;} buffer_t;
 static slack_config_t cfg;
 static const stnlabz_module_host_t *host;
@@ -49,6 +50,7 @@ static int load_config(const char *path,slack_config_t *out){
   else if(!strcmp(key,"workspace_id"))good=bounded(v.workspace,sizeof(v.workspace),value)||!*value;
   else if(!strcmp(key,"app_token"))good=bounded(v.app,sizeof(v.app),value)||!*value;
   else if(!strcmp(key,"bot_token"))good=bounded(v.bot,sizeof(v.bot),value)||!*value;
+  else if(!strcmp(key,"intel_channel_id"))good=bounded(v.intel_channel,sizeof(v.intel_channel),value)||!*value;
   else good=0;
   if(!good)break;
  }
@@ -139,6 +141,19 @@ static int process_event(struct json_object *root){
  if(is_mention){const char *p=strstr(text,mention);if(p==text)message=p+strlen(mention);}
  while(isspace((unsigned char)*message))++message;
  if(!*message||strlen(message)>=sizeof(query.request))return 0;
+ if(!strcmp(message,"gen intel")||!strcmp(message,"generate feed")){
+  digit_stn2_request_t intel={0};digit_stn2_result_t report={0};
+  if(!cfg.intel_channel[0]||strcmp(cfg.intel_channel,channel)!=0)
+   return reply(channel,ts?ts:field(event,"ts"),"STN-2 collection is restricted to the configured intelligence channel.");
+  if(strlen(user)>=sizeof(intel.actor))return 0;
+  snprintf(intel.actor,sizeof(intel.actor),"%s",user);
+  snprintf(intel.command,sizeof(intel.command),"%s",message);
+  if(!host||!host->invoke_service||
+    host->invoke_service(DIGIT_STN2_SERVICE,&intel,sizeof(intel),&report,sizeof(report),&used)!=STNLABZ_MODULE_OK||
+    used!=sizeof(report)||!memchr(report.report,0,sizeof(report.report))||!report.report[0])
+   return reply(channel,ts?ts:field(event,"ts"),"STN-2 intelligence collection is unavailable.");
+  return reply(channel,ts?ts:field(event,"ts"),report.report);
+ }
  /* A distinct, non-administrative Slack actor scope; no SA or org claims. */
  if(strlen(user)+6>=sizeof(query.actor))return 0;
  snprintf(query.actor,sizeof(query.actor),"slack:%s",user);
