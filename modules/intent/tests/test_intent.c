@@ -205,7 +205,7 @@ int main(int argc, char **argv)
             fprintf(stderr,"FAIL actual ingest intent\\n");++failures;
         }
         digit_intent_interpret("What does ingest mean?",&interpreted);
-        if(interpreted.intent!=DIGIT_INTENT_FACT||
+        if(interpreted.intent!=DIGIT_INTENT_DEFINE||
            interpreted.target!=DIGIT_INTENT_TARGET_KNOWLEDGE){
             fprintf(stderr,"FAIL factual ingest question\\n");++failures;
         }
