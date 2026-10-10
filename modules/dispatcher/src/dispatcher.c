@@ -164,6 +164,8 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
         if(strcmp(intent_result.subject,"prior_answer")==0&&
            previous_answer&&previous_answer[0])
             snprintf(out.answer,sizeof(out.answer),"%s",previous_answer);
+        else if(strcmp(intent_result.subject,"prior_user_message")==0 && previous_user_message && previous_user_message[0])
+            snprintf(out.answer,sizeof(out.answer),"%s",previous_user_message);
         else if(strcmp(intent_result.subject,"prior_user_message")==0)
             snprintf(out.answer,sizeof(out.answer),
                      "I do not have your previous message available in this conversation context.");
