@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.1.1 (intelligence-first reporting)
+# STN-2 Intelligence Module — version 1.1.2 (intelligence brief ordering)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -99,3 +99,7 @@ STN-2 correlates the historical, deduplicated Sentinel threat records against a 
 ## Revision 1.1.1 — Intelligence brief presentation
 
 The Slack-facing `@Digit gen intel` report now prioritizes observed Sentinel categories, recent activity, tracked/new IDs, Rictus findings, candidate overlaps, and evidence-limited assessment. Successful transport byte counts, HTTP codes, per-feed status banners, repeated zero-CVE lines and generic collector notes are suppressed from the intelligence brief. Failed collection remains visible as a coverage gap; CVEs appear only when actual textual references exist. No source collection, analysis, access-control, or Core behavior changed. Tests are updated for the new report language. Remaining absence of case workflows is unchanged.
+
+## Revision 1.1.2 — Intelligence brief ordering
+
+Report presentation now leads with recent Sentinel observations and trends, followed by historical threat categories and reported indicators, historical aggregate changes, distinct-ID changes, Rictus overlap evidence, and the qualified assessment. Source collection, prior baselines and module services remain unchanged; this is an editorial-only STN-2 module change. Qualification must be repeated on Linux before deployment.
