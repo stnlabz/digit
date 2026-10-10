@@ -50,6 +50,7 @@ typedef struct { corpus_record_t record; unsigned int score; unsigned int matche
 static void grounded_fallback(const char *question, ranked_record_t selected[SELECTED_MAX], size_t selected_count, digit_response_result_t *output);
 static int learned_self_identity_answer(const char *question,const corpus_record_t *record,char *answer,size_t capacity);
 static int learned_quoted_reply(const char *question,const corpus_record_t *record,char *answer,size_t capacity);
+static int learned_social_reply(const char *question,const corpus_record_t *record,char *answer,size_t capacity);
 static int complete_phrase_match(const char *phrase, const char *text);
 static int collect_corpus(const char *question, corpus_result_t *evidence);
 static size_t select_evidence(const char *question, const corpus_result_t *evidence, ranked_record_t selected[SELECTED_MAX]);
