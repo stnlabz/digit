@@ -42,7 +42,9 @@ static int has_word(const char *text, const char *word)
 
 /* [AI:GPT-6 | 2026-10-09] Command verbs embedded in knowledge
  * questions are not operator instructions. */
-/* [AI:GPT-6 | 2026-10-10] Recognize comma-delimited leading address\n * consistently with whitespace/colon delimiters. */\nstatic int starts_with_command(const char *text,const char *const *words,size_t count){
+/* [AI:GPT-6 | 2026-10-10] Recognize comma-delimited leading address
+ * consistently with whitespace/colon delimiters. */
+static int starts_with_command(const char *text,const char *const *words,size_t count){
  const char *p=text;size_t i;
  if(!p)return 0;
  while(*p&&isspace((unsigned char)*p))++p;
