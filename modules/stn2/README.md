@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.2.5 (sectioned intelligence brief corrections)
+# STN-2 Intelligence Module — version 1.2.6 (evidence watch updates)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -129,3 +129,7 @@ The existing STN-2 report is organized with six Slack-formatted sections: curren
 ## Revision 1.2.5 — Report-only corrections
 
 The Slack-facing headline is now **INTELLIGENCE BRIEF** without the STN-2 prefix. The executive summary alone carries the recent-24-hour summary, the threat overview omits its duplicate, cross-source intelligence excludes the repeated tracked-record total and moves its qualified assessment to the final assessment section. No collection, case, evidence, admission or Core changes. Live display validation pending.
+
+## Revision 1.2.6 — Continuing evidence watch on collection
+
+Whenever STN-2 performs an approved collection, its existing persistent investigations are rechecked against the current Sentinel threat observations. Each genuinely new evidence ID associated with an active case compounds the retained case; at most five new evidence updates are highlighted in the structured Slack brief, including IP linkage, observation ID, source type and relevance. Previously recorded evidence IDs do not generate repeated alerts. This does **not** introduce autonomous timed collection, background scheduling, proactive Slack posting, full evidence snapshots, or independent source verification. Those mission requirements remain outstanding. No Digit Core or Slack module changes. Linux build/tests and live verification pending.
