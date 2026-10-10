@@ -576,7 +576,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  static const char *const endpoints[]={"/threats","/events","/intel","/patterns","/rss"};
  const digit_stn2_request_t *in=request;digit_stn2_result_t r={0};response_t *buf;size_t i;long http=0;fetch_status_t status;
  FILE *list;char url[1024],line[1024],log_summary[256]={0};
- char intel_section[DIGIT_STN2_TEXT_MAX]={0},record_section[DIGIT_STN2_TEXT_MAX]={0};
+ char intel_section[sizeof(r.report)]={0},record_section[sizeof(r.report)]={0};
  (void)ctx;
  if(!owner||!in||req_size!=sizeof(*in)||!output||output_size<sizeof(r)||!used||
     !memchr(in->command,0,sizeof(in->command))||!memchr(in->actor,0,sizeof(in->actor))||
@@ -635,7 +635,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  }
  /* Present findings by relevance, independent of the feed collection order. */
  {
-  char ordered[DIGIT_STN2_TEXT_MAX]={0};
+  char ordered[sizeof(r.report)]={0};
   append(ordered,sizeof(ordered),"STN-2 Intelligence Brief\n");
   append(ordered,sizeof(ordered),intel_section);
   append(ordered,sizeof(ordered),record_section);
