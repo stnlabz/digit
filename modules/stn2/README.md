@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.1 (collection transport revision)
+# STN-2 Intelligence Module — version 1.0.2 (qualification fix)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -47,3 +47,7 @@ and an actual `@Digit gen intel` Slack report.
 ## Revision 1.0.1
 
 Corrected false UNAVAILABLE results for large Threat API responses (such as ~613,400-byte /threats and /events feeds). Incoming bytes are counted incrementally, with a bounded 8 MiB ceiling and explicit failure classification. No claim of JSON/RSS interpretation or security evidence verification is made. Offline regression tests include >600 KiB receipt and over-limit rejection. Qualification and deployment must still be verified on the running Linux host.
+
+## Revision 1.0.2
+
+Fixes the streaming test assertion by capturing the remaining capacity before the callback mutates the received-byte counter. Separates misleadingly indented conditional statements in the module source. Module descriptor bumped to 1.0.2. Native build and runtime qualification still require verification.
