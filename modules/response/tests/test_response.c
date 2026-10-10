@@ -229,10 +229,15 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
   snprintf(request.question,sizeof(request.question),
     "INTENT: DEFINE\nTARGET: KNOWLEDGE\nSUBJECT: wut\nREQUEST: What does wut mean?");
-  check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==
-        STNLABZ_MODULE_OK&&used==sizeof(answer)&&answer.answered&&
-        strstr(answer.answer,"wut means What.")!=NULL,
-        "learned definition lookup returns its attested meaning");
+  {
+   stnlabz_module_result_t rc=response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL);
+   if(rc!=STNLABZ_MODULE_OK||strstr(answer.answer,"wut means What.")==NULL)
+    fprintf(stderr,"definition fixture rc=%d used=%zu answered=%d answer=%.200s corpus=%u outbound=%u unexpected=%u\n",
+     (int)rc,used,answer.answered,answer.answer,corpus_queries,outbound_validations,unexpected_services);
+   check(rc==STNLABZ_MODULE_OK&&used==sizeof(answer)&&answer.answered&&
+         strstr(answer.answer,"wut means What.")!=NULL,
+         "learned definition lookup returns its attested meaning");
+  }
   learned_definition_fixture=0;
  }
  check(descriptor->stop()==STNLABZ_MODULE_OK,"response service unregisters");
