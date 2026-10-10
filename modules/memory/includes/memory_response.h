@@ -20,6 +20,9 @@ static int digit_memory_natural_reply(const char *saved,char *out,size_t cap){
   if(*q!=','&&*q!='.'&&*q!=';'&&*q!=' '){name[0]=0;}
   if(n<2)name[0]=0;
  }
+ if(name[0]&&saved[5+n]==','&&saved[6+n]==' '){
+  p=saved+7+n;
+ }
  if(name[0]){
   int used=snprintf(out,cap,"Hi %s! You told me that ",name);
   if(used<0||(size_t)used>=cap)return 0;
