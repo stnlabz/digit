@@ -16,6 +16,7 @@
 #include "slack.h"
 #include "dispatcher.h"
 #include "../../stn2/includes/stn2.h"
+#include "../../interface/includes/account_auth.h"
 #define SLACK_PATH "/opt/digit/auth/slack/slack.conf"
 #define BUF_CAP 65536
 #define INTEL_OUTBOX_PATH "/opt/digit/auth/slack/intel-outbox.json"
@@ -29,6 +30,8 @@ static int watch_active;
 static int active,stop_flag;
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t intel_mutex=PTHREAD_MUTEX_INITIALIZER;
+typedef struct {char user[64],team[64],identity[DIGIT_ACCOUNT_ID_MAX];time_t expires;} slack_session_t;
+static slack_session_t sessions[32];
 static char bot_id[64];
 static char last_events[128][128];static unsigned int event_cursor;
 static void erase(void *p,size_t n){volatile unsigned char *v=p;while(n--)*v++=0;}
@@ -184,6 +187,48 @@ static int reply(const char *channel,const char *timestamp,const char *message){
  ok=result&&yes(result,"ok");
  if(result)json_object_put(result);json_object_put(request);return ok;
 }
+static int auth_command(const char *input){
+ return input&&(!strncmp(input,"/login ",7)||!strcmp(input,"/login")||
+                !strcmp(input,"/logout")||!strcmp(input,"/whoami"));
+}
+static int authenticate_dm(const char *workspace,const char *slack_user,const char *input,
+                           char *answer,size_t capacity){
+ size_t i,slot=32;
+ time_t now=time(NULL);
+ if(!workspace||!slack_user||!input||!answer||!capacity)return 0;
+ pthread_mutex_lock(&mutex);
+ for(i=0;i<32;i++){
+  if(sessions[i].expires<=now){memset(&sessions[i],0,sizeof(sessions[i]));if(slot==32)slot=i;}
+  else if(!strcmp(sessions[i].team,workspace)&&!strcmp(sessions[i].user,slack_user))slot=i;
+ }
+ if(!strcmp(input,"/logout")){
+  if(slot<32)memset(&sessions[slot],0,sizeof(sessions[slot]));
+  snprintf(answer,capacity,"Digit Slack session closed.");
+ }else if(!strcmp(input,"/whoami")){
+  if(slot<32&&sessions[slot].expires>now&&
+     digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,sessions[slot].identity))
+   snprintf(answer,capacity,"Authenticated Digit account: %s",sessions[slot].identity);
+  else snprintf(answer,capacity,"No active Digit Slack session.");
+ }else if(!strncmp(input,"/login ",7)){
+  const char *arg=input+7,*slash=strchr(arg,'/');
+  char identity[DIGIT_ACCOUNT_ID_MAX]={0};
+  size_t n=slash?(size_t)(slash-arg):0;
+  if(slash&&n&&n<sizeof(identity)&&slash[1]&&strlen(slash+1)<DIGIT_ACCOUNT_PASSWORD_MAX&&
+     !strchr(slash+1,'\n')&&!strchr(slash+1,'\r')){
+   memcpy(identity,arg,n);
+   if(digit_account_verify_file(DIGIT_ACCOUNT_AUTH_PATH,identity,slash+1)&&slot<32){
+    snprintf(sessions[slot].team,sizeof(sessions[slot].team),"%s",workspace);
+    snprintf(sessions[slot].user,sizeof(sessions[slot].user),"%s",slack_user);
+    snprintf(sessions[slot].identity,sizeof(sessions[slot].identity),"%s",identity);
+    sessions[slot].expires=now+3600;
+    snprintf(answer,capacity,"Digit credentials verified. Slack session active for one hour.");
+   }else snprintf(answer,capacity,"Authentication failed or session capacity reached.");
+  }else snprintf(answer,capacity,"Authentication failed or invalid command format.");
+  erase(identity,sizeof(identity));
+ }else snprintf(answer,capacity,"Use /login username/password in a direct message.");
+ pthread_mutex_unlock(&mutex);
+ return 1;
+}
 static int process_event(struct json_object *root){
  struct json_object *payload=object(root,"payload"),*event=object(payload,"event");
  const char *event_id=field(payload,"event_id"),*type=field(event,"type");
@@ -203,7 +248,15 @@ static int process_event(struct json_object *root){
  message=text;
  if(is_mention){const char *p=strstr(text,mention);if(p==text)message=p+strlen(mention);}
  while(isspace((unsigned char)*message))++message;
- if(!*message||strlen(message)>=sizeof(query.request))return 0;
+ if(!*message)return 0;
+ if(auth_command(message)){
+  char auth_reply[192]={0};
+  if(!is_dm)return reply(channel,ts?ts:field(event,"ts"),
+                              "Digit authentication commands are accepted only in direct messages.");
+  if(!authenticate_dm(team,user,message,auth_reply,sizeof(auth_reply)))return 0;
+  return reply(channel,ts?ts:field(event,"ts"),auth_reply);
+ }
+ if(strlen(message)>=sizeof(query.request))return 0;
  if(!strcmp(message,"gen intel")||!strcmp(message,"generate feed")){
   digit_stn2_request_t intel={0};digit_stn2_result_t report={0};
   if(!cfg.intel_channel[0]||strcmp(cfg.intel_channel,channel)!=0)
@@ -405,7 +458,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
