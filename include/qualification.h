@@ -5,7 +5,10 @@
 
 #include "module.h"
 
-#define DIGIT_QUALIFICATION_MAX 128
+/* [AI:GPT-6 | 2026-10-10] Preserve retained module-version qualification history.
+ * The prior 128-entry limit exhausted at startup and prevented Interface
+ * qualification persistence despite passing qualification. */
+#define DIGIT_QUALIFICATION_MAX 4096
 
 typedef struct
 {
