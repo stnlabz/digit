@@ -135,7 +135,7 @@ static int unique_learned_meaning(const digit_corpus_search_result_t *result,
     for(i=0;i<result->count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
         if(!parse_learned_definition(&result->records[i],word,candidate,sizeof(candidate))&&
            !parse_learned_equivalence(&result->records[i],word,candidate,sizeof(candidate)))continue;
-        if(found&&strcmp(resolved,candidate)!=0)return 0;
+        if(found&&strcasecmp(resolved,candidate)!=0)return 0;
         snprintf(resolved,sizeof(resolved),"%s",candidate);
         found=1;
     }
@@ -233,6 +233,15 @@ static int definition_target_span(const char *input,const char **begin,const cha
  const char *p=input,*target;
  if(!input||!begin||!end)return 0;
  while(isspace((unsigned char)*p))++p;
+ /* A DEFINE operation mentions its subject; never normalize it. */
+ if(strncasecmp(p,"define",6)==0&&isspace((unsigned char)p[6])){
+  p+=6;while(isspace((unsigned char)*p))++p;target=p;
+  while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+  if(target==p)return 0;
+  *begin=target;*end=p;
+  while(isspace((unsigned char)*p))++p;
+  return *p=='?'||*p=='.'||*p=='\0';
+ }
  if(strncasecmp(p,"what",4)!=0||!isspace((unsigned char)p[4]))return 0;
  p+=4;while(isspace((unsigned char)*p))++p;
  if(strncasecmp(p,"does",4)!=0||!isspace((unsigned char)p[4]))return 0;
@@ -252,6 +261,7 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
     const char *p = input;
     size_t used = 0;
     unsigned int changed = 0;
+    char quote=0;
     const char *definition_begin=NULL,*definition_end=NULL;
     if (input == NULL || output == NULL || output_size == 0) return 0;
     output[0] = '\0';
@@ -268,7 +278,7 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
             if (n >= sizeof(word)) n = sizeof(word) - 1;
             memcpy(word, start, n);
             word[n] = '\0';
-            if (!(definition_begin&&start==definition_begin&&p==definition_end) &&
+            if (!quote && !(definition_begin&&start==definition_begin&&p==definition_end) &&
                 learned_meaning(word, meaning, sizeof(meaning)))
             {
                 start = meaning;
@@ -281,6 +291,14 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
         }
         else
         {
+            /* Quoted expressions and C character literals are mentions,
+             * not permission to rewrite their contents. */
+            if((*p=='"'||*p=='\\'')&&
+               !(p>input&&isalnum((unsigned char)p[-1])&&
+                 isalnum((unsigned char)p[1]))){
+                if(!quote)quote=*p;
+                else if(quote==*p)quote=0;
+            }
             output[used++] = *p++;
         }
     }
@@ -446,7 +464,7 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
 
 static stnlabz_module_result_t interpretation_start(const stnlabz_module_host_t *host)
 {
-    if (host == NULL || host->register_service == NULL || host->invoke_service == NULL)
+    if (host == NULL || host->register_service == NULL || host->unregister_service == NULL || host->invoke_service == NULL)
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if (!host->register_service(DIGIT_INTERPRETATION_SERVICE, interpretation_service, NULL))
         return STNLABZ_MODULE_ERR_START_FAILED;
@@ -476,7 +494,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 9,
+    "interpretation", "Digit Interpretation", 1, 0, 10,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
