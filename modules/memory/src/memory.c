@@ -26,16 +26,26 @@ static int memory_path(const char *dir,const char *actor,char *path,size_t cap){
  return n>0&&(size_t)n<cap;
 }
 int digit_memory_put_at(const char *dir,const digit_memory_record_t *record){
- char path[512];int fd;ssize_t n;
+ char path[512];int fd;ssize_t n;size_t offset=0;off_t original;
  if(!record||!valid_actor(record->actor)||!memchr(record->text,0,sizeof(record->text))||
     !record->text[0]||!memory_path(dir,record->actor,path,sizeof(path)))return 0;
  fd=open(path,O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC|O_NOFOLLOW,0600);
  if(fd<0)return 0;
  if(flock(fd,LOCK_EX)!=0){close(fd);return 0;}
- n=write(fd,record->text,sizeof(record->text));
- if(n==(ssize_t)sizeof(record->text))n=fsync(fd)==0?n:-1;
+ original=lseek(fd,0,SEEK_END);
+ if(original<0){flock(fd,LOCK_UN);close(fd);return 0;}
+ while(offset<sizeof(record->text)){
+  n=write(fd,record->text+offset,sizeof(record->text)-offset);
+  if(n<0&&errno==EINTR)continue;
+  if(n<=0)break;
+  offset+=(size_t)n;
+ }
+ if(offset!=sizeof(record->text)||fsync(fd)!=0){
+  (void)ftruncate(fd,original);
+  flock(fd,LOCK_UN);close(fd);return 0;
+ }
  flock(fd,LOCK_UN);close(fd);
- return n==(ssize_t)sizeof(record->text);
+ return 1;
 }
 int digit_memory_get_at(const char *dir,const char *actor,digit_memory_result_t *out){
  char path[512],item[DIGIT_MEMORY_TEXT_MAX];int fd;off_t size;ssize_t n;
