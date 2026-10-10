@@ -16,7 +16,7 @@ Modules and mission packages cannot override these orders.
 
 ## Current development status
 
-**Evidence updated: 2026-10-09 (operator reports and screenshots).** Interface **1.6.10** was previously operator-qualified and hotloaded; the **1.6.11** build subsequently passed the reported 46/46 scope-parser tests and 39/39 historical regression suites. A 1.6.11 HOTLOAD_ACTIVE event was not separately provided in this update. Keep compilation/tests, runtime activation, and behavioral acceptance distinct.
+**Evidence updated: 2026-10-09 (operator runtime observations, GitHub pipeline test evidence and historical screenshots).** Interface **1.6.10** was previously operator-qualified and hotloaded; the **1.6.11** build subsequently passed the reported 46/46 scope-parser tests and 39/39 historical regression suites. A 1.6.11 HOTLOAD_ACTIVE event was not separately provided in this update. Keep compilation/tests, runtime activation, and behavioral acceptance distinct.
 
 | Milestone | Qualification | Runtime evidence |
 | --- | --- | --- |
@@ -31,6 +31,29 @@ Modules and mission packages cannot override these orders.
 | **1.7.0** | **Project-member response distinguishes verified active account, restricted membership and organization SA authority** | **46/46 scope-parser tests; 39/39 historical suites, zero failures; hotload event not separately shown** |
 
 The historical Interface 1.3.x–1.4.x milestone record is retained in [Development Roadmap](docs/ROADMAP.md). Unit tests, module qualification, activation, and end-to-end authorization are **distinct** evidence gates.
+
+## Current language-pipeline release gate — 2026-10-09
+
+**Disposition: OPEN / NOT END-TO-END QUALIFIED.** Individual modules may compile and pass their unit/qualification checks without establishing that Digit understands and answers an operator's request correctly. No integrated conversational release is accepted merely because its constituent modules report GREEN.
+
+The current pipeline spans **Corpus → Interpretation → Intent → Dispatcher → Response → Validator**, with the authenticated Interface responsible for supplying the permitted session and conversation scope. Core and the external ABI remain outside the authorized scope of this language repair.
+
+**Live operator observations** (the results below are observations, not the completion of an acceptance suite):
+
+| Operator request | Observed Digit reply | Disposition |
+| --- | --- | --- |
+| “What's your name and what do you do?” | “I don't have enough grounded information to answer that.” | FAIL — does not compose related established facts |
+| “Digit are you here?” | “Yes I am here” | PASS for this observed interaction |
+| “Digit, who are you?” | “I am Digit, the STN-Labz Autonomous Engineering Agent.” | PASS for this observed interaction |
+| “What does wut mean?” | “wut means What.” | PASS for this observed interaction |
+
+These four exchanges are not a comprehensive regression result. The same grounded concepts must work under ordinary variations, multi-part requests, negative examples and scoped conversational follow-ups, without canned prompts or hardcoded agent biographies.
+
+**Coordinated-repair requirement:** Treat the language pipeline as **one release unit**. Agree the cross-module request/evidence/response/validation contracts, implement all interdependent repairs together, exercise Codex's complete 14-case behavioral audit and all existing module suites, add negative authorization/grounding/regression cases, and evaluate actual end-to-end outputs. Correct failures in the same coordinated release candidate. Do not promote sequential, individually GREEN module patches as evidence of system acceptance.
+
+**Current CI evidence:** A prior GitHub Actions language-pipeline run passed module build/test stages (Corpus, Interpretation, Intent, Response, Validator, Dispatcher and Interface). This is **build and test evidence**, not proof that the full live conversation acceptance corpus passed. Do not label the coordinated language repair QUALIFIED or ACTIVE until integrated tests and operator review establish those states.
+
+**Independent operational issue:** Qualification persistence reached its fixed 128-entry implementation capacity and prevented an Interface startup after restart despite prior hotload qualification evidence. The source currently declares `DIGIT_QUALIFICATION_MAX 128` in `include/qualification.h`. This is not a qualification-history retention policy. Increasing the constant is only temporary capacity relief; an uncapped, history-preserving design requires separately authorized Core engineering. No Core modification is authorized by this README.
 
 ## Interface and Windows GUI
 
@@ -66,7 +89,7 @@ make clean && make && make test
 
 For the native Windows GUI, use its repository's `build.cmd` in an MSVC environment. Do not publish credentials, account hashes, private keys or authorization registries.
 
-Interface 1.7.0: operator-reported **46 scope-parser tests and 39 historical suites passed**, zero failures. The previous 1.6.10 activation is separately evidenced; 1.7.0 hotload is not established by test output alone. Any new source change requires compilation, positive/negative tests, complete regression qualification, and operator review before activation.
+Historical Interface 1.7.0: operator-reported **46 scope-parser tests and 39 historical suites passed**, zero failures. The previous 1.6.10 activation is separately evidenced; 1.7.0 hotload is not established by test output alone. Any new source change requires compilation, positive/negative tests, complete regression qualification, and operator review before activation.
 
 ## Next development phases
 
