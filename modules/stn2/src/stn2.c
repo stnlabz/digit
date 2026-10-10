@@ -174,9 +174,10 @@ static void append(char *out,size_t size,const char *line){
 static void add_source_result(digit_stn2_result_t *r,const char *name,
                               fetch_status_t status,size_t bytes,long http){
  char line[256];
- snprintf(line,sizeof(line),"%-18s %s (%zu bytes; HTTP %ld)\n",
-          name,fetch_label(status),bytes,http);
- if(status==FETCH_OK)r->sources_ok++;else r->sources_failed++;
+ (void)bytes;(void)http;
+ if(status==FETCH_OK){r->sources_ok++;return;}
+ r->sources_failed++;
+ snprintf(line,sizeof(line),"Collection gap: %s (%s)\n",name,fetch_label(status));
  append(r->report,sizeof(r->report),line);
 }
 /* /intel carries aggregate statistics, not verified incidents.
@@ -501,22 +502,22 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  }
  if(rictus_path){
   if(!rictus_available)
-   append(out,cap,"Historical correlation: Rictus unavailable; results incomplete\n");
+   append(out,cap,"Rictus correlation unavailable.\n");
   else {
    snprintf(line,sizeof(line),
-            "Historical correlation: %zu distinct records checked by IP; %zu matching Rictus IP tokens\n",
-            ip_checked,ip_matches);
+            "Rictus overlap: %zu IP matches among %zu eligible Sentinel records\n",
+            ip_matches,ip_checked);
    append(out,cap,line);
   }
   snprintf(line,sizeof(line),
-   "Historical path assessment: %zu usable request paths checked; %zu literal Rictus matches\n",
-   path_checked,path_matches);
+   "Request-path overlap: %zu matches among %zu eligible Sentinel records\n",
+   path_matches,path_checked);
   append(out,cap,line);
-  if(!rictus_available)append(out,cap,"Investigation outcome: INSUFFICIENT EVIDENCE (Rictus unavailable)\n");
+  if(!rictus_available)append(out,cap,"Assessment limited: Rictus evidence unavailable.\n");
   else if(ip_matches||path_matches)
-   append(out,cap,"Investigation outcome: CANDIDATE OVERLAP; verify timestamps, roles and independent provenance\n");
-  else append(out,cap,"Investigation outcome: NO OVERLAP IN BOUNDED RICTUS WINDOW; historical relationship unresolved\n");
-  append(out,cap,"Candidate matches are textual overlap, not proof of common incident or compromise.\n");
+   append(out,cap,"Assessment: candidate shared indicators; attribution and incident linkage unverified.\n");
+  else append(out,cap,"Assessment: no overlap in recent Rictus evidence; broader relationship unresolved.\n");
+  
  }
  json_object_object_add(snapshot,"ids",ids);ids=NULL;
  if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))goto done;
@@ -530,11 +531,11 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  if(fclose(fp)!=0){fp=NULL;unlink(tmp);goto done;}fp=NULL;
  if(rename(tmp,path)!=0){unlink(tmp);goto done;}
  if(present)
-  snprintf(line,sizeof(line),"Threat IDs: %zu records; %zu absent from previous snapshot\n",seen,new_count);
+  snprintf(line,sizeof(line),"Sentinel records tracked: %zu; newly observed IDs: %zu\n",seen,new_count);
  else
-  snprintf(line,sizeof(line),"Threat IDs: initial baseline of %zu records\n",seen);
+  snprintf(line,sizeof(line),"Sentinel baseline established: %zu distinct observations\n",seen);
  append(out,cap,line);
- append(out,cap,"Record comparison: new means absent from prior snapshot, not independently verified or newly exploited.\n");
+ 
  ok=1;
  done:
  free(window);
@@ -564,8 +565,8 @@ static int rictus_summary(const char *path,char *summary,size_t cap){
   const char *v=last[i%LOG_TAIL_LINES];
   if(strstr(v,"ERROR")||strstr(v,"WARN")||strstr(v,"ALERT"))count++;
  }
- snprintf(summary,cap,"Rictus: inspected last %zu records, %u flagged (WARN/ERROR/ALERT text matches).\n",
- n<LOG_TAIL_LINES?n:(size_t)LOG_TAIL_LINES,count);
+ snprintf(summary,cap,"Rictus: %u warning/error/alert lines in last %zu records (keyword matches).\n",
+ count,n<LOG_TAIL_LINES?n:(size_t)LOG_TAIL_LINES);
  return 1;
 }
 static int authorized_command(const char *s){
@@ -581,7 +582,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
     !authorized_command(in->command)||!in->actor[0])
   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  buf=calloc(1,sizeof(*buf));if(!buf)return STNLABZ_MODULE_ERR_START_FAILED;
- append(r.report,sizeof(r.report),"STN-2 Intelligence Collection\nSource status (read-only):\n");
+ append(r.report,sizeof(r.report),"STN-2 Intelligence Brief\n");
  if(rictus_summary(settings.log,log_summary,sizeof(log_summary))){
   r.sources_ok++;append(r.report,sizeof(r.report),log_summary);
  }else add_source_result(&r,"Rictus",FETCH_NETWORK,0,0);
@@ -603,13 +604,11 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
     if(buf->intel_len<sizeof(buf->intel_json)&&
        intel_report(buf->intel_json,r.report,sizeof(r.report))){
       (void)intel_state(buf->intel_json,r.report,sizeof(r.report),STATE_PATH);
-      append(r.report,sizeof(r.report),
-       "Assessment: reported web probing is not evidence of successful compromise.\n");
+      
     }else append(r.report,sizeof(r.report),"Sentinel /intel schema: UNPARSEABLE\n");
    }
-   if(status==FETCH_OK){
-    snprintf(finding,sizeof(finding),"  CVE references detected: %u mentions; up to %u distinct identifiers sampled\n",
-             buf->cve_mentions,buf->unique_cves);
+   if(status==FETCH_OK&&buf->unique_cves){
+    snprintf(finding,sizeof(finding),"  CVE references (%u textual mentions; unverified):\n",buf->cve_mentions);
     append(r.report,sizeof(r.report),finding);
     for(j=0;j<buf->unique_cves;j++){
      snprintf(finding,sizeof(finding),"    %s (unverified textual reference)\n",buf->cves[j]);
@@ -620,7 +619,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  }
  list=NULL;
  if(is_private(settings.advisories))list=fopen(settings.advisories,"r");
- if(!list)append(r.report,sizeof(r.report),"Advisory sources: NOT CONFIGURED/UNAVAILABLE\n");
+ if(!list)append(r.report,sizeof(r.report),"Coverage gap: external vendor advisories not configured.\n");
  else{
   unsigned int checked=0;
   while(checked<32&&fgets(line,sizeof(line),list)){
@@ -634,7 +633,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
   fclose(list);
  }
  append(r.report,sizeof(r.report),
-  "Note: retrieval is not analysis or CVE verification. No unsupported threat claims made.\n");
+  "Confidence: observed indicators only; no verified compromise established.\n");
  free(buf);memcpy(output,&r,sizeof(r));*used=sizeof(r);
  return STNLABZ_MODULE_OK;
 }
@@ -671,7 +670,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,1,0,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,1,1,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
