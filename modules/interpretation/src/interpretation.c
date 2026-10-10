@@ -225,13 +225,36 @@ static int strip_terminal_addressee(char *text)
     return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-10] A term cited as the subject of a definition
+ * must survive normalization; substitution would destroy the referent. */
+static int definition_target_span(const char *input,const char **begin,const char **end)
+{
+ const char *p=input,*target;
+ if(!input||!begin||!end)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"what",4)!=0||!isspace((unsigned char)p[4]))return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"does",4)!=0||!isspace((unsigned char)p[4]))return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;target=p;
+ while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+ if(target==p||!isspace((unsigned char)*p))return 0;
+ *begin=target;*end=p;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"mean",4)!=0)return 0;
+ p+=4;
+ while(isspace((unsigned char)*p))++p;
+ return *p=='?'||*p=='.'||*p=='\0';
+}
+
 static int resolve_text(const char *input, char *output, size_t output_size, unsigned int *substitutions)
 {
     const char *p = input;
     size_t used = 0;
     unsigned int changed = 0;
+    const char *definition_begin=NULL,*definition_end=NULL;
     if (input == NULL || output == NULL || output_size == 0) return 0;
     output[0] = '\0';
+    (void)definition_target_span(input,&definition_begin,&definition_end);
     while (*p && used + 1 < output_size)
     {
         if (isalnum((unsigned char)*p) || *p == '_' || *p == '-')
@@ -244,7 +267,8 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
             if (n >= sizeof(word)) n = sizeof(word) - 1;
             memcpy(word, start, n);
             word[n] = '\0';
-            if (learned_meaning(word, meaning, sizeof(meaning)))
+            if (!(definition_begin&&start==definition_begin&&p==definition_end) &&
+                learned_meaning(word, meaning, sizeof(meaning)))
             {
                 start = meaning;
                 n = strlen(meaning);
@@ -365,6 +389,17 @@ static stnlabz_module_result_t interpretation_qualify(stnlabz_module_qualificati
             result->tests_executed++;
             if(!unique_learned_meaning(&records,"wut",value,sizeof(value)))result->tests_passed++;
         }
+        /* [AI:GPT-6 | 2026-10-10] Mention-versus-use grammar checks. */
+        {
+            const char *begin=NULL,*end=NULL;
+            result->tests_executed++;
+            if(definition_target_span("What does example mean?",&begin,&end)&&
+               (size_t)(end-begin)==7&&strncmp(begin,"example",7)==0)
+                result->tests_passed++;
+            result->tests_executed++;
+            if(!definition_target_span("What does example do?",&begin,&end))
+                result->tests_passed++;
+        }
         result->negative_test_executed=1;
         result->negative_test_passed=!resolve_text("oversized", (char[2]){0}, 2, NULL);
     }
@@ -396,7 +431,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 7,
+    "interpretation", "Digit Interpretation", 1, 0, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
