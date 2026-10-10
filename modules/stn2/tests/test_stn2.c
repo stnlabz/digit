@@ -93,6 +93,12 @@ int main(void){
   out[0]=0;
   assert(threat_records(b,out,sizeof(out),baseline,log));
   assert(strstr(out,"Rictus: matching IP token")!=NULL);
+  assert(strstr(out,"Historical correlation: 1 distinct records checked by IP; 1 matching Rictus IP tokens")!=NULL);
+  assert(strstr(out,"Historical candidate: record=b IP=192.0.2.9")!=NULL);
+  out[0]=0;
+  assert(threat_records(b,out,sizeof(out),baseline,log));
+  assert(strstr(out,"0 absent from previous snapshot")!=NULL);
+  assert(strstr(out,"1 matching Rictus IP tokens")!=NULL);
   assert(unlink(baseline)==0);
   assert(unlink(log)==0);
   assert(rmdir(dir)==0);
