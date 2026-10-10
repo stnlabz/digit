@@ -293,7 +293,7 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
         {
             /* Quoted expressions and C character literals are mentions,
              * not permission to rewrite their contents. */
-            if((*p=='"'||*p=='\\'')&&
+            if((*p=='"'||*p=='\'')&&
                !(p>input&&isalnum((unsigned char)p[-1])&&
                  isalnum((unsigned char)p[1]))){
                 if(!quote)quote=*p;
