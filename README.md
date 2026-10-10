@@ -128,3 +128,7 @@ Corrected reciprocal-pronoun context classification: `What did I just tell you?`
 ### Private previous-user-turn context correction (2026-10-10)
 
 Dispatcher 1.3.7 accepts a bounded `previous_user_message` alongside `previous_answer` in its existing authenticated private contextual request. Digit's Interface 1.7.8 and Slack 1.0.8 each retain only the immediately preceding user message inside their established private authenticated session and pass it to Dispatcher for speaker-correct recall. Session logout, expiry and module restart discard these volatile fields; Slack reauthentication clears prior conversational context. No long-term biography storage, shared channel history, new authorization, or Core modification is introduced. Build and end-to-end tests remain pending.
+
+### Digit Memory v1.0.0 (candidate; Linux qualification pending)
+
+An additive `modules/memory` service provides durable account-keyed private personal statements across Slack 1.0.9 and Interface 1.7.9, provided both access the same Digit installation and use the same authenticated Digit account. Currently captures authenticated `remember ...` and `I am ...` messages and retrieves the most recent record via `What do you remember about me?`. This is **not** generalized autonomous learning, complete chat-history recall, distributed synchronization, or a production-qualified privacy subsystem. Service activation, storage authorization, Linux tests, and live qualification are still required.
