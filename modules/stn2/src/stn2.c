@@ -638,7 +638,15 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
   char ordered[sizeof(r.report)]={0};
   append(ordered,sizeof(ordered),"STN-2 Intelligence Brief\n");
   append(ordered,sizeof(ordered),intel_section);
-  append(ordered,sizeof(ordered),record_section);
+  {
+   char *change=strstr(record_section,"Sentinel records tracked:");
+   if(!change)change=strstr(record_section,"Sentinel baseline established:");
+   if(change){
+    append(ordered,sizeof(ordered),change);
+    *change=0;
+   }
+   append(ordered,sizeof(ordered),record_section);
+  }
   if(log_summary[0])append(ordered,sizeof(ordered),log_summary);
   append(ordered,sizeof(ordered),r.report+strlen("STN-2 Intelligence Brief\n"));
   strncpy(r.report,ordered,sizeof(r.report)-1);
