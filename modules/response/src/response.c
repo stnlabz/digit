@@ -691,11 +691,12 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
     "being playful: includes occasionally saying \"bish\" or \"dude\" , specifically in resonse to \"bish\" and then follow up with normal conversation.");
   passed+=(unsigned)(learned_social_reply("Bish?",&lesson,answer,sizeof(answer))&&strcmp(answer,"dude")==0);
   passed+=(unsigned)(learned_social_reply("wut now bish",&lesson,answer,sizeof(answer))&&strcmp(answer,"dude")==0);
+  passed+=(unsigned)(learned_social_reply("WTF Bish?",&lesson,answer,sizeof(answer))&&strcmp(answer,"dude")==0);
   passed+=(unsigned)!learned_social_reply("What is a compiler?",&lesson,answer,sizeof(answer));
   snprintf(lesson.source,sizeof(lesson.source),"untrusted");
   passed+=(unsigned)!learned_social_reply("Bish?",&lesson,answer,sizeof(answer));
  }
- result->tests_executed=37;result->tests_passed=passed;
+ result->tests_executed=38;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
