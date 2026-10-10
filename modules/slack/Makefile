@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 ABI_DIR ?= ../../../ABI
 CPPFLAGS ?= -Iincludes -I../dispatcher/includes -I$(ABI_DIR)/includes
-LDLIBS ?= -lcurl -ljson-c -pthread
+LDLIBS ?= -lcurl -ljson-c -pthread -lcrypt
 TARGET := bin/slack.so
 TEST_TARGET := bin/test_slack
 PREFIX ?= /opt/digit
@@ -13,9 +13,9 @@ check-abi:
 bin:
 	mkdir -p bin
 $(TARGET): src/slack.c includes/slack.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< -o $@ $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $< ../interface/src/account_auth.c -o $@ $(LDLIBS)
 $(TEST_TARGET): tests/test_slack.c src/slack.c includes/slack.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< ../interface/src/account_auth.c -o $@ $(LDLIBS)
 test: check-abi $(TEST_TARGET)
 	./$(TEST_TARGET)
 install: all
