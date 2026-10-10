@@ -55,11 +55,27 @@ static void test_alert_outbox(void){
  snprintf(cfg.intel_channel,sizeof(cfg.intel_channel),"C_INTEL");
  assert(alert_clear(path));
 }
+static void test_dm_auth_commands(void){
+ char reply_text[192]={0};
+ assert(auth_command("/login user/password"));
+ assert(auth_command("/logout"));
+ assert(auth_command("/whoami"));
+ assert(!auth_command("gen intel"));
+ assert(authenticate_dm("T_1","U_1","/logout",reply_text,sizeof(reply_text)));
+ assert(strstr(reply_text,"closed")!=NULL);
+ assert(authenticate_dm("T_1","U_1","/whoami",reply_text,sizeof(reply_text)));
+ assert(strstr(reply_text,"No active")!=NULL);
+ assert(authenticate_dm("T_1","U_1","/login fake/incorrect",reply_text,sizeof(reply_text)));
+ assert(strstr(reply_text,"failed")!=NULL);
+ assert(strstr(reply_text,"incorrect")==NULL);
+ assert(authenticate_dm("T_2","U_2","/whoami",reply_text,sizeof(reply_text)));
+ assert(strstr(reply_text,"No active")!=NULL);
+}
 int main(void){
  stnlabz_module_qualification_result_t result;
  assert(stnlabz_module_get_descriptor()->qualify(&result)==STNLABZ_MODULE_OK);
  assert(result.tests_executed>=10&&result.tests_failed==0);
- test_config();test_fail_closed();test_alert_outbox();
+ test_config();test_fail_closed();test_alert_outbox();test_dm_auth_commands();
  assert(!intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 2 active; 0 opened; 0 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
