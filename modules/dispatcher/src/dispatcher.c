@@ -162,6 +162,9 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
         if(strcmp(intent_result.subject,"prior_answer")==0&&
            previous_answer&&previous_answer[0])
             snprintf(out.answer,sizeof(out.answer),"%s",previous_answer);
+        else if(strcmp(intent_result.subject,"prior_user_message")==0)
+            snprintf(out.answer,sizeof(out.answer),
+                     "I do not have your previous message available in this conversation context.");
         else if(strcmp(intent_result.subject,"unresolved")==0)
             snprintf(out.answer,sizeof(out.answer),
                      "Please specify which earlier topic you mean.");
@@ -287,5 +290,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
