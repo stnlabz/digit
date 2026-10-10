@@ -345,7 +345,8 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  struct json_object *root=NULL,*records=NULL,*prior=NULL,*previous=NULL,*snapshot=NULL,*ids=NULL;
  struct stat st;
  char line[256],tmp[600],idbuf[80];
- size_t i,new_count=0,seen=0,reported=0;
+ size_t i,new_count=0,seen=0,reported=0,ip_checked=0,ip_matches=0,ip_samples=0;
+ int rictus_available=1;
  int present=0,fd=-1,ok=0;
  FILE *fp=NULL;
  if(!raw||!out||!path)return 0;
@@ -384,6 +385,28 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
   if(duplicate)continue;
   if(json_object_array_add(ids,json_object_new_string(identifier))!=0)goto done;
   seen++;
+  if(rictus_path){
+   struct json_object *ipfield=NULL;
+   if(json_object_object_get_ex(item,"ip",&ipfield)&&
+      json_object_is_type(ipfield,json_type_string)){
+    const char *ip=json_object_get_string(ipfield);
+    int match=rictus_ip_match(rictus_path,ip);
+    if(match<0)rictus_available=0;
+    else {
+     ip_checked++;
+     if(match){
+      ip_matches++;
+      if(ip_samples<3){
+       snprintf(line,sizeof(line),
+                "  Historical candidate: record=%.*s IP=%.*s (exact Rictus token match)\n",
+                64,identifier,45,ip);
+       append(out,cap,line);
+       ip_samples++;
+      }
+     }
+    }
+   }
+  }
   duplicate=0;
   if(present)for(j=0;j<json_object_array_length(previous);j++){
    const char *oldid=json_object_get_string(json_object_array_get_idx(previous,j));
@@ -417,6 +440,17 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
     reported++;
    }
   }
+ }
+ if(rictus_path){
+  if(!rictus_available)
+   append(out,cap,"Historical correlation: Rictus unavailable; results incomplete\n");
+  else {
+   snprintf(line,sizeof(line),
+            "Historical correlation: %zu distinct records checked by IP; %zu matching Rictus IP tokens\n",
+            ip_checked,ip_matches);
+   append(out,cap,line);
+  }
+  append(out,cap,"Candidate matches are textual overlap, not proof of common incident or compromise.\n");
  }
  json_object_object_add(snapshot,"ids",ids);ids=NULL;
  if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))goto done;
@@ -570,7 +604,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,8,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,9,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
