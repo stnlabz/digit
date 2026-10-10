@@ -648,6 +648,34 @@ static int investigation_update(const char *raw,const char *path,char *report,si
    if(id){
     snprintf(line,sizeof(line),"    Observation ID: %.*s\n",64,id);
     append(report,cap,line);
+    {
+     size_t m;
+     struct json_object *source=NULL,*details=NULL;
+     const char *type=NULL,*when=NULL,*path_value=NULL,*domain=NULL;
+     for(m=0;m<(size_t)json_object_array_length(threats);m++){
+      struct json_object *candidate=json_object_array_get_idx(threats,(int)m);
+      const char *candidate_id=json_text_member(candidate,"id");
+      if(candidate_id&&!strcmp(candidate_id,id)){source=candidate;break;}
+     }
+     if(source){
+      type=json_text_member(source,"type");
+      when=json_text_member(source,"created_at");
+      details=json_member_object(source,"details");
+      path_value=json_text_member(details,"request_url");
+      domain=json_text_member(details,"domain");
+      snprintf(line,sizeof(line),"      Activity=%.*s; observed=%.*s\n",
+               40,type?type:"unclassified",32,when?when:"not supplied");
+      append(report,cap,line);
+      if(path_value&&path_value[0]){
+       snprintf(line,sizeof(line),"      Request=%.*s\n",100,path_value);
+       append(report,cap,line);
+      }
+      if(domain&&domain[0]){
+       snprintf(line,sizeof(line),"      Domain=%.*s\n",90,domain);
+       append(report,cap,line);
+      }
+     }else append(report,cap,"      Detail unavailable in current Sentinel snapshot.\n");
+    }
    }
   }
   if(n>shown)append(report,cap,"    Additional evidence IDs retained in case state.\n");
@@ -807,7 +835,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,2,2,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,3,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
