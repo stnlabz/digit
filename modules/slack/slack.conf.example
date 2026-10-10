@@ -1,0 +1,5 @@
+# Install privately at /opt/digit/auth/slack/slack.conf (0600)
+enabled=false
+workspace_id=
+app_token=
+bot_token=
