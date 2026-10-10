@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.4 (streaming regression correction)
+# STN-2 Intelligence Module — version 1.0.5 (Sentinel schema-aware analysis)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -35,9 +35,7 @@ Slack `/opt/digit/auth/slack/slack.conf` also needs
 STN-LABZ ABI and native libcurl development library.
 
 **SOURCE CANDIDATE — NOT A QUALIFIED INTELLIGENCE ANALYST.**
-This first milestone performs bounded retrieval and reports source health; it
-does **not** yet parse CVEs, correlate records, store a durable intel history,
-generate the weekly briefing, or verify advisory findings. It intentionally
+This revision performs bounded retrieval, captures and validates the small Sentinel `/intel` JSON summary, reports its historical type counts, 24-hour activity and pattern indicators, and extracts unverified CVE references from the byte streams. It does **not** yet verify advisory findings, correlate Rictus against individual threat records, persist investigations, autonomously watch cases or generate the weekly briefing. It intentionally
 does not claim those capabilities or fabricate intelligence.
 
 Deployment acceptance requires valid feeds, source-content analysis,
@@ -59,3 +57,9 @@ The bounded streaming collector now detects syntactically recognizable CVE ident
 ## Revision 1.0.4
 
 Corrected an offline test that passed a multi-megabyte size with only an 8 KiB source buffer. Since v1.0.3 actually examines streamed bytes for CVE identifiers, this caused an out-of-bounds read and segmentation fault. The test now iterates over actual 8 KiB chunks. Module descriptor revision incremented to 1.0.4; live qualification remains pending.
+
+## Revision 1.0.5
+
+Implements initial evidence-based interpretation of the provided Sentinel /intel schema (stats.total_threats, stats.by_type, analysis.total_24h, analysis.trending and patterns). The report differentiates historical totals from 24-hour values and explicitly states that request-pattern indicators are not proof of compromise. Parses only bounded /intel JSON content; raw /threats and /events remain byte-counted, not normalized or deduplicated. The advisory feed is not yet enabled by default. Native json-c development headers and library are required. New offline tests validate an /intel example and reject missing required fields.
+
+**Not implemented:** durable evidence/case management, investigation decisions, timed watchers, weekly brief synthesis, or full CVE/vendor advisory verification. These remain required mission milestones; do not describe this version as autonomous investigation completion.
