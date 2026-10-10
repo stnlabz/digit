@@ -57,18 +57,18 @@ static void test_alert_outbox(void){
 }
 static void test_dm_auth_commands(void){
  char reply_text[192]={0};
- assert(auth_command("/login user/password"));
- assert(auth_command("/logout"));
- assert(auth_command("/whoami"));
+ assert(auth_command("login user/password"));
+ assert(auth_command("logout"));
+ assert(auth_command("whoami"));
  assert(!auth_command("gen intel"));
- assert(authenticate_dm("T_1","U_1","/logout",reply_text,sizeof(reply_text)));
+ assert(authenticate_dm("T_1","U_1","logout",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"closed")!=NULL);
- assert(authenticate_dm("T_1","U_1","/whoami",reply_text,sizeof(reply_text)));
+ assert(authenticate_dm("T_1","U_1","whoami",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"No active")!=NULL);
- assert(authenticate_dm("T_1","U_1","/login fake/incorrect",reply_text,sizeof(reply_text)));
+ assert(authenticate_dm("T_1","U_1","login fake/incorrect",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"failed")!=NULL);
  assert(strstr(reply_text,"incorrect")==NULL);
- assert(authenticate_dm("T_2","U_2","/whoami",reply_text,sizeof(reply_text)));
+ assert(authenticate_dm("T_2","U_2","whoami",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"No active")!=NULL);
 }
 int main(void){
