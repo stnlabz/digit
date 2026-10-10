@@ -124,3 +124,7 @@ A contextual question such as `What did I just tell you about myself?` is now cl
 ### Intent 1.2.8 qualification correction
 
 Corrected reciprocal-pronoun context classification: `What did I just tell you?` requests the prior user statement, whereas `What did you just tell me?` requests Digit's prior answer. This corrects the failed Linux regression observed in Intent 1.2.7. The comparison-subject `snprintf` now uses an explicit bounded precision to avoid the reported `-Wformat-truncation` warning. Conversation history remains outside this narrowly scoped correction. Linux retest pending.
+
+### Private previous-user-turn context correction (2026-10-10)
+
+Dispatcher 1.3.7 accepts a bounded `previous_user_message` alongside `previous_answer` in its existing authenticated private contextual request. Digit's Interface 1.7.8 and Slack 1.0.8 each retain only the immediately preceding user message inside their established private authenticated session and pass it to Dispatcher for speaker-correct recall. Session logout, expiry and module restart discard these volatile fields; Slack reauthentication clears prior conversational context. No long-term biography storage, shared channel history, new authorization, or Core modification is introduced. Build and end-to-end tests remain pending.
