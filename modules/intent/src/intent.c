@@ -96,59 +96,8 @@ static void semantic_subject(const char *after, char *subject, size_t size)
     subject[n] = '\0';
 }
 
-static int learned_word(const char *word,char *out,size_t cap)
-{
-    digit_corpus_search_request_t q; digit_corpus_search_result_t r; size_t used=0,i;
-    if(!word||!out||!cap||!intent_host||!intent_host->invoke_service)return 0;
-    memset(&q,0,sizeof(q)); memset(&r,0,sizeof(r)); snprintf(q.query,sizeof(q.query),"%s",word);
-    if(intent_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&q,sizeof(q),&r,sizeof(r),&used)!=STNLABZ_MODULE_OK||used!=sizeof(r))return 0;
-    for(i=0;i<r.count&&i<DIGIT_CORPUS_SEARCH_MAX;i++){
-        const char *p,*m; size_t n=0;
-        const char *start=r.records[i].text; size_t prefix_length;
-        if(strcmp(r.records[i].category,"OPERATOR_LEARNED")!=0)continue;
-        m=strstr(start," means "); if(!m)continue;
-        while(start<m&&isspace((unsigned char)*start))++start;
-        prefix_length=(size_t)(m-start);
-        while(prefix_length>0&&isspace((unsigned char)start[prefix_length-1]))--prefix_length;
-        if(!word_equal_ci(start,prefix_length,word))continue;
-        p=m+7;
-        while(*p&&(!isalnum((unsigned char)*p)&&*p!='_'&&*p!='-'))p++;
-        while(p[n]&&(isalnum((unsigned char)p[n])||p[n]=='_'||p[n]=='-')&&n+1<cap)n++;
-        if(n){memcpy(out,p,n);out[n]=0;return 1;}
-    } return 0;
-}
-/* [AI:GPT-6 | 2026-10-09] Never classify silently truncated requests.
- * If a learned substitution expands past the ABI boundary, fail closed. */
-static int learned_text(const char *in,char *out,size_t cap)
-{
- const char *p=in;size_t used=0;
- if(!in||!out||cap==0)return 0;
- out[0]=0;
- while(*p){
-  if(isalnum((unsigned char)*p)||*p=='_'||*p=='-'){
-   const char *start=p,*value;
-   char word[128],replacement[128];
-   size_t length,copy_length;
-   while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))++p;
-   length=(size_t)(p-start);
-   value=start;copy_length=length;
-   if(length<sizeof(word)){
-    memcpy(word,start,length);word[length]=0;
-    if(learned_word(word,replacement,sizeof(replacement))){
-     value=replacement;copy_length=strlen(replacement);
-    }
-   }
-   if(copy_length>=cap-used)return 0;
-   memcpy(out+used,value,copy_length);used+=copy_length;
-  }else{
-   if(used+1>=cap)return 0;
-   out[used++]=*p++;
-  }
- }
- out[used]=0;
- return 1;
-}
-
+/* [AI:GPT-6 | 2026-10-09] Intent classifies already interpreted text.
+ * Learned meaning resolution is owned by Interpretation upstream. */
 /* [AI:GPT-6 | 2026-10-09] A name introduction is conversational content,
  * not a privileged identity claim or an account-profile update. */
 static int personal_introduction(const char *text)
@@ -187,19 +136,17 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     static const char *const social_words[] = {"hi","hello","hey","morning","afternoon","evening","thanks","thank","sorry","ouch","paws"};
     static const char *const compare_words[] = {"compare","versus","difference","differences"};
     const char *after = NULL;
-    char interpreted[DIGIT_INTENT_TEXT_MAX];
+
     int action, status, explain, define, compare, why, how, fact, social;
     unsigned int operational_count;
     if (result == NULL) return;
     memset(result, 0, sizeof(*result));
     if (text == NULL || text[0] == '\0') { set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Intent is not deterministically established."); return; }
-    if(strlen(text)>=sizeof(interpreted) ||
-       !learned_text(text,interpreted,sizeof(interpreted))){
+    if(strlen(text)>=DIGIT_INTENT_TEXT_MAX){
         set_result(result,DIGIT_INTENT_UNKNOWN,DIGIT_INTENT_TARGET_UNKNOWN,0U,
-                   "Request exceeds the interpretation boundary.");
+                   "Request exceeds the intent input boundary.");
         return;
     }
-    text=interpreted;
     if(personal_introduction(text)){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Operator self-introduction is conversational, not authentication.");return;}
     /* [AI:GPT-6 | 2026-10-09] A bounded solve-equation request is
      * an arithmetic knowledge query, not a privileged executable action. */
@@ -400,7 +347,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 1, 9,
+    "intent", "Digit Intent", 1, 2, 0,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
