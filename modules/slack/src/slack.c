@@ -63,7 +63,8 @@ static int load_config(const char *path,slack_config_t *out){
   else good=0;
   if(!good)break;
  }
- if(ferror(file))good=0;fclose(file);
+ if(ferror(file))good=0;
+ fclose(file);
  if(good&&v.enabled){
   good=v.workspace[0]&&v.app[0]&&v.bot[0]&&
    strncmp(v.app,"xapp-",5)==0&&strncmp(v.bot,"xoxb-",5)==0;
@@ -111,7 +112,8 @@ static struct json_object *post(const char *endpoint,const char *bearer,struct j
  }
 done:
  erase(authorization,sizeof(authorization));curl_slist_free_all(headers);
- if(curl)curl_easy_cleanup(curl);erase(buf,sizeof(*buf));free(buf);return result;
+ if(curl)curl_easy_cleanup(curl);
+ erase(buf,sizeof(*buf));free(buf);return result;
 }
 /* One-slot crash-recoverable outbox. Restrict to the configured channel.
  * Refuse unsafe/corrupt state instead of silently overwriting lost evidence. */
@@ -185,7 +187,8 @@ static int reply(const char *channel,const char *timestamp,const char *message){
  if(timestamp&&*timestamp)json_object_object_add(request,"thread_ts",json_object_new_string(timestamp));
  result=post("https://slack.com/api/chat.postMessage",cfg.bot,request);
  ok=result&&yes(result,"ok");
- if(result)json_object_put(result);json_object_put(request);return ok;
+ if(result)json_object_put(result);
+ json_object_put(request);return ok;
 }
 static int auth_command(const char *input){
  return input&&(!strncmp(input,"/login ",7)||!strcmp(input,"/login")||
@@ -401,7 +404,8 @@ static void *worker_main(void *arg){
 }
 static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *r){
  unsigned int passed=0;slack_config_t empty={0};struct json_object *j;
- if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(r,0,sizeof(*r));
+ if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memset(r,0,sizeof(*r));
  passed+=bounded(empty.workspace,sizeof(empty.workspace),"T123");
  passed+=!bounded(empty.workspace,3,"toolong");
  passed+=!private_file("/this/file/does/not/exist");
@@ -461,7 +465,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
