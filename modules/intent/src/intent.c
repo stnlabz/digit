@@ -143,6 +143,31 @@ static int definition_question(const char *text,char *subject,size_t capacity)
  memcpy(subject,begin,n);subject[n]='\0';return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-10] Resolve request-local references by
+ * relation type, never by searching global Corpus for pronouns. */
+static int contextual_reference(const char *text,char *subject,size_t capacity)
+{
+ int discourse,past,recall;
+ if(!text||!subject||capacity<16)return 0;
+ discourse=has_word(text,"discussed")||has_word(text,"discussion")||
+           has_word(text,"mentioned");
+ past=has_word(text,"previous")||has_word(text,"earlier")||
+      has_word(text,"last")||has_word(text,"just");
+ recall=has_word(text,"tell")||has_word(text,"told")||
+        has_word(text,"said")||has_word(text,"say")||discourse;
+ if(!recall)return 0;
+ if(past&&(has_word(text,"you")||has_word(text,"your"))){
+  snprintf(subject,capacity,"prior_answer");
+  return 1;
+ }
+ if(discourse&&(has_word(text,"thing")||has_word(text,"topic")||
+                has_word(text,"that"))){
+  snprintf(subject,capacity,"unresolved");
+  return 1;
+ }
+ return 0;
+}
+
 static void set_result(digit_intent_result_t *result, digit_intent_class_t intent,
                        digit_intent_target_t target, unsigned int established,
                        const char *reason)
@@ -219,6 +244,11 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         status=0;why=0;how=0;fact=0;
     }
     if(fact&&!action){status=0;}
+    if(!action&&contextual_reference(text,result->subject,sizeof(result->subject))){
+        set_result(result,DIGIT_INTENT_CONTEXT,DIGIT_INTENT_TARGET_SOCIAL,1U,
+                   "Request refers to prior conversational context.");
+        return;
+    }
     operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
     if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
     if(action){set_result(result,DIGIT_INTENT_ACTION,DIGIT_INTENT_TARGET_CAPABILITY,1U,"Request directs Digit to perform or change something.");return;}
@@ -265,6 +295,7 @@ const char *digit_intent_class_string(digit_intent_class_t intent)
         case DIGIT_INTENT_STATUS: return "STATUS";
         case DIGIT_INTENT_ACTION: return "ACTION";
         case DIGIT_INTENT_AMBIGUOUS: return "AMBIGUOUS";
+        case DIGIT_INTENT_CONTEXT: return "CONTEXT";
         default: return "UNKNOWN";
     }
 }
@@ -321,6 +352,8 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
     } cases[] =
     {
         {"hello Digit", DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U},
+        {"What did you just tell me?", DIGIT_INTENT_CONTEXT, DIGIT_INTENT_TARGET_SOCIAL, 1U},
+        {"Tell me about the thing we discussed.", DIGIT_INTENT_CONTEXT, DIGIT_INTENT_TARGET_SOCIAL, 1U},
         {"what is the first General Order", DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"define deterministic behavior", DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"What does example mean?", DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
@@ -388,7 +421,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 5,
+    "intent", "Digit Intent", 1, 2, 6,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
