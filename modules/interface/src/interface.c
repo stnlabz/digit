@@ -205,7 +205,7 @@ static digit_session_entry_t *interface_private_session(const char *request,
  return entry;
 }
 static int interface_dispatch_private(const char *body,const char *identity,
-                                       const char *previous_answer,
+                                       const char *previous_answer,const char *previous_user_message,
                                        interface_dispatcher_result_t *out)
 {
  interface_scoped_context_dispatcher_request_t in;
@@ -225,11 +225,16 @@ static int interface_dispatch_private(const char *body,const char *identity,
   if(prior_length>=sizeof(in.previous_answer))return 0;
   memcpy(in.previous_answer,previous_answer,prior_length+1U);
  }
+ if(previous_user_message&&previous_user_message[0]){
+  size_t n=strnlen(previous_user_message,sizeof(in.previous_user_message));
+  if(n>=sizeof(in.previous_user_message))return 0;
+  memcpy(in.previous_user_message,previous_user_message,n+1U);
+ }
  if(interface_invoke(DISPATCHER_SCOPED_CONTEXT_SERVICE,&in,sizeof(in),
                      out,sizeof(*out),&used)&&used==sizeof(*out))return 1;
  /* Existing no-context route remains backward-compatible. A supplied
   * prior turn must never be silently discarded during fallback. */
- if(in.previous_answer[0])return 0;
+ if(in.previous_answer[0]||in.previous_user_message[0])return 0;
  memset(&legacy,0,sizeof(legacy));legacy=in.scoped;
  used=0;
  return interface_invoke(DISPATCHER_SCOPED_SERVICE,&legacy,sizeof(legacy),
@@ -1168,7 +1173,7 @@ if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,ident
     interface_reply(client,200,json);return;
 }if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){if(!interface_alert_channel_messages(client,id,identity))interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
-if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;digit_session_entry_t *session;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}session=interface_private_session(request,identity);if(!session){interface_reply(client,403,"{\"error\":\"valid authenticated session required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_dispatch_private(body,identity,session->last_reply,&out)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
+if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out;char escaped[8192],json[9000];const char *learn;digit_session_entry_t *session;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}session=interface_private_session(request,identity);if(!session){interface_reply(client,403,"{\"error\":\"valid authenticated session required\"}\n");return;}learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_dispatch_private(body,identity,session->last_reply,session->last_user_message,&out)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);snprintf(session->last_user_message,sizeof(session->last_user_message),"%s",body);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
  * record lookup, using the existing Corpus get service. UNKNOWN is
  * explicit when no record exists; unverified Core output is rejected. */
