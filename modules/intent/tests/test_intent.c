@@ -134,6 +134,19 @@ int main(int argc, char **argv)
                   DIGIT_INTENT_FACT, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
     expect_intent("define", "define deterministic behavior",
                   DIGIT_INTENT_DEFINE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
+    /* [AI:GPT-6 | 2026-10-10] Check definition operation and extracted
+     * subject without relying on any production vocabulary mapping. */
+    {
+        digit_intent_result_t interpreted;
+        digit_intent_interpret("What does sample mean?",&interpreted);
+        if(interpreted.intent!=DIGIT_INTENT_DEFINE||
+           interpreted.target!=DIGIT_INTENT_TARGET_KNOWLEDGE||
+           !interpreted.established||
+           strcmp(interpreted.subject,"sample")!=0){
+            fprintf(stderr,"FAIL definition-query subject extraction\n");++failures;
+        }
+    }
+
     expect_intent("explain", "explain deterministic behavior",
                   DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
     expect_intent("compare", "compare these two implementations",
