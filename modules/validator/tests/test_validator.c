@@ -13,7 +13,7 @@ int main(void){
   return 1;
  memset(&result,0,sizeof(result));
  if(descriptor->version_major!=1||descriptor->version_minor!=0||
-    descriptor->version_patch!=5||descriptor->qualify(&result)!=STNLABZ_MODULE_OK||
+    descriptor->version_patch!=8||descriptor->qualify(&result)!=STNLABZ_MODULE_OK||
     result.tests_executed<10||result.tests_passed!=result.tests_executed||
     result.tests_failed||!result.negative_test_executed||
     result.negative_test_passed!=result.negative_test_executed){
