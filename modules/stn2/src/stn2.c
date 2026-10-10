@@ -25,7 +25,9 @@ static int is_private(const char *path){
 }
 static int safe_copy(char *dst,size_t n,const char *src){
  size_t len;if(!src)return 0;len=strlen(src);
- if(!len||len>=n)return 0;memcpy(dst,src,len+1);return 1;
+ if(!len||len>=n)return 0;
+ memcpy(dst,src,len+1);
+ return 1;
 }
 static int parse_settings(const char *path,settings_t *out){
  FILE *fp;char line[1024];settings_t c={0};int ok=1;
@@ -46,9 +48,11 @@ static int parse_settings(const char *path,settings_t *out){
   else ok=0;
   if(!ok)break;
  }
- if(ferror(fp))ok=0;fclose(fp);
+ if(ferror(fp))ok=0;
+ fclose(fp);
  if(ok&&c.enabled)ok=c.log[0]&&c.base[0]&&strncmp(c.base,"https://",8)==0&&c.advisories[0];
- if(ok)*out=c;return ok;
+ if(ok)*out=c;
+ return ok;
 }
 static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
  response_t *b=ctx;size_t bytes;
@@ -167,7 +171,8 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
 }
 static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q){
  unsigned int passed=0;settings_t s={0};char text[32];
- if(!q)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;memset(q,0,sizeof(*q));
+ if(!q)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memset(q,0,sizeof(*q));
  passed+=authorized_command("gen intel");
  passed+=authorized_command("generate feed");
  passed+=!authorized_command("weekly brief");
@@ -197,7 +202,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,1,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,2,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
