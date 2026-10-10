@@ -156,7 +156,7 @@ static int contextual_reference(const char *text,char *subject,size_t capacity)
  recall=has_word(text,"tell")||has_word(text,"told")||
         has_word(text,"said")||has_word(text,"say")||discourse;
  if(!recall)return 0;
- if(past&&(has_word(text,"i")||has_word(text,"me"))&&
+ if(past&&has_word(text,"i")&&
     (has_word(text,"you")||has_word(text,"your"))){
   snprintf(subject,capacity,"prior_user_message");
   return 1;
@@ -260,7 +260,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if(status){set_result(result,DIGIT_INTENT_STATUS,DIGIT_INTENT_TARGET_RUNTIME,1U,"Request asks about current operational state.");return;}
     if(explain){semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_EXPLAIN,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for an explanation.");return;}
     if(define){find_word(text,"define",&after);semantic_subject(after,result->subject,sizeof(result->subject));set_result(result,DIGIT_INTENT_DEFINE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a definition.");return;}
-    if(compare){if(find_word(text,"compare",&after)){semantic_subject(after,result->subject,sizeof(result->subject));}else{snprintf(result->subject,sizeof(result->subject),"%s",text);}set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a comparison.");return;}
+    if(compare){if(find_word(text,"compare",&after)){semantic_subject(after,result->subject,sizeof(result->subject));}else{snprintf(result->subject,sizeof(result->subject),"%.*s",(int)sizeof(result->subject)-1,text);}set_result(result,DIGIT_INTENT_COMPARE,DIGIT_INTENT_TARGET_KNOWLEDGE,result->subject[0]!='\0',"Request asks for a comparison.");return;}
     if(why){set_result(result,DIGIT_INTENT_WHY,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for a supported reason or cause.");return;}
     if(how){set_result(result,DIGIT_INTENT_HOW,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks how something works or is done.");return;}
     if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
@@ -426,7 +426,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 7,
+    "intent", "Digit Intent", 1, 2, 8,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
