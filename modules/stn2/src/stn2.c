@@ -15,7 +15,15 @@
 #define SOURCE_LIMIT (8U * 1024U * 1024U)
 #define LOG_TAIL_LINES 120
 typedef struct {int enabled;char log[512],base[512],advisories[512];} settings_t;
-typedef struct {size_t len;int exceeded;} response_t;
+typedef struct {
+ size_t len;
+ int exceeded;
+ char window[32];
+ size_t window_len;
+ char cves[8][24];
+ unsigned int unique_cves;
+ unsigned int cve_mentions;
+} response_t;
 typedef enum {FETCH_OK=0,FETCH_INVALID_URL,FETCH_NETWORK,FETCH_HTTP,FETCH_EMPTY,FETCH_LIMIT} fetch_status_t;
 static settings_t settings;
 static const stnlabz_module_host_t *owner;
@@ -54,12 +62,55 @@ static int parse_settings(const char *path,settings_t *out){
  if(ok)*out=c;
  return ok;
 }
+static int cve_token(const char *p,size_t n){
+ size_t i;
+ if(n<13||n>22||memcmp(p,"CVE-",4)!=0||p[8]!='-')return 0;
+ for(i=4;i<8;i++)if(!isdigit((unsigned char)p[i]))return 0;
+ for(i=9;i<n;i++)if(!isdigit((unsigned char)p[i]))return 0;
+ return 1;
+}
+static void cve_track(response_t *b,const char *token,size_t n){
+ unsigned int i;
+ if(!cve_token(token,n))return;
+ b->cve_mentions++;
+ for(i=0;i<b->unique_cves;i++)
+  if(strlen(b->cves[i])==n&&!memcmp(b->cves[i],token,n))return;
+ if(b->unique_cves<8){
+  memcpy(b->cves[b->unique_cves],token,n);
+  b->cves[b->unique_cves][n]=0;
+  b->unique_cves++;
+ }
+}
+static void scan_bytes(response_t *b,const char *data,size_t length){
+ static const char prefix[]="CVE-";
+ size_t i,n;
+ for(i=0;i<length;i++){
+  unsigned char ch=(unsigned char)data[i];
+  n=b->window_len;
+  if(n==0){if(ch=='C'){b->window[0]='C';b->window_len=1;}continue;}
+  if(n<4&&ch==(unsigned char)prefix[n]){
+   b->window[n]=(char)ch;b->window_len=n+1;continue;
+  }
+  if((n>=4&&n<8&&isdigit(ch))||(n==8&&ch=='-')||
+     (n>=9&&n<22&&isdigit(ch))){
+   b->window[n]=(char)ch;b->window_len=n+1;continue;
+  }
+  cve_track(b,b->window,n);
+  b->window_len=0;
+  if(ch=='C'){b->window[0]='C';b->window_len=1;}
+ }
+}
+static void finish_scan(response_t *b){
+ if(b->window_len)cve_track(b,b->window,b->window_len);
+ b->window_len=0;
+}
 static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
  response_t *b=ctx;size_t bytes;
  (void)ptr;
  if(n&&size>SIZE_MAX/n){b->exceeded=1;return 0;}
  bytes=size*n;
  if(bytes>SOURCE_LIMIT-b->len){b->exceeded=1;return 0;}
+ scan_bytes(b,ptr,bytes);
  b->len+=bytes;return bytes;
 }
 static fetch_status_t https_fetch(const char *url,response_t *body,long *http_code){
@@ -79,6 +130,7 @@ static fetch_status_t https_fetch(const char *url,response_t *body,long *http_co
  curl_easy_cleanup(h);
  if(http_code)*http_code=code;
  if(body->exceeded)return FETCH_LIMIT;
+ if(result==CURLE_OK)finish_scan(body);
  if(result!=CURLE_OK)return FETCH_NETWORK;
  if(code!=200)return FETCH_HTTP;
  return body->len?FETCH_OK:FETCH_EMPTY;
@@ -147,7 +199,21 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  for(i=0;i<sizeof(endpoints)/sizeof(endpoints[0]);i++){
   if(snprintf(url,sizeof(url),"%s%s",settings.base,endpoints[i])>=(int)sizeof(url))
    add_source_result(&r,endpoints[i],FETCH_INVALID_URL,0,0);
-  else {status=https_fetch(url,buf,&http);add_source_result(&r,endpoints[i],status,buf->len,http);}
+  else {
+   unsigned int j;
+   char finding[160];
+   status=https_fetch(url,buf,&http);
+   add_source_result(&r,endpoints[i],status,buf->len,http);
+   if(status==FETCH_OK){
+    snprintf(finding,sizeof(finding),"  CVE references detected: %u mentions; up to %u distinct identifiers sampled\n",
+             buf->cve_mentions,buf->unique_cves);
+    append(r.report,sizeof(r.report),finding);
+    for(j=0;j<buf->unique_cves;j++){
+     snprintf(finding,sizeof(finding),"    %s (unverified textual reference)\n",buf->cves[j]);
+     append(r.report,sizeof(r.report),finding);
+    }
+   }
+  }
  }
  list=NULL;
  if(is_private(settings.advisories))list=fopen(settings.advisories,"r");
@@ -202,7 +268,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,2,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,3,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
