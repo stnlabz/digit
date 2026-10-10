@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.6 (persistent aggregate baseline)
+# STN-2 Intelligence Module — version 1.0.7 (record-level change detection)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -69,3 +69,9 @@ Implements initial evidence-based interpretation of the provided Sentinel /intel
 Introduces cross-run **aggregate baseline tracking** for the Sentinel `/intel` total. After a valid authenticated HTTPS response and parsed schema, the module writes a private `/opt/digit/auth/stn2/intel-state.json` snapshot with 0600 permissions using a same-directory temporary file and atomic rename. On later collections it reports the change in `stats.total_threats`; a decrease is explicitly presented as a possible reset or retention change, not negative incident activity. Corrupt, inaccessible, or unsafe prior state files prevent baseline replacement and produce a visible diagnostic. All reads of external security sources remain read-only.
 
 The Digit runtime user must have write access to `/opt/digit/auth/stn2/`. This is a **historical aggregate delta**, not proof of new distinct threat IDs, a durable incident evidence archive, correlations, completed investigations, or timed autonomous watches. Concurrent invocations are not yet serialized; aggregate state is only a candidate for later case tracking, not a reliable concurrent journal. Offline tests verify first baseline and second-run delta.
+
+## Revision 1.0.7
+
+On successful `/threats` retrieval, capture the response within the existing 8 MiB limit, validate the `threats` array, and compare stable `id` fields against a prior private snapshot at `/opt/digit/auth/stn2/threat-ids.json` (0600). The first collection establishes a baseline; subsequent reports show how many IDs are absent from the prior snapshot and list up to four new record IDs with reported type and timestamp. Duplicate IDs within a single collection are not double-counted. `/events` is *not* treated as an independent corroborating record set.
+
+Scope and limits: maximum 4,096 threat array entries per snapshot; a larger or malformed feed fails closed for record comparison and leaves the previous ID baseline unchanged. State updates use same-directory temporary files and atomic rename. A separate aggregate baseline remains in `intel-state.json`. These IDs are snapshot comparisons, not a durable evidentiary journal or automated investigations. Full Rictus correlation, case management, continuous autonomous watches, investigative outcomes, and non-blocking Slack progress acknowledgements remain **unimplemented**. Concurrent snapshot writers are not serialized. Testing on the actual host is required before qualification.
