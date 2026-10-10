@@ -4,6 +4,8 @@
 #include <curl/curl.h>
 #include <json-c/json.h>
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +15,7 @@
 #include <unistd.h>
 #include "stn2.h"
 #define CONFIG_PATH "/opt/digit/auth/stn2/stn2.conf"
+#define STATE_PATH "/opt/digit/auth/stn2/intel-state.json"
 #define SOURCE_LIMIT (8U * 1024U * 1024U)
 #define LOG_TAIL_LINES 120
 typedef struct {int enabled;char log[512],base[512],advisories[512];} settings_t;
@@ -239,6 +242,59 @@ static int intel_report(const char *raw,char *out,size_t capacity){
  json_object_put(root);
  return 1;
 }
+/* The aggregate state is a baseline, not an evidence store or case record.
+ * Only valid /intel snapshots advance it. Security failures are reported.
+ * Atomic rename avoids torn writes; a prior private file must be owned safely. */
+static int intel_state(const char *raw,char *out,size_t cap,const char *path){
+ struct json_object *root=NULL,*stats=NULL,*old=NULL,*oldstats=NULL;
+ int64_t current=0,previous=0;
+ char line[256],tmp[600];
+ FILE *fp=NULL;
+ int fd=-1,ok=0;
+ struct stat st;
+ if(!raw||!out||!path)return 0;
+ root=json_tokener_parse(raw);
+ if(!root||!json_object_is_type(root,json_type_object))goto done;
+ stats=json_member_object(root,"stats");
+ if(!json_u64(stats,"total_threats",&current))goto done;
+ if(lstat(path,&st)==0){
+  if(!is_private(path)){append(out,cap,"Change tracking: UNSAFE STATE FILE\n");goto done;}
+  old=json_object_from_file(path);
+  if(!old){append(out,cap,"Change tracking: CORRUPT PRIOR STATE\n");goto done;}
+  oldstats=json_member_object(old,"stats");
+  if(!json_u64(oldstats,"total_threats",&previous)){
+   append(out,cap,"Change tracking: INVALID PRIOR BASELINE\n");goto done;
+  }
+  if(current>=previous)
+   snprintf(line,sizeof(line),"Change since prior collection: +%lld historical records (aggregate only)\n",
+           (long long)(current-previous));
+  else snprintf(line,sizeof(line),"Historical total decreased by %lld; check reset or retention policy\n",
+                (long long)(previous-current));
+ }else if(errno==ENOENT){
+  snprintf(line,sizeof(line),"Change tracking: initial baseline established (%lld records)\n",(long long)current);
+ }else{
+  append(out,cap,"Change tracking: STATE ACCESS ERROR\n");goto done;
+ }
+ if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))goto done;
+ fd=open(tmp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+ if(fd<0){append(out,cap,"Change tracking: STATE WRITE FAILED\n");goto done;}
+ fp=fdopen(fd,"w");
+ if(!fp){close(fd);fd=-1;unlink(tmp);goto done;}
+ fd=-1;
+ if(fputs(raw,fp)==EOF||fflush(fp)!=0||fsync(fileno(fp))!=0||fclose(fp)!=0){
+  fp=NULL;unlink(tmp);append(out,cap,"Change tracking: STATE WRITE FAILED\n");goto done;
+ }
+ fp=NULL;
+ if(rename(tmp,path)!=0){unlink(tmp);append(out,cap,"Change tracking: STATE RENAME FAILED\n");goto done;}
+ append(out,cap,line);
+ ok=1;
+ done:
+ if(fp)fclose(fp);
+ if(fd>=0)close(fd);
+ if(old)json_object_put(old);
+ if(root)json_object_put(root);
+ return ok;
+}
 static int rictus_summary(const char *path,char *summary,size_t cap){
  FILE *f;char line[2048],last[LOG_TAIL_LINES][512];size_t n=0,i,begin;
  struct stat st;unsigned int count=0;
@@ -288,10 +344,11 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    add_source_result(&r,endpoints[i],status,buf->len,http);
    if(status==FETCH_OK&&strcmp(endpoints[i],"/intel")==0){
     if(buf->intel_len<sizeof(buf->intel_json)&&
-       intel_report(buf->intel_json,r.report,sizeof(r.report)))
+       intel_report(buf->intel_json,r.report,sizeof(r.report))){
+      (void)intel_state(buf->intel_json,r.report,sizeof(r.report),STATE_PATH);
       append(r.report,sizeof(r.report),
        "Assessment: reported web probing is not evidence of successful compromise.\n");
-    else append(r.report,sizeof(r.report),"Sentinel /intel schema: UNPARSEABLE\n");
+    }else append(r.report,sizeof(r.report),"Sentinel /intel schema: UNPARSEABLE\n");
    }
    if(status==FETCH_OK){
     snprintf(finding,sizeof(finding),"  CVE references detected: %u mentions; up to %u distinct identifiers sampled\n",
@@ -357,7 +414,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,5,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,6,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
