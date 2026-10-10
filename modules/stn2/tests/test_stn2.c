@@ -60,6 +60,21 @@ int main(void){
   assert(unlink(path)==0);
   assert(rmdir(dir)==0);
  }
+ {
+  char dir[]="/tmp/stn2-record-XXXXXX",path[256],report[4096]={0};
+  const char *first="{\"threats\":[{\"id\":\"t_a\",\"type\":\"pattern_match\",\"created_at\":\"2026-10-10 17:00:00\"}]}";
+  const char *next="{\"threats\":[{\"id\":\"t_a\"},{\"id\":\"t_b\",\"type\":\"bot_probe\",\"created_at\":\"2026-10-10 17:10:00\"},{\"id\":\"t_b\"}]}";
+  assert(mkdtemp(dir)!=NULL);
+  assert(snprintf(path,sizeof(path),"%s/threat-ids.json",dir)<(int)sizeof(path));
+  assert(threat_records(first,report,sizeof(report),path));
+  assert(strstr(report,"initial baseline of 1 records")!=NULL);
+  report[0]=0;
+  assert(threat_records(next,report,sizeof(report),path));
+  assert(strstr(report,"2 records; 1 absent from previous snapshot")!=NULL);
+  assert(strstr(report,"New record t_b type=bot_probe")!=NULL);
+  assert(unlink(path)==0);
+  assert(rmdir(dir)==0);
+ }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
  assert(strcmp(fetch_label(FETCH_HTTP),"HTTP_ERROR")==0);
  assert(strcmp(fetch_label(FETCH_EMPTY),"EMPTY_RESPONSE")==0);
