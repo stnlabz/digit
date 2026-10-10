@@ -5,6 +5,7 @@
 
 #define DIGIT_DISPATCHER_SERVICE "dispatcher.handle"
 #define DIGIT_DISPATCHER_SCOPED_SERVICE "dispatcher.handle_scoped"
+#define DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE "dispatcher.handle_scoped_context"
 #define DIGIT_DISPATCHER_ACTOR_MAX 64
 #define DIGIT_DISPATCHER_SCOPE_MAX 64
 #define DIGIT_DISPATCHER_SCOPE_PRIVATE 1U
@@ -36,6 +37,15 @@ typedef struct
     char project[DIGIT_DISPATCHER_SCOPE_MAX];
     char channel[DIGIT_DISPATCHER_SCOPE_MAX];
 } digit_dispatcher_scoped_request_t;
+
+/* [AI:GPT-6 | 2026-10-10] Additive request-local, scoped context.
+ * Only an authenticated Interface may supply prior conversational text.
+ * Context never grants capabilities or creates cross-scope memory. */
+typedef struct
+{
+    digit_dispatcher_scoped_request_t scoped;
+    char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];
+} digit_dispatcher_scoped_context_request_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
 
