@@ -114,9 +114,9 @@ int main(void){
  }
  {
   char dir[]="/tmp/stn2-cases-XXXXXX",path[256],brief[4096]={0};
-  const char *low="{\"threats\":[{\"id\":\"low\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\"}]}";
-  const char *high="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\"}]}";
-  const char *follow="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\"},{\"id\":\"follow\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\"}]}";
+  const char *low="{\"threats\":[{\"id\":\"low\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\",\"relevance\":\"LOW\"}]}";
+  const char *high="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"MEDIUM\",\"relevance\":\"HIGH\"}]}";
+  const char *follow="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"MEDIUM\",\"relevance\":\"HIGH\"},{\"id\":\"follow\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\",\"relevance\":\"LOW\"}]}";
   assert(mkdtemp(dir)!=NULL);
   assert(snprintf(path,sizeof(path),"%s/cases.json",dir)<(int)sizeof(path));
   assert(investigation_update(low,path,brief,sizeof(brief)));
@@ -124,6 +124,14 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(high,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 1 opened; 1 distinct")!=NULL);
+  {
+   struct json_object *saved=json_object_from_file(path),*cases=NULL,*entry=NULL;
+   assert(saved&&json_object_object_get_ex(saved,"cases",&cases));
+   entry=json_object_array_get_idx(cases,0);
+   assert(!strcmp(json_text_member(entry,"opening_relevance"),"HIGH"));
+   assert(!strcmp(json_text_member(entry,"opening_severity"),"MEDIUM"));
+   json_object_put(saved);
+  }
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 1 distinct")!=NULL);
