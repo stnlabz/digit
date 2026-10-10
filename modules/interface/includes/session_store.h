@@ -21,6 +21,7 @@ typedef struct {
     char preferred_name[64];
     /* [AI:GPT-6 | 2026-10-10] Volatile authenticated-session reply context. */
     char last_reply[DIGIT_SESSION_LAST_REPLY_MAX];
+    char last_user_message[DIGIT_SESSION_LAST_REPLY_MAX];
     time_t expires_at;
     int active;
 } digit_session_entry_t;
