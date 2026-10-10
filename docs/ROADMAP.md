@@ -9,6 +9,25 @@
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
 
+## Current status and priorities — 2026-10-10
+
+**Conversational release gate: OPEN.** Digit's implied MVC roles are Interface (View), Dispatcher (Controller), and Intent → Interpretation → Corpus (Model); actual runtime interpretation precedes intent classification. Response and Validator provide candidate generation and independent verification. Existing Core → Modules → Mission authority remains unchanged.
+
+**Verified source/host evidence:** Operator-supplied /opt/digit/corpus/corpus.tsv lines 47751, 47753 and 48546–48549 contain the operator-learned playful response rule, limited kitty-talk style, WTF alternatives, stoopid alternatives, and girl/gurl/gerl relationships. NUL count and unexpected-control count both zero. 'Learned.' confirms storage, not behavior. Intent 1.3.1 VERSION_CHANGED, QUALIFICATION_GREEN and HOTLOAD_ACTIVE confirmed in operator logs at 2026-10-10 23:39:27 UTC (events 64–66). Response 1.9.5 source committed to main; deployed binary version and full pipeline qualification not shown.
+
+**Live acceptance:** Bish? → dude and, later, WTF Bish? → dude passed. Gurl/Girl?/Gurl?/gerl? failed Validator. Girl are you stoopid?, girl wtf?, yous stoopid, NOOOOO Yous a dude, and oh wows, no you says something like Dude? returned insufficient-grounding responses. What is a compiler? returned an observed relevant factual answer. The system has not met generalized playful-language or conversational-continuity acceptance.
+
+**Prioritized coordinated work:**
+
+1. Trace retained Corpus records by authenticated source, record identity, alias, meaning, social response rule and personality policy; preserve originals and provenance. Support multiple or multiword alternatives without arbitrary substitution.
+2. Reconcile Model contracts across Interpretation, Intent and Corpus. Distinguish factual questions, playful addresses, aliases, conversation corrections, and operational commands without hardcoded slang or weakening authority.
+3. Repair evidence retrieval and Response ranking as one contract: bounded lexical search must not hide relevant operator-learned rules; an instructional record is not automatically an answer. Require an evidenced conversational output, not just word overlap.
+4. Inspect real outbound Response candidates and Validator rejection reasons for Girl/Gurl cases; retain independent Validator checks and fail-closed behavior.
+5. Implement constrained, Corpus-grounded conversational selection/composition and variation respecting the existing kitty-talk safety and technical-output restrictions, with no LLM integration or invented canned responses.
+6. Execute complete end-to-end regression over actual Interface/Slack → Dispatcher → Model → Response → Validator, including the operator's complete failed/pass set, history-follow-ups, negative authorization/grounding cases, and historic module suites. Track COMMITTED, TESTED, QUALIFIED, HOTLOAD_ACTIVE and live ACCEPTED separately; do not promote an individually GREEN module as system acceptance.
+
+**No Core, external ABI, or mission-architecture change is approved by this roadmap update.** Earlier milestone history below remains intact.
+
 ## Mission
 
 Develop Digit into a deterministic, modular, platform-independent autonomous agent capable of performing assigned work within explicitly delegated authority, with human oversight, traceable decisions, and controlled access to organizational resources.
