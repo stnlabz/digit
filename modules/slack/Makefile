@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 ABI_DIR ?= ../../../ABI
-CPPFLAGS ?= -Iincludes -I../dispatcher/includes -I$(ABI_DIR)/includes
+CPPFLAGS ?= -Iincludes -I../dispatcher/includes -I../interface/includes -I$(ABI_DIR)/includes
 LDLIBS ?= -lcurl -ljson-c -pthread -lcrypt
 TARGET := bin/slack.so
 TEST_TARGET := bin/test_slack
