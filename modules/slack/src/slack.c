@@ -17,6 +17,7 @@
 #include "slack.h"
 #include "dispatcher.h"
 #include "../../memory/includes/memory.h"
+#include "../../memory/includes/memory_response.h"
 #include "../../stn2/includes/stn2.h"
 #include "../../interface/includes/account_auth.h"
 #define SLACK_PATH "/opt/digit/auth/slack/slack.conf"
@@ -368,8 +369,13 @@ static int process_event(struct json_object *root){
                              &memory,sizeof(memory),&stored,sizeof(stored),&memory_used)!=STNLABZ_MODULE_OK||
         memory_used!=sizeof(stored))
       return reply(channel,ts?ts:field(event,"ts"),"Persistent memory is unavailable.");
-     if(recalling)
-      return reply(channel,ts?ts:field(event,"ts"),stored.ok?stored.text:"I have no saved personal memory for this account.");
+     if(recalling){
+      char natural[DIGIT_DISPATCHER_ANSWER_MAX]={0};
+      if(!stored.ok)return reply(channel,ts?ts:field(event,"ts"),"I have no saved personal memory for this account.");
+      if(!digit_memory_natural_reply(stored.text,natural,sizeof(natural)))
+       return reply(channel,ts?ts:field(event,"ts"),"I could not format that saved memory.");
+      return reply(channel,ts?ts:field(event,"ts"),natural);
+     }
      return reply(channel,ts?ts:field(event,"ts"),stored.ok?"Saved to your Digit account memory.":"I could not save that memory.");
     }
    }
@@ -571,7 +577,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
