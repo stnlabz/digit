@@ -43,6 +43,7 @@
 #include "sa_management.h"
 #include "core_services.h"
 #include "../../memory/includes/memory.h"
+#include "../../memory/includes/memory_response.h"
 
 #define INTERFACE_BUFFER_MAX 65536
 /* [AI:GPT-6 | 2026-10-08] Remote operation requires server TLS identity. */
@@ -239,8 +240,10 @@ static int interface_memory_private(const char *body,const char *identity,
  }
  out->answered=1;
  if(read_request)
-  snprintf(out->answer,sizeof(out->answer),"%s",
-           result.ok?result.text:"I have no saved personal memory for this account.");
+  if(result.ok){
+   if(!digit_memory_natural_reply(result.text,out->answer,sizeof(out->answer)))
+    snprintf(out->answer,sizeof(out->answer),"I could not format that saved memory.");
+  }else snprintf(out->answer,sizeof(out->answer),"I have no saved personal memory for this account.");
  else snprintf(out->answer,sizeof(out->answer),"%s",
                result.ok?"Saved to your Digit account memory.":"I could not save that memory.");
  return 1;
@@ -1438,5 +1441,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,7,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
