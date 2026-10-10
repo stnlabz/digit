@@ -20,7 +20,8 @@ typedef struct {int enabled;char workspace[64],app[512],bot[512],intel_channel[6
 typedef struct {char data[BUF_CAP];size_t used;} buffer_t;
 static slack_config_t cfg;
 static const stnlabz_module_host_t *host;
-static pthread_t thread;
+static pthread_t thread,watch_thread;
+static int watch_active;
 static int active,stop_flag;
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static char bot_id[64];
@@ -200,6 +201,40 @@ static void socket_session(const char *url){
  }
  curl_easy_cleanup(ws);
 }
+/* Autonomous scheduled intelligence collection; no public Slack command needed. */
+static int intelligence_change(const char *report){
+ const char *p=report?strstr(report,"Investigations:"):NULL;
+ size_t active_cases=0,opened=0,added=0;
+ if(!p)return 0;
+ if(sscanf(p,"Investigations: %zu active; %zu opened; %zu distinct evidence IDs added",
+           &active_cases,&opened,&added)!=3)return 0;
+ (void)active_cases;
+ return opened>0||added>0;
+}
+static void *intel_watch_main(void *arg){
+ (void)arg;
+ while(!stop_flag){
+  unsigned int i;
+  /* Wait for services to finish startup; interruptible at shutdown. */
+  for(i=0;i<300&&!stop_flag;i++)sleep(1);
+  if(stop_flag)break;
+  if(cfg.intel_channel[0]&&host&&host->invoke_service){
+   digit_stn2_request_t request={0};
+   digit_stn2_result_t result={0};
+   size_t used=0;
+   snprintf(request.actor,sizeof(request.actor),"slack:scheduled");
+   snprintf(request.command,sizeof(request.command),"gen intel");
+   if(host->invoke_service(DIGIT_STN2_SERVICE,&request,sizeof(request),
+                           &result,sizeof(result),&used)==STNLABZ_MODULE_OK&&
+      used==sizeof(result)&&memchr(result.report,0,sizeof(result.report))&&
+      intelligence_change(result.report)){
+    if(!reply(cfg.intel_channel,NULL,result.report)&&host->send_message)
+     (void)host->send_message("[SLACK] Intelligence alert delivery failed");
+   }
+  }
+ }
+ return NULL;
+}
 static void *worker_main(void *arg){
  (void)arg;
  while(!stop_flag){
@@ -254,6 +289,11 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *h){
  thread_rc=pthread_create(&thread,NULL,worker_main,NULL);
  if(thread_rc!=0){failure="worker_creation";goto fail_curl;}
  active=1;
+ if(cfg.intel_channel[0]){
+  thread_rc=pthread_create(&watch_thread,NULL,intel_watch_main,NULL);
+  if(thread_rc==0)watch_active=1;
+  else if(host->send_message)(void)host->send_message("[SLACK] Intelligence watch thread unavailable");
+ }
  if(host->send_message)(void)host->send_message("[SLACK] Socket Mode module started");
  return STNLABZ_MODULE_OK;
 fail_curl:
@@ -265,12 +305,12 @@ fail:
  return STNLABZ_MODULE_ERR_START_FAILED;
 }
 static stnlabz_module_result_t stop(void){
- if(active){stop_flag=1;pthread_join(thread,NULL);active=0;}
+ if(active){stop_flag=1;pthread_join(thread,NULL);if(watch_active){pthread_join(watch_thread,NULL);watch_active=0;}active=0;}
  host=NULL;erase(&cfg,sizeof(cfg));erase(bot_id,sizeof(bot_id));curl_global_cleanup();
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
