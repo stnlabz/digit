@@ -73,7 +73,7 @@ typedef struct { size_t count; interface_corpus_record_t records[CORPUS_SEARCH_M
 typedef struct { char request[DISPATCHER_REQUEST_MAX]; } interface_dispatcher_request_t;
 /* [AI:GPT-6 | 2026-10-09] Mirrors additive Dispatcher scoped ABI; no retained identity. */
 typedef struct { char request[DISPATCHER_REQUEST_MAX]; char actor[DISPATCHER_SCOPE_MAX]; unsigned int scope_kind; char organization[DISPATCHER_SCOPE_MAX]; char project[DISPATCHER_SCOPE_MAX]; char channel[DISPATCHER_SCOPE_MAX]; } interface_scoped_dispatcher_request_t;
-typedef struct { interface_scoped_dispatcher_request_t scoped; char previous_answer[DISPATCHER_ANSWER_MAX]; } interface_scoped_context_dispatcher_request_t;
+typedef struct { interface_scoped_dispatcher_request_t scoped; char previous_answer[DISPATCHER_ANSWER_MAX]; char previous_user_message[DISPATCHER_REQUEST_MAX]; } interface_scoped_context_dispatcher_request_t;
 typedef struct { int answered; char answer[DISPATCHER_ANSWER_MAX]; } interface_dispatcher_result_t;
 
 static int interface_fd=-1;
