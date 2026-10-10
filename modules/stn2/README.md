@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.5 (Sentinel schema-aware analysis)
+# STN-2 Intelligence Module — version 1.0.6 (persistent aggregate baseline)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -35,7 +35,7 @@ Slack `/opt/digit/auth/slack/slack.conf` also needs
 STN-LABZ ABI and native libcurl development library.
 
 **SOURCE CANDIDATE — NOT A QUALIFIED INTELLIGENCE ANALYST.**
-This revision performs bounded retrieval, captures and validates the small Sentinel `/intel` JSON summary, reports its historical type counts, 24-hour activity and pattern indicators, and extracts unverified CVE references from the byte streams. It does **not** yet verify advisory findings, correlate Rictus against individual threat records, persist investigations, autonomously watch cases or generate the weekly briefing. It intentionally
+This revision performs bounded retrieval, captures and validates the small Sentinel `/intel` JSON summary, reports its historical type counts, 24-hour activity and pattern indicators, and extracts unverified CVE references from the byte streams. It does **not** yet verify advisory findings, correlate Rictus against individual threat records, persist investigation cases, autonomously watch cases or generate the weekly briefing. It intentionally
 does not claim those capabilities or fabricate intelligence.
 
 Deployment acceptance requires valid feeds, source-content analysis,
@@ -63,3 +63,9 @@ Corrected an offline test that passed a multi-megabyte size with only an 8 KiB s
 Implements initial evidence-based interpretation of the provided Sentinel /intel schema (stats.total_threats, stats.by_type, analysis.total_24h, analysis.trending and patterns). The report differentiates historical totals from 24-hour values and explicitly states that request-pattern indicators are not proof of compromise. Parses only bounded /intel JSON content; raw /threats and /events remain byte-counted, not normalized or deduplicated. The advisory feed is not yet enabled by default. Native json-c development headers and library are required. New offline tests validate an /intel example and reject missing required fields.
 
 **Not implemented:** durable evidence/case management, investigation decisions, timed watchers, weekly brief synthesis, or full CVE/vendor advisory verification. These remain required mission milestones; do not describe this version as autonomous investigation completion.
+
+## Revision 1.0.6
+
+Introduces cross-run **aggregate baseline tracking** for the Sentinel `/intel` total. After a valid authenticated HTTPS response and parsed schema, the module writes a private `/opt/digit/auth/stn2/intel-state.json` snapshot with 0600 permissions using a same-directory temporary file and atomic rename. On later collections it reports the change in `stats.total_threats`; a decrease is explicitly presented as a possible reset or retention change, not negative incident activity. Corrupt, inaccessible, or unsafe prior state files prevent baseline replacement and produce a visible diagnostic. All reads of external security sources remain read-only.
+
+The Digit runtime user must have write access to `/opt/digit/auth/stn2/`. This is a **historical aggregate delta**, not proof of new distinct threat IDs, a durable incident evidence archive, correlations, completed investigations, or timed autonomous watches. Concurrent invocations are not yet serialized; aggregate state is only a candidate for later case tracking, not a reliable concurrent journal. Offline tests verify first baseline and second-run delta.
