@@ -89,11 +89,25 @@ static void test_previous_user_turn(void){
  assert(!value[0]);
  memset(&sessions[0],0,sizeof(sessions[0]));
 }
+/* [AI:GPT-6 | 2026-10-10] Bound name recall to an attested introduction. */
+static void test_saved_name_recall(void){
+ char answer[256]={0};
+ assert(digit_memory_name_question("What is my name?"));
+ assert(digit_memory_name_question("what's my name"));
+ assert(digit_memory_name_question("What should you call me?"));
+ assert(!digit_memory_name_question("What is your name?"));
+ assert(digit_memory_name_reply("I am Taylor, an engineer.",answer,sizeof(answer)));
+ assert(strcmp(answer,"You told me your name is Taylor.")==0);
+ assert(!digit_memory_name_reply("I am an engineer.",answer,sizeof(answer))||
+        strcmp(answer,"You told me your name is an.")!=0);
+ assert(!digit_memory_name_reply("I work on engineering.",answer,sizeof(answer)));
+ assert(!digit_memory_name_reply("I am Taylor, an engineer.",answer,8));
+}
 int main(void){
  stnlabz_module_qualification_result_t result;
  assert(stnlabz_module_get_descriptor()->qualify(&result)==STNLABZ_MODULE_OK);
  assert(result.tests_executed>=10&&result.tests_failed==0);
- test_config();test_fail_closed();test_alert_outbox();test_dm_auth_commands();test_previous_user_turn();
+ test_config();test_fail_closed();test_alert_outbox();test_dm_auth_commands();test_previous_user_turn();test_saved_name_recall();
  assert(!intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 2 active; 0 opened; 0 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
