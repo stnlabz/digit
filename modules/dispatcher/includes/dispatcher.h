@@ -45,6 +45,7 @@ typedef struct
 {
     digit_dispatcher_scoped_request_t scoped;
     char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];
+    char previous_user_message[DIGIT_DISPATCHER_REQUEST_MAX];
 } digit_dispatcher_scoped_context_request_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
