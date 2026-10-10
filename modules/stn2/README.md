@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.2.4 (sectioned intelligence brief)
+# STN-2 Intelligence Module — version 1.2.5 (sectioned intelligence brief corrections)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -125,3 +125,7 @@ For each of up to three displayed stored observation IDs per active case, STN-2 
 ## Revision 1.2.4 — Slack intelligence brief structure
 
 The existing STN-2 report is organized with six Slack-formatted sections: current intelligence, active investigations (each visually separated), collection changes, cross-source correlation, evidence gaps, and assessment. The renderer uses the findings already produced by the existing collectors and investigation service. This is an output presentation change only: case admission, persisted records, source parsing, correlation, permissions and Digit Core are unchanged. Slack message size remains bounded by the existing result ABI; long reports require live visual verification. Linux compilation and tests remain pending.
+
+## Revision 1.2.5 — Report-only corrections
+
+The Slack-facing headline is now **INTELLIGENCE BRIEF** without the STN-2 prefix. The executive summary alone carries the recent-24-hour summary, the threat overview omits its duplicate, cross-source intelligence excludes the repeated tracked-record total and moves its qualified assessment to the final assessment section. No collection, case, evidence, admission or Core changes. Live display validation pending.
