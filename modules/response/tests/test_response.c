@@ -228,7 +228,7 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   learned_definition_fixture=1;
   memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
   snprintf(request.question,sizeof(request.question),
-    "INTENT: DEFINE\\nTARGET: KNOWLEDGE\\nSUBJECT: wut\\nREQUEST: What does wut mean?");
+    "INTENT: DEFINE\nTARGET: KNOWLEDGE\nSUBJECT: wut\nREQUEST: What does wut mean?");
   check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==
         STNLABZ_MODULE_OK&&used==sizeof(answer)&&answer.answered&&
         strstr(answer.answer,"wut means What.")!=NULL,
