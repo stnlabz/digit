@@ -630,6 +630,29 @@ static int investigation_update(const char *raw,const char *path,char *report,si
           (size_t)json_object_array_length(cases),opened,added);
  append(report,cap,line);
  append(report,cap,"Admission: explicit HIGH relevance; case linkage by source IP (provisional).\n");
+ for(i=0;i<(size_t)json_object_array_length(cases);i++){
+  struct json_object *entry=json_object_array_get_idx(cases,(int)i),*evidence=NULL;
+  const char *ip=json_text_member(entry,"indicator_ip");
+  const char *severity=json_text_member(entry,"opening_severity");
+  size_t n,k,shown;
+  if(!ip||!json_object_object_get_ex(entry,"evidence_ids",&evidence)||
+     !json_object_is_type(evidence,json_type_array))continue;
+  n=(size_t)json_object_array_length(evidence);
+  snprintf(line,sizeof(line),"  Case %zu: source IP=%.*s; opening relevance=HIGH; severity=%.*s; evidence IDs=%zu\n",
+           i+1,45,ip,16,severity?severity:"unknown",n);
+  append(report,cap,line);
+  shown=n<3?n:3;
+  for(k=0;k<shown;k++){
+   struct json_object *v=json_object_array_get_idx(evidence,(int)k);
+   const char *id=json_object_is_type(v,json_type_string)?json_object_get_string(v):NULL;
+   if(id){
+    snprintf(line,sizeof(line),"    Observation ID: %.*s\n",64,id);
+    append(report,cap,line);
+   }
+  }
+  if(n>shown)append(report,cap,"    Additional evidence IDs retained in case state.\n");
+ }
+
  ok=1;
  done:
  if(fp)fclose(fp);
@@ -784,7 +807,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,2,1,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,2,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
