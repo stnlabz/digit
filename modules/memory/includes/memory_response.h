@@ -5,6 +5,35 @@
 #include <string.h>
 #include "memory.h"
 
+/* [AI:GPT-6 | 2026-10-10] Account-scoped memory name retrieval.
+ * Extract only a name explicitly stated in a retained introduction. */
+static int digit_memory_name_question(const char *text){
+ size_t n;
+ if(!text)return 0;
+ while(isspace((unsigned char)*text))++text;
+ n=strlen(text);
+ while(n&&isspace((unsigned char)text[n-1]))--n;
+ if(n&&text[n-1]=='?')--n;
+ return (n==15&&!strncasecmp(text,"what is my name",n))||
+        (n==14&&!strncasecmp(text,"what's my name",n))||
+        (n==20&&!strncasecmp(text,"what should you call me",n));
+}
+static int digit_memory_name_reply(const char *saved,char *out,size_t cap){
+ static const char *const forms[]={"I am ","My name is ","Call me ","You can call me "};
+ size_t i,n=0;const char *p=NULL;char name[64];
+ if(!saved||!out||!cap||!memchr(saved,0,DIGIT_MEMORY_TEXT_MAX))return 0;
+ for(i=0;i<sizeof(forms)/sizeof(forms[0]);++i){
+  size_t length=strlen(forms[i]);
+  if(!strncasecmp(saved,forms[i],length)){p=saved+length;break;}
+ }
+ if(!p||!isalpha((unsigned char)*p))return 0;
+ while((isalpha((unsigned char)*p)||*p=='-'||*p=='\'')&&n+1<sizeof(name))
+  name[n++]=*p++;
+ if(n<2||(*p&&*p!=','&&*p!='.'&&*p!=';'&&!isspace((unsigned char)*p)))return 0;
+ name[n]=0;
+ return snprintf(out,cap,"You told me your name is %s.",name)>0&&
+        strlen(name)+strlen("You told me your name is .")<cap;
+}
 /* Bounded presentation of a verified memory; never adds unsupported facts. */
 static int digit_memory_natural_reply(const char *saved,char *out,size_t cap){
  char name[64]={0};size_t pos=0,n=0;const char *p=saved;
