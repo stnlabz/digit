@@ -222,6 +222,8 @@ static int authenticate_dm(const char *workspace,const char *slack_user,const ch
      !strchr(slash+1,'\n')&&!strchr(slash+1,'\r')){
    memcpy(identity,arg,n);
    if(digit_account_verify_file(DIGIT_ACCOUNT_AUTH_PATH,identity,slash+1)&&slot<32){
+    memset(sessions[slot].previous_answer,0,sizeof(sessions[slot].previous_answer));
+    memset(sessions[slot].previous_user_message,0,sizeof(sessions[slot].previous_user_message));
     snprintf(sessions[slot].team,sizeof(sessions[slot].team),"%s",workspace);
     snprintf(sessions[slot].user,sizeof(sessions[slot].user),"%s",slack_user);
     snprintf(sessions[slot].identity,sizeof(sessions[slot].identity),"%s",identity);
