@@ -39,6 +39,8 @@ int main(void){
  assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
  assert(!intelligence_change("Investigations: unavailable"));
+ assert(!intelligence_change("Investigations: 2 active; 0 opened; 0 distinct evidence IDs added"));
+ assert(intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 3 active; 1 opened; 1 distinct evidence IDs added"));
  puts("Digit Slack module offline tests passed");
  return 0;
 }
