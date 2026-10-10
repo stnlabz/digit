@@ -8,7 +8,7 @@ int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
  if(!d||strcmp(d->id,"interpretation")||!d->qualify||
-    d->version_major!=1||d->version_minor!=0||d->version_patch!=8)return 1;
+    d->version_major!=1||d->version_minor!=0||d->version_patch!=9)return 1;
  if(d->qualify(NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT)return 1;
  memset(&q,0,sizeof(q));
  if(d->qualify(&q)!=STNLABZ_MODULE_OK||q.tests_executed<10||
