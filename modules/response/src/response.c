@@ -245,7 +245,34 @@ if(strcmp(canonical,"who are you")==0){
  return 1;
 }}
 if(count==0)return 1;
-for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}memset(evidence,0,sizeof(*evidence));result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);return result==STNLABZ_MODULE_OK&&used==sizeof(*evidence);}
+for(i=0;i<count;++i){int written=snprintf(request.query+offset,sizeof(request.query)-offset,"%s%s",i?" ":"",query_terms[i]);if(written<=0||(size_t)written>=sizeof(request.query)-offset)break;offset+=(size_t)written;}memset(evidence,0,sizeof(*evidence));
+result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),evidence,sizeof(*evidence),&used);
+if(result!=STNLABZ_MODULE_OK||used!=sizeof(*evidence))return 0;
+/* Search each interpreted content word as well. A broad composite query
+ * can fill Corpus's bounded result window before reaching an exact learned
+ * response rule. Merge only authenticated operator lessons and deduplicate. */
+if(count>1){
+ size_t t;
+ for(t=0;t<count&&evidence->count<CORPUS_MAX;t++){
+  corpus_result_t individual={0};size_t j;
+  memset(&request,0,sizeof(request));used=0;
+  snprintf(request.query,sizeof(request.query),"%s",query_terms[t]);
+  result=response_host->invoke_service(CORPUS_SEARCH_SERVICE,&request,sizeof(request),
+                                       &individual,sizeof(individual),&used);
+  if(result!=STNLABZ_MODULE_OK||used!=sizeof(individual))continue;
+  for(j=0;j<individual.count&&j<CORPUS_MAX&&evidence->count<CORPUS_MAX;j++){
+   size_t z;int duplicate=0;
+   const corpus_record_t *candidate=&individual.records[j];
+   if(strcmp(candidate->category,"OPERATOR_LEARNED")||
+      strcmp(candidate->source,"interface:learn"))continue;
+   for(z=0;z<evidence->count;z++)
+    if(!strcmp(evidence->records[z].id,candidate->id)&&
+       !strcmp(evidence->records[z].source,candidate->source)){duplicate=1;break;}
+   if(!duplicate)evidence->records[evidence->count++]=*candidate;
+  }
+ }
+}
+return 1;}
 static int duplicate_source(const corpus_result_t *evidence,const char *source,const char *text){size_t i;for(i=0;i<evidence->count;++i)if(strcmp(evidence->records[i].category,"source")==0&&strcmp(evidence->records[i].source,source)==0&&strcmp(evidence->records[i].text,text)==0)return 1;return 0;}
 static void collect_source(const char *question,corpus_result_t *evidence){source_projects_result_t projects;char qt[TERM_COUNT][TERM_MAX];size_t qn,p,q,used=0;stnlabz_module_result_t result;if(question==NULL||evidence==NULL||response_host==NULL||response_host->invoke_service==NULL||!source_intent(question)||evidence->count>=CORPUS_MAX)return;memset(&projects,0,sizeof(projects));result=response_host->invoke_service(SOURCE_PROJECTS_SERVICE,NULL,0,&projects,sizeof(projects),&used);if(result!=STNLABZ_MODULE_OK||used!=sizeof(projects))return;memset(qt,0,sizeof(qt));qn=terms(question,qt);for(q=0;q<qn&&evidence->count<CORPUS_MAX;++q){if(strlen(qt[q])<3)continue;for(p=0;p<projects.count&&p<SOURCE_PROJECTS_MAX&&evidence->count<CORPUS_MAX;++p){source_search_request_t request;source_search_result_t found;size_t search_used=0,m;memset(&request,0,sizeof(request));snprintf(request.project,sizeof(request.project),"%s",projects.projects[p].name);snprintf(request.query,sizeof(request.query),"%s",qt[q]);memset(&found,0,sizeof(found));result=response_host->invoke_service(SOURCE_SEARCH_SERVICE,&request,sizeof(request),&found,sizeof(found),&search_used);if(result!=STNLABZ_MODULE_OK||search_used!=sizeof(found))continue;for(m=0;m<found.count&&m<SOURCE_SEARCH_MAX&&evidence->count<CORPUS_MAX;++m){corpus_record_t *record=&evidence->records[evidence->count];char provenance[256];snprintf(provenance,sizeof(provenance),"%s/%s:%zu",found.matches[m].project,found.matches[m].path,found.matches[m].line);if(duplicate_source(evidence,provenance,found.matches[m].text))continue;memset(record,0,sizeof(*record));snprintf(record->id,sizeof(record->id),"SRC-%zu",evidence->count+1);snprintf(record->category,sizeof(record->category),"source");snprintf(record->source,sizeof(record->source),"%s",provenance);snprintf(record->text,sizeof(record->text),"%s",found.matches[m].text);++evidence->count;}}}}
 static unsigned int lesson_bonus(const char *question,const corpus_record_t *record){char topic[TERM_MAX];const char *start,*end;size_t len;if(record==NULL||strncmp(record->source,"lesson:",7)!=0)return 0;start=record->source+7;end=strstr(start,".txt");if(end==NULL||end<=start)return 150U;len=(size_t)(end-start);if(len>=sizeof(topic))len=sizeof(topic)-1;memcpy(topic,start,len);topic[len]='\0';if(question!=NULL){char qt[TERM_COUNT][TERM_MAX];size_t qn;memset(qt,0,sizeof(qt));qn=terms(question,qt);if(has_term(qt,qn,topic))return 300U;}return 150U;}
@@ -727,5 +754,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
