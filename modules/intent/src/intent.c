@@ -155,7 +155,7 @@ static void set_result(digit_intent_result_t *result, digit_intent_class_t inten
 
 void digit_intent_interpret(const char *text, digit_intent_result_t *result)
 {
-    static const char *const action_words[] = {"create","build","write","generate","make","implement","produce","fix","remove","delete","install","uninstall","update","patch","ingest,"grant","revoke","override","bypass","ignore"};
+    static const char *const action_words[] = {"create","build","write","generate","make","implement","produce","fix","remove","delete","install","uninstall","update","patch","ingest","grant","revoke","override","bypass","ignore"};
     static const char *const status_words[] = {"status","errors","error","alerts","alert","broken","health","running","failures","failure"};
     static const char *const social_words[] = {"hi","hello","hey","morning","afternoon","evening","thanks","thank","sorry","ouch","paws"};
     static const char *const compare_words[] = {"compare","versus","difference","differences"};
