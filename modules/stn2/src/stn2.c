@@ -547,7 +547,7 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  if(root)json_object_put(root);
  return ok;
 }
-/* Provisional HIGH admission: requires explicit source severity and stable IP.
+/* Provisional HIGH admission: requires explicit source relevance and stable IP.
  * Do not infer HIGH from type, volume or a textual pattern. */
 #define CASE_PATH "/opt/digit/auth/stn2/investigations.json"
 static int case_contains(struct json_object *ids,const char *id){
@@ -586,8 +586,9 @@ static int investigation_update(const char *raw,const char *path,char *report,si
   struct json_object *item=json_object_array_get_idx(threats,(int)i),*target=NULL,*ids=NULL;
   const char *id=json_text_member(item,"id");
   const char *ip=json_text_member(item,"ip");
+  const char *relevance=json_text_member(item,"relevance");
   const char *severity=json_text_member(item,"severity");
-  int high=severity&&!strcmp(severity,"HIGH");
+  int high=relevance&&!strcmp(relevance,"HIGH");
   if(!id||!id[0]||strlen(id)>64||!ip||strlen(ip)<7||strlen(ip)>45)continue;
   for(j=0;j<(size_t)json_object_array_length(cases);j++){
    struct json_object *entry=json_object_array_get_idx(cases,(int)j);
@@ -600,7 +601,8 @@ static int investigation_update(const char *raw,const char *path,char *report,si
    ids=json_object_new_array();
    if(!target||!ids){if(target)json_object_put(target);if(ids)json_object_put(ids);goto done;}
    json_object_object_add(target,"indicator_ip",json_object_new_string(ip));
-   json_object_object_add(target,"opening_severity",json_object_new_string("HIGH"));
+   json_object_object_add(target,"opening_relevance",json_object_new_string("HIGH"));
+   if(severity)json_object_object_add(target,"opening_severity",json_object_new_string(severity));
    json_object_object_add(target,"evidence_ids",ids);
    if(json_object_array_add(cases,target)!=0){json_object_put(target);goto done;}
    opened++;persist=1;
@@ -627,7 +629,7 @@ static int investigation_update(const char *raw,const char *path,char *report,si
  snprintf(line,sizeof(line),"Investigations: %zu active; %zu opened; %zu distinct evidence IDs added\n",
           (size_t)json_object_array_length(cases),opened,added);
  append(report,cap,line);
- append(report,cap,"Admission: explicit HIGH severity; case linkage by source IP (provisional).\n");
+ append(report,cap,"Admission: explicit HIGH relevance; case linkage by source IP (provisional).\n");
  ok=1;
  done:
  if(fp)fclose(fp);
@@ -782,7 +784,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,2,0,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,1,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
