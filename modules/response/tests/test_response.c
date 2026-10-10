@@ -3,6 +3,9 @@
 
 #include "response.h"
 #include "arithmetic.h"
+#include "../../corpus/includes/corpus.h"
+#include "../../interpretation/includes/interpretation.h"
+#include "../../validator/includes/validator.h"
 
 static unsigned int executed = 0;
 static unsigned int failed = 0;
@@ -24,6 +27,7 @@ static unsigned int arithmetic_calls;
 static const char *arithmetic_expected_request;
 static const char *arithmetic_expected_answer;
 static int arithmetic_available=1;
+static int learned_definition_fixture=0;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -71,12 +75,36 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
  }
  if(!strcmp(name,"corpus.search")){
   corpus_queries++;
+  if(learned_definition_fixture){
+   digit_corpus_search_result_t *out=response;
+   if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+   memset(out,0,sizeof(*out));out->count=1;
+   snprintf(out->records[0].category,sizeof(out->records[0].category),"OPERATOR_LEARNED");
+   snprintf(out->records[0].source,sizeof(out->records[0].source),"interface:learn");
+   snprintf(out->records[0].text,sizeof(out->records[0].text),"Wut, wut, = What, what");
+   *used=sizeof(*out);return STNLABZ_MODULE_OK;
+  }
   memset(response,0,response_size);
   *used=response_size;
   return STNLABZ_MODULE_OK;
  }
+ if(!strcmp(name,DIGIT_INTERPRETATION_DEFINITION_SERVICE)){
+  const digit_interpretation_definition_request_t *in=request;
+  digit_interpretation_definition_result_t *out=response;
+  if(request_size!=sizeof(*in)||response_size<sizeof(*out)||
+     strcmp(in->term,"wut"))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  memset(out,0,sizeof(*out));out->established=1;
+  snprintf(out->meaning,sizeof(out->meaning),"What");
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
+ }
  if(!strcmp(name,"validator.outbound")){
   outbound_validations++;
+  if(learned_definition_fixture){
+   digit_validator_outbound_result_t *out=response;
+   if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+   memset(out,0,sizeof(*out));out->status=DIGIT_VALIDATOR_PASS;
+   *used=sizeof(*out);return STNLABZ_MODULE_OK;
+  }
   return STNLABZ_MODULE_ERR_NOT_FOUND;
  }
  if(!strcmp(name,"validator.inbound")){
@@ -194,6 +222,19 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        "missing evidence reports uncertainty");
  check(corpus_queries==1&&outbound_validations==0,
        "missing evidence does not enter outbound factual validation");
+ /* [AI:GPT-6 | 2026-10-10] Exercise Response -> Interpretation
+  * definition lookup and bounded Corpus fixture end to end. */
+ {
+  learned_definition_fixture=1;
+  memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
+  snprintf(request.question,sizeof(request.question),
+    "INTENT: DEFINE\\nTARGET: KNOWLEDGE\\nSUBJECT: wut\\nREQUEST: What does wut mean?");
+  check(response_handler(&request,sizeof(request),&answer,sizeof(answer),&used,NULL)==
+        STNLABZ_MODULE_OK&&used==sizeof(answer)&&answer.answered&&
+        strstr(answer.answer,"wut means What.")!=NULL,
+        "learned definition lookup returns its attested meaning");
+  learned_definition_fixture=0;
+ }
  check(descriptor->stop()==STNLABZ_MODULE_OK,"response service unregisters");
 }
 
