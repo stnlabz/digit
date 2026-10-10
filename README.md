@@ -136,3 +136,7 @@ An additive `modules/memory` service provides durable account-keyed private pers
 ### Conversational memory recall presentation (2026-10-10)
 
 Interface 1.7.10 and Slack 1.0.10 share bounded conversational formatting for authenticated `What do you remember about me?` retrieval. Stored records remain unchanged; rendering uses prior saved text only and does not add profile facts. Test/deployment qualification pending.
+
+### Response 1.8.14 — Standalone self-identity question
+
+`Who are you?` consists entirely of retrieval stopwords; previous corpus search exited without querying, whereas `Digit, who are you?` included a searchable term. Response now performs an explicit corpus lookup for the standalone identity question, while still requiring authorized grounded evidence and existing learned-identity rendering. The native GUI's displayed `&amp;` requires inspection of its presentation code; this Response correction does not change HTML rendering. Linux qualification pending.
