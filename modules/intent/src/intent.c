@@ -179,8 +179,17 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     how=has_word(text,"how");
     fact=has_word(text,"what")||has_word(text,"who");
     social=any_word(text,social_words,sizeof(social_words)/sizeof(social_words[0]));
-    /* Question words framing an explicit knowledge operation are not conflicting intents. */
-    if(explain||define||compare){status=0;why=0;how=0;fact=0;}
+    /* [AI:GPT-6 | 2026-10-09] Resolve overlapping non-executing
+     * operations by purpose rather than counting all matching words.
+     * Comparing remains the primary operation when explanation and a
+     * comparison marker both occur; conversation-opening salutations
+     * outrank incidental interrogative words, never actions. */
+    if(compare){explain=0;define=0;status=0;why=0;how=0;fact=0;}
+    else if(explain||define){status=0;why=0;how=0;fact=0;}
+    if(social&&!action&&!compare&&!explain&&!define&&
+       (has_word(text,"hey")||has_word(text,"hello")||has_word(text,"hi"))){
+        status=0;why=0;how=0;fact=0;
+    }
     if(fact&&!action){status=0;}
     operational_count=(unsigned int)action+(unsigned int)status+(unsigned int)explain+(unsigned int)define+(unsigned int)compare+(unsigned int)why+(unsigned int)how+(unsigned int)fact;
     if(operational_count>1U){set_result(result,DIGIT_INTENT_AMBIGUOUS,DIGIT_INTENT_TARGET_UNKNOWN,0U,"Request contains conflicting operational meanings.");return;}
@@ -290,6 +299,8 @@ static stnlabz_module_result_t intent_qualify(stnlabz_module_qualification_resul
         {"Explain what running on fumes means in your own words.", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"Explain what it means when a server is toast without using the word ruined.", DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"compare these two implementations", DIGIT_INTENT_COMPARE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"Explain the difference between alpha and beta.", DIGIT_INTENT_COMPARE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
+        {"Hey, how's everything?", DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U},
         {"why did qualification fail", DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"how does hotload work", DIGIT_INTENT_HOW, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U},
         {"report current errors", DIGIT_INTENT_STATUS, DIGIT_INTENT_TARGET_RUNTIME, 1U},
@@ -347,7 +358,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 0,
+    "intent", "Digit Intent", 1, 2, 1,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
