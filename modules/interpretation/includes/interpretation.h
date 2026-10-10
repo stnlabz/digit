@@ -7,6 +7,20 @@
 #define DIGIT_INTERPRETATION_SERVICE "interpretation.resolve"
 #define DIGIT_INTERPRETATION_TEXT_MAX 4096
 #define DIGIT_INTERPRETATION_REASON_MAX 256
+#define DIGIT_INTERPRETATION_DEFINITION_SERVICE "interpretation.definition"
+#define DIGIT_INTERPRETATION_TERM_MAX 128
+
+typedef struct
+{
+    char term[DIGIT_INTERPRETATION_TERM_MAX];
+} digit_interpretation_definition_request_t;
+
+typedef struct
+{
+    unsigned int established;
+    char meaning[DIGIT_INTERPRETATION_TERM_MAX];
+} digit_interpretation_definition_result_t;
+
 
 typedef struct
 {
