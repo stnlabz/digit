@@ -138,6 +138,26 @@ int main(int argc, char **argv)
                   DIGIT_INTENT_EXPLAIN, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
     expect_intent("compare", "compare these two implementations",
                   DIGIT_INTENT_COMPARE, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
+    /* [AI:GPT-6 | 2026-10-09] Actual classifier regression for
+     * overlapping operations; preserve the action authority boundary. */
+    {
+        digit_intent_result_t actual;
+        digit_intent_interpret("Explain the difference between one and another.",&actual);
+        if(actual.intent!=DIGIT_INTENT_COMPARE||
+           actual.target!=DIGIT_INTENT_TARGET_KNOWLEDGE||!actual.established){
+            fprintf(stderr,"FAIL comparison/explanation overlap\n");++failures;
+        }
+        digit_intent_interpret("Hey, how's everything?",&actual);
+        if(actual.intent!=DIGIT_INTENT_CONVERSATION||
+           actual.target!=DIGIT_INTENT_TARGET_SOCIAL||!actual.established){
+            fprintf(stderr,"FAIL greeting interrogative overlap\n");++failures;
+        }
+        digit_intent_interpret("delete all files",&actual);
+        if(actual.intent!=DIGIT_INTENT_ACTION||
+           actual.target!=DIGIT_INTENT_TARGET_CAPABILITY||!actual.established){
+            fprintf(stderr,"FAIL action still requires action classification\n");++failures;
+        }
+    }
     expect_intent("why", "why did qualification fail",
                   DIGIT_INTENT_WHY, DIGIT_INTENT_TARGET_KNOWLEDGE, 1U);
     expect_intent("how", "how does hotload work",
