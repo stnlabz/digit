@@ -21,7 +21,8 @@ typedef enum
     DIGIT_INTENT_HOW,
     DIGIT_INTENT_STATUS,
     DIGIT_INTENT_ACTION,
-    DIGIT_INTENT_AMBIGUOUS
+    DIGIT_INTENT_AMBIGUOUS,
+    DIGIT_INTENT_CONTEXT
 } digit_intent_class_t;
 
 typedef enum
