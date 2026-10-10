@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include "slack.h"
 #include "dispatcher.h"
+#include "../../memory/includes/memory.h"
 #include "../../stn2/includes/stn2.h"
 #include "../../interface/includes/account_auth.h"
 #define SLACK_PATH "/opt/digit/auth/slack/slack.conf"
@@ -347,6 +348,30 @@ static int process_event(struct json_object *root){
     snprintf(line,sizeof(line),"Your authenticated Digit account is %s.",identity);
     return reply(channel,ts?ts:field(event,"ts"),line);
    }
+   {
+    digit_memory_record_t memory={0};
+    digit_memory_result_t stored={0};
+    const char *payload=NULL;
+    const int recalling=!strcasecmp(message,"what do you remember about me?")||
+                        !strcasecmp(message,"what do you remember about me");
+    size_t memory_used=0;
+    if(!recalling){
+     if(!strncasecmp(message,"remember ",9))payload=message+9;
+     else if(!strncasecmp(message,"i am ",5))payload=message;
+    }
+    if(recalling||payload){
+     if(!bounded(memory.actor,sizeof(memory.actor),identity))return 0;
+     if(payload&&!bounded(memory.text,sizeof(memory.text),payload))return 0;
+     if(!host||!host->invoke_service||
+        host->invoke_service(recalling?DIGIT_MEMORY_GET_SERVICE:DIGIT_MEMORY_PUT_SERVICE,
+                             &memory,sizeof(memory),&stored,sizeof(stored),&memory_used)!=STNLABZ_MODULE_OK||
+        memory_used!=sizeof(stored))
+      return reply(channel,ts?ts:field(event,"ts"),"Persistent memory is unavailable.");
+     if(recalling)
+      return reply(channel,ts?ts:field(event,"ts"),stored.ok?stored.text:"I have no saved personal memory for this account.");
+     return reply(channel,ts?ts:field(event,"ts"),stored.ok?"Saved to your Digit account memory.":"I could not save that memory.");
+    }
+   }
    contextual.scoped=query;
    dm_session_prior_user(team,user,contextual.previous_user_message,sizeof(contextual.previous_user_message));
    snprintf(contextual.previous_answer,sizeof(contextual.previous_answer),"%s",previous);
@@ -545,7 +570,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
