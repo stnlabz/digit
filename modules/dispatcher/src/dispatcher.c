@@ -99,6 +99,7 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     stnlabz_module_result_t interpretation_sr,intent_sr;
     const digit_dispatcher_scoped_context_request_t *context=handler_context;
     const char *previous_answer=context?context->previous_answer:NULL;
+    const char *previous_user_message=context?context->previous_user_message:NULL;
     if(request==NULL||request_size!=sizeof(*in)||response==NULL||response_used==NULL||response_size<sizeof(out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if(memchr(in->request,'\0',sizeof(in->request))==NULL||in->request[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&out,0,sizeof(out));
