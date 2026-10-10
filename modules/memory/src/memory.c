@@ -108,6 +108,6 @@ static stnlabz_module_result_t stop(void){
                 ok &= memory_host->unregister_service(DIGIT_MEMORY_PUT_SERVICE,NULL);}
  memory_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"memory","Digit Memory",1,0,0,
+static const stnlabz_module_descriptor_t descriptor={"memory","Digit Memory",1,0,1,
  STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
