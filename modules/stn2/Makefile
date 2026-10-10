@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
 ABI_DIR ?= ../../../ABI
 CPPFLAGS ?= -Iincludes -I$(ABI_DIR)/includes
-LDLIBS ?= -lcurl -pthread
+LDLIBS ?= -lcurl -ljson-c -pthread
 TARGET := bin/stn2.so
 TEST_TARGET := bin/test_stn2
 PREFIX ?= /opt/digit
