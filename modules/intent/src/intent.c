@@ -156,6 +156,11 @@ static int contextual_reference(const char *text,char *subject,size_t capacity)
  recall=has_word(text,"tell")||has_word(text,"told")||
         has_word(text,"said")||has_word(text,"say")||discourse;
  if(!recall)return 0;
+ if(past&&(has_word(text,"i")||has_word(text,"me"))&&
+    (has_word(text,"you")||has_word(text,"your"))){
+  snprintf(subject,capacity,"prior_user_message");
+  return 1;
+ }
  if(past&&(has_word(text,"you")||has_word(text,"your"))){
   snprintf(subject,capacity,"prior_answer");
   return 1;
@@ -421,7 +426,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 2, 6,
+    "intent", "Digit Intent", 1, 2, 7,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
