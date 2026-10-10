@@ -231,21 +231,36 @@ static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *r)
  r->negative_test_executed=1;r->negative_test_passed=!load_config("/this/file/does/not/exist",&empty);
  return r->tests_failed?STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
+static void startup_failure(const stnlabz_module_host_t *h,const char *stage){
+ char line[160];
+ if(!h||!h->send_message)return;
+ snprintf(line,sizeof(line),"[SLACK] START_FAILED stage=%s",stage);
+ (void)h->send_message(line);
+}
 static stnlabz_module_result_t start(const stnlabz_module_host_t *h){
- struct json_object *identity=NULL;const char *id;
+ struct json_object *identity=NULL;
+ const char *id,*failure="unknown";
+ int thread_rc;
  if(!h||!h->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- if(!load_config(SLACK_PATH,&cfg)||!cfg.enabled)return STNLABZ_MODULE_ERR_START_FAILED;
- if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)goto fail;
+ if(!load_config(SLACK_PATH,&cfg)){startup_failure(h,"configuration");return STNLABZ_MODULE_ERR_START_FAILED;}
+ if(!cfg.enabled){startup_failure(h,"disabled");return STNLABZ_MODULE_ERR_START_FAILED;}
+ if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK){failure="curl_init";goto fail;}
  identity=post("https://slack.com/api/auth.test",cfg.bot,NULL);
  id=field(identity,"user_id");
- if(!identity||!yes(identity,"ok")||!id||!bounded(bot_id,sizeof(bot_id),id))goto fail_curl;
+ if(!identity||!yes(identity,"ok")||!id||!bounded(bot_id,sizeof(bot_id),id)){
+  failure="auth_test";goto fail_curl;
+ }
  json_object_put(identity);identity=NULL;host=h;stop_flag=0;
- if(pthread_create(&thread,NULL,worker_main,NULL))goto fail_curl;
- active=1;if(host->send_message)(void)host->send_message("[SLACK] Socket Mode module started");
+ thread_rc=pthread_create(&thread,NULL,worker_main,NULL);
+ if(thread_rc!=0){failure="worker_creation";goto fail_curl;}
+ active=1;
+ if(host->send_message)(void)host->send_message("[SLACK] Socket Mode module started");
  return STNLABZ_MODULE_OK;
 fail_curl:
- if(identity)json_object_put(identity);curl_global_cleanup();
+ if(identity)json_object_put(identity);
+ curl_global_cleanup();
 fail:
+ startup_failure(h,failure);
  erase(&cfg,sizeof(cfg));erase(bot_id,sizeof(bot_id));host=NULL;
  return STNLABZ_MODULE_ERR_START_FAILED;
 }
