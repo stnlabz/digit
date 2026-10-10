@@ -19,6 +19,10 @@ int main(void){
  assert(digit_memory_get_at(dir,"test_account",&result));
  assert(result.ok&&strcmp(result.text,record.text)==0);
  assert(digit_memory_get_at(dir,"another_account",&result)&&!result.ok);
+ snprintf(record.text,sizeof(record.text),"I also created another application.");
+ assert(digit_memory_put_at(dir,&record));
+ assert(digit_memory_get_at(dir,"test_account",&result));
+ assert(result.ok&&strcmp(result.text,record.text)==0);
  strcpy(record.actor,"../escape");
  assert(!digit_memory_put_at(dir,&record));
  snprintf(file,sizeof(file),"%s/test_account.bin",dir);unlink(file);rmdir(dir);
