@@ -76,11 +76,24 @@ static void test_dm_auth_commands(void){
  assert(authenticate_dm("T_2","U_2","whoami",reply_text,sizeof(reply_text)));
  assert(strstr(reply_text,"No active")!=NULL);
 }
+static void test_previous_user_turn(void){
+ char value[DIGIT_DISPATCHER_REQUEST_MAX]={0};
+ memset(&sessions[0],0,sizeof(sessions[0]));
+ snprintf(sessions[0].team,sizeof(sessions[0].team),"T1");
+ snprintf(sessions[0].user,sizeof(sessions[0].user),"U1");
+ sessions[0].expires=time(NULL)+100;
+ dm_session_set_reply("T1","U1","I own the project.","Acknowledged");
+ dm_session_prior_user("T1","U1",value,sizeof(value));
+ assert(strcmp(value,"I own the project.")==0);
+ dm_session_prior_user("T1","U2",value,sizeof(value));
+ assert(!value[0]);
+ memset(&sessions[0],0,sizeof(sessions[0]));
+}
 int main(void){
  stnlabz_module_qualification_result_t result;
  assert(stnlabz_module_get_descriptor()->qualify(&result)==STNLABZ_MODULE_OK);
  assert(result.tests_executed>=10&&result.tests_failed==0);
- test_config();test_fail_closed();test_alert_outbox();test_dm_auth_commands();
+ test_config();test_fail_closed();test_alert_outbox();test_dm_auth_commands();test_previous_user_turn();
  assert(!intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 2 active; 0 opened; 0 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
