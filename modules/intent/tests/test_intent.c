@@ -198,6 +198,7 @@ int main(int argc, char **argv)
            strcmp(context.subject,"prior_user_message")!=0){
             fprintf(stderr,"FAIL prior user message context classification\n");++failures;
         }
+        /* First-person actor must be the prior speaker, not merely a pronoun. */
         digit_intent_interpret("What did you just tell me?",&context);
         if(context.intent!=DIGIT_INTENT_CONTEXT||
            strcmp(context.subject,"prior_answer")!=0){
