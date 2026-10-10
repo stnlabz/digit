@@ -97,7 +97,7 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     const char *interpreted_request;
     size_t interpretation_used=0,intent_used=0;
     stnlabz_module_result_t interpretation_sr,intent_sr;
-    (void)handler_context;
+    const char *previous_answer=(const char *)handler_context;
     if(request==NULL||request_size!=sizeof(*in)||response==NULL||response_used==NULL||response_size<sizeof(out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if(memchr(in->request,'\0',sizeof(in->request))==NULL||in->request[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&out,0,sizeof(out));
@@ -157,6 +157,18 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
         out.answered=1;
         snprintf(out.answer,sizeof(out.answer),"I can't establish an authorized request to dispatch.");
     }
+    else if(intent_result.intent==DIGIT_INTENT_CONTEXT){
+        out.answered=1;
+        if(strcmp(intent_result.subject,"prior_answer")==0&&
+           previous_answer&&previous_answer[0])
+            snprintf(out.answer,sizeof(out.answer),"%s",previous_answer);
+        else if(strcmp(intent_result.subject,"unresolved")==0)
+            snprintf(out.answer,sizeof(out.answer),
+                     "Please specify which earlier topic you mean.");
+        else
+            snprintf(out.answer,sizeof(out.answer),
+                     "I don't have an established prior reply in this conversation.");
+    }
     else if(intent_result.intent==DIGIT_INTENT_ACTION){
         if(lesson_action(interpreted_request,&out)){}
         else if(source_action(interpreted_request))source_scan(interpreted_request,&out);
@@ -169,27 +181,54 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
 }
 
 /* [AI:GPT-6 | 2026-10-09] Validated, request-local routing. */
-static stnlabz_module_result_t dispatcher_scoped_service(const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx){
+/* [AI:GPT-6 | 2026-10-10] Only validated request-local scope
+ * may accompany conversational context. Caller identity remains sourced
+ * from the authenticated Interface, never inferred from request text. */
+static int dispatcher_scoped_valid(const digit_dispatcher_scoped_request_t *in)
+{
+ if(!in||!memchr(in->actor,0,sizeof(in->actor))||!in->actor[0]||
+    !memchr(in->request,0,sizeof(in->request))||!in->request[0])return 0;
+ if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_PRIVATE)
+  return !in->organization[0]&&!in->project[0]&&!in->channel[0];
+ if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_CHANNEL)
+  return in->organization[0]&&in->project[0]&&in->channel[0]&&
+         memchr(in->organization,0,sizeof(in->organization))&&
+         memchr(in->project,0,sizeof(in->project))&&
+         memchr(in->channel,0,sizeof(in->channel));
+ return 0;
+}
+static stnlabz_module_result_t dispatcher_scoped_service(
+ const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx)
+{
  const digit_dispatcher_scoped_request_t *in=request;
  digit_dispatcher_request_t legacy;
- if(!in||size!=sizeof(*in)||!response||!used||capacity<sizeof(digit_dispatcher_result_t))
+ (void)ctx;
+ if(!in||size!=sizeof(*in)||!response||!used||
+    capacity<sizeof(digit_dispatcher_result_t)||!dispatcher_scoped_valid(in))
   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- if(!memchr(in->actor,0,sizeof(in->actor))||!in->actor[0]||
-    !memchr(in->request,0,sizeof(in->request))||!in->request[0])
-  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_PRIVATE){
-  if(in->organization[0]||in->project[0]||in->channel[0])
-   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- }else if(in->scope_kind==DIGIT_DISPATCHER_SCOPE_CHANNEL){
-  if(!in->organization[0]||!in->project[0]||!in->channel[0]||
-     !memchr(in->organization,0,sizeof(in->organization))||
-     !memchr(in->project,0,sizeof(in->project))||
-     !memchr(in->channel,0,sizeof(in->channel)))
-   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- }else return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  memset(&legacy,0,sizeof(legacy));
  memcpy(legacy.request,in->request,strlen(in->request)+1);
- return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,ctx);
+ return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,NULL);
+}
+static stnlabz_module_result_t dispatcher_scoped_context_service(
+ const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx)
+{
+ const digit_dispatcher_scoped_context_request_t *in=request;
+ digit_dispatcher_request_t legacy;
+ (void)ctx;
+ if(!in||size!=sizeof(*in)||!response||!used||
+    capacity<sizeof(digit_dispatcher_result_t)||
+    !dispatcher_scoped_valid(&in->scoped)||
+    !memchr(in->previous_answer,0,sizeof(in->previous_answer)))
+  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ /* Channel context is not sourced from a verified channel-history
+  * provider yet. Never use a caller-provided prior turn in that scope. */
+ if(in->scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE&&
+    in->previous_answer[0])return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memset(&legacy,0,sizeof(legacy));
+ memcpy(legacy.request,in->scoped.request,strlen(in->scoped.request)+1);
+ return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,
+                           (void *)in->previous_answer);
 }
 
 /* [AI:GPT-6 | 2026-10-09] Executed, deterministic local qualification;
@@ -216,7 +255,37 @@ static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_r
  result->negative_test_executed=1;result->negative_test_passed=negative_passed;
  return result->tests_failed||result->negative_test_passed!=result->negative_test_executed?STNLABZ_MODULE_ERR_QUALIFICATION:STNLABZ_MODULE_OK;
 }
-static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;if(!host->register_service(DIGIT_DISPATCHER_SCOPED_SERVICE,dispatcher_scoped_service,NULL)){if(host->unregister_service)(void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);return STNLABZ_MODULE_ERR_START_FAILED;}dispatcher_host=host;if(host->send_message!=NULL)(void)host->send_message("[DISPATCHER] active: operator requests coordinated across Digit services including lesson ingestion");return STNLABZ_MODULE_OK;}
-static stnlabz_module_result_t dispatcher_stop(void){if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;if(dispatcher_host!=NULL&&dispatcher_host->unregister_service!=NULL)if(!dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;dispatcher_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *host)
+{
+ if(!host||!host->register_service||!host->unregister_service||
+    !host->invoke_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ if(!host->register_service(DIGIT_DISPATCHER_SERVICE,dispatcher_service,NULL))
+  return STNLABZ_MODULE_ERR_START_FAILED;
+ if(!host->register_service(DIGIT_DISPATCHER_SCOPED_SERVICE,dispatcher_scoped_service,NULL)){
+  (void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
+  return STNLABZ_MODULE_ERR_START_FAILED;
+ }
+ if(!host->register_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,
+                            dispatcher_scoped_context_service,NULL)){
+  (void)host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL);
+  (void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
+  return STNLABZ_MODULE_ERR_START_FAILED;
+ }
+ dispatcher_host=host;
+ if(host->send_message)
+  (void)host->send_message("[DISPATCHER] active: controlled scoped routing registered");
+ return STNLABZ_MODULE_OK;
+}
+static stnlabz_module_result_t dispatcher_stop(void)
+{
+ int ok=1;
+ if(dispatcher_host&&dispatcher_host->unregister_service){
+  ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,NULL);
+  ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL);
+  ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
+ }
+ dispatcher_host=NULL;
+ return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
+}
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
