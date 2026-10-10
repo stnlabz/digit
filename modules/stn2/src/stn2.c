@@ -547,6 +547,96 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  if(root)json_object_put(root);
  return ok;
 }
+/* Provisional HIGH admission: requires explicit source severity and stable IP.
+ * Do not infer HIGH from type, volume or a textual pattern. */
+#define CASE_PATH "/opt/digit/auth/stn2/investigations.json"
+static int case_contains(struct json_object *ids,const char *id){
+ size_t i;
+ if(!ids||!id)return 0;
+ for(i=0;i<(size_t)json_object_array_length(ids);i++){
+  struct json_object *v=json_object_array_get_idx(ids,(int)i);
+  if(json_object_is_type(v,json_type_string)&&!strcmp(json_object_get_string(v),id))return 1;
+ }
+ return 0;
+}
+static int investigation_update(const char *raw,const char *path,char *report,size_t cap){
+ struct json_object *root=NULL,*threats=NULL,*store=NULL,*cases=NULL;
+ struct stat st;char tmp[600],line[180];FILE *fp=NULL;
+ int fd=-1,ok=0,persist=0;size_t opened=0,added=0,i,j;
+ if(!raw||!path||!report||!cap)return 0;
+ root=json_tokener_parse(raw);
+ if(!root||!json_object_is_type(root,json_type_object)||
+    !json_object_object_get_ex(root,"threats",&threats)||
+    !json_object_is_type(threats,json_type_array)||
+    json_object_array_length(threats)>RECORD_MAX)goto done;
+ if(lstat(path,&st)==0){
+  if(!is_private(path))goto done;
+  store=json_object_from_file(path);
+  if(!store||!json_object_is_type(store,json_type_object))goto done;
+  if(!json_object_object_get_ex(store,"cases",&cases)||
+     !json_object_is_type(cases,json_type_array))goto done;
+ }else if(errno==ENOENT){
+  store=json_object_new_object();
+  cases=json_object_new_array();
+  if(!store||!cases)goto done;
+  json_object_object_add(store,"cases",cases);
+ }else goto done;
+ if(json_object_array_length(cases)>RECORD_MAX)goto done;
+ for(i=0;i<(size_t)json_object_array_length(threats);i++){
+  struct json_object *item=json_object_array_get_idx(threats,(int)i),*target=NULL,*ids=NULL;
+  const char *id=json_text_member(item,"id");
+  const char *ip=json_text_member(item,"ip");
+  const char *severity=json_text_member(item,"severity");
+  int high=severity&&!strcmp(severity,"HIGH");
+  if(!id||!id[0]||strlen(id)>64||!ip||strlen(ip)<7||strlen(ip)>45)continue;
+  for(j=0;j<(size_t)json_object_array_length(cases);j++){
+   struct json_object *entry=json_object_array_get_idx(cases,(int)j);
+   const char *key=json_text_member(entry,"indicator_ip");
+   if(key&&!strcmp(key,ip)){target=entry;break;}
+  }
+  if(!target){
+   if(!high||json_object_array_length(cases)>=RECORD_MAX)continue;
+   target=json_object_new_object();
+   ids=json_object_new_array();
+   if(!target||!ids){if(target)json_object_put(target);if(ids)json_object_put(ids);goto done;}
+   json_object_object_add(target,"indicator_ip",json_object_new_string(ip));
+   json_object_object_add(target,"opening_severity",json_object_new_string("HIGH"));
+   json_object_object_add(target,"evidence_ids",ids);
+   if(json_object_array_add(cases,target)!=0){json_object_put(target);goto done;}
+   opened++;persist=1;
+  }
+  if(!json_object_object_get_ex(target,"evidence_ids",&ids)||
+     !json_object_is_type(ids,json_type_array)||
+     json_object_array_length(ids)>RECORD_MAX)goto done;
+  if(!case_contains(ids,id)){
+   struct json_object *newid=json_object_new_string(id);
+   if(!newid||json_object_array_add(ids,newid)!=0){if(newid)json_object_put(newid);goto done;}
+   added++;persist=1;
+  }
+ }
+ if(persist){
+  if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))goto done;
+  fd=open(tmp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+  if(fd<0)goto done;
+  fp=fdopen(fd,"w");if(!fp)goto done;fd=-1;
+  if(fputs(json_object_to_json_string_ext(store,JSON_C_TO_STRING_PLAIN),fp)==EOF||
+     fflush(fp)!=0||fsync(fileno(fp))!=0){fclose(fp);fp=NULL;unlink(tmp);goto done;}
+  if(fclose(fp)!=0){fp=NULL;unlink(tmp);goto done;}fp=NULL;
+  if(rename(tmp,path)!=0){unlink(tmp);goto done;}
+ }
+ snprintf(line,sizeof(line),"Investigations: %zu active; %zu opened; %zu distinct evidence IDs added\n",
+          (size_t)json_object_array_length(cases),opened,added);
+ append(report,cap,line);
+ append(report,cap,"Admission: explicit HIGH severity; case linkage by source IP (provisional).\n");
+ ok=1;
+ done:
+ if(fp)fclose(fp);
+ if(fd>=0)close(fd);
+ if(cases&&!store)json_object_put(cases);
+ if(store)json_object_put(store);
+ if(root)json_object_put(root);
+ return ok;
+}
 static int rictus_summary(const char *path,char *summary,size_t cap){
  FILE *f;char line[2048],last[LOG_TAIL_LINES][512];size_t n=0,i,begin;
  struct stat st;unsigned int count=0;
@@ -597,6 +687,8 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    status=buf->record_json||strcmp(endpoints[i],"/threats")?https_fetch(url,buf,&http):FETCH_NETWORK;
    add_source_result(&r,endpoints[i],status,buf->len,http);
    if(!strcmp(endpoints[i],"/threats")&&status==FETCH_OK){
+    if(!investigation_update(buf->record_json,CASE_PATH,record_section,sizeof(record_section)))
+     append(record_section,sizeof(record_section),"Investigation state unavailable; no case changes confirmed.\n");
     if(!threat_records(buf->record_json,record_section,sizeof(record_section),RECORD_PATH,settings.log))
      append(record_section,sizeof(record_section),"Threat record comparison: unavailable or invalid source schema\n");
    }
@@ -690,7 +782,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,1,2,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,0,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
