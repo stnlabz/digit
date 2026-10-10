@@ -16,6 +16,8 @@
 #include "stn2.h"
 #define CONFIG_PATH "/opt/digit/auth/stn2/stn2.conf"
 #define STATE_PATH "/opt/digit/auth/stn2/intel-state.json"
+#define RECORD_PATH "/opt/digit/auth/stn2/threat-ids.json"
+#define RECORD_MAX 4096
 #define SOURCE_LIMIT (8U * 1024U * 1024U)
 #define LOG_TAIL_LINES 120
 typedef struct {int enabled;char log[512],base[512],advisories[512];} settings_t;
@@ -26,6 +28,8 @@ typedef struct {
  size_t window_len;
  char intel_json[4096];
  size_t intel_len;
+ char *record_json;
+ size_t record_len;
  char cves[8][24];
  unsigned int unique_cves;
  unsigned int cve_mentions;
@@ -121,12 +125,20 @@ static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
   b->intel_len+=bytes;
   b->intel_json[b->intel_len]=0;
  }else b->intel_len=sizeof(b->intel_json);
+ if(b->record_json){
+  memcpy(b->record_json+b->record_len,ptr,bytes);
+  b->record_len+=bytes;
+  b->record_json[b->record_len]=0;
+ }
  b->len+=bytes;return bytes;
 }
 static fetch_status_t https_fetch(const char *url,response_t *body,long *http_code){
  CURL *h;CURLcode result;long code=0;
  if(!url||strncmp(url,"https://",8)||!body)return FETCH_INVALID_URL;
- memset(body,0,sizeof(*body));if(http_code)*http_code=0;
+ {char *storage=body->record_json;
+  memset(body,0,sizeof(*body));body->record_json=storage;
+ }
+ if(http_code)*http_code=0;
  h=curl_easy_init();if(!h)return FETCH_NETWORK;
  curl_easy_setopt(h,CURLOPT_URL,url);
  curl_easy_setopt(h,CURLOPT_WRITEFUNCTION,capture);
@@ -295,6 +307,98 @@ static int intel_state(const char *raw,char *out,size_t cap,const char *path){
  if(root)json_object_put(root);
  return ok;
 }
+/* Record-level inventory is intentionally separate from aggregate /intel.
+ * /events may mirror /threats and is not counted as corroboration. */
+static int threat_records(const char *raw,char *out,size_t cap,const char *path){
+ struct json_object *root=NULL,*records=NULL,*prior=NULL,*previous=NULL,*snapshot=NULL,*ids=NULL;
+ struct stat st;
+ char line[256],tmp[600],idbuf[80];
+ size_t i,new_count=0,seen=0,reported=0;
+ int present=0,fd=-1,ok=0;
+ FILE *fp=NULL;
+ if(!raw||!out||!path)return 0;
+ root=json_tokener_parse(raw);
+ if(!root||!json_object_is_type(root,json_type_object))goto done;
+ if(!json_object_object_get_ex(root,"threats",&records)||
+    !json_object_is_type(records,json_type_array))goto done;
+ if((size_t)json_object_array_length(records)>RECORD_MAX)goto done;
+ if(lstat(path,&st)==0){
+  if(!is_private(path)){append(out,cap,"Threat record tracking: UNSAFE PRIOR FILE\n");goto done;}
+  prior=json_object_from_file(path);
+  if(!prior||!json_object_is_type(prior,json_type_object)||
+     !json_object_object_get_ex(prior,"ids",&previous)||
+     !json_object_is_type(previous,json_type_array)){
+   append(out,cap,"Threat record tracking: INVALID PRIOR FILE\n");goto done;
+  }
+  present=1;
+ }else if(errno!=ENOENT){append(out,cap,"Threat record tracking: READ ERROR\n");goto done;}
+ snapshot=json_object_new_object();
+ ids=json_object_new_array();
+ if(!snapshot||!ids)goto done;
+ for(i=0;i<(size_t)json_object_array_length(records);i++){
+  struct json_object *item=json_object_array_get_idx(records,(int)i);
+  struct json_object *field=NULL,*type=NULL,*created=NULL;
+  const char *identifier,*category="unspecified",*when="unknown";
+  int duplicate=0,j;
+  if(!json_object_is_type(item,json_type_object)||
+     !json_object_object_get_ex(item,"id",&field)||
+     !json_object_is_type(field,json_type_string))goto done;
+  identifier=json_object_get_string(field);
+  if(!identifier||!identifier[0]||strlen(identifier)>64)goto done;
+  for(j=0;j<json_object_array_length(ids);j++)
+   if(!strcmp(identifier,json_object_get_string(json_object_array_get_idx(ids,j)))){
+    duplicate=1;break;
+   }
+  if(duplicate)continue;
+  if(json_object_array_add(ids,json_object_new_string(identifier))!=0)goto done;
+  seen++;
+  duplicate=0;
+  if(present)for(j=0;j<json_object_array_length(previous);j++){
+   const char *oldid=json_object_get_string(json_object_array_get_idx(previous,j));
+   if(oldid&&!strcmp(identifier,oldid)){duplicate=1;break;}
+  }
+  if(!duplicate){
+   new_count++;
+   if(reported<4&&present){
+    if(json_object_object_get_ex(item,"type",&type)&&json_object_is_type(type,json_type_string))
+     category=json_object_get_string(type);
+    if(json_object_object_get_ex(item,"created_at",&created)&&json_object_is_type(created,json_type_string))
+     when=json_object_get_string(created);
+    snprintf(idbuf,sizeof(idbuf),"%.*s",64,identifier);
+    snprintf(line,sizeof(line),"  New record %s type=%.*s at=%.*s\n",
+             idbuf,40,category,32,when);
+    append(out,cap,line);
+    reported++;
+   }
+  }
+ }
+ json_object_object_add(snapshot,"ids",ids);ids=NULL;
+ if(snprintf(tmp,sizeof(tmp),"%s.tmp.%ld",path,(long)getpid())>=(int)sizeof(tmp))goto done;
+ fd=open(tmp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+ if(fd<0){append(out,cap,"Threat record tracking: WRITE ERROR\n");goto done;}
+ fp=fdopen(fd,"w");if(!fp){close(fd);fd=-1;unlink(tmp);goto done;}fd=-1;
+ if(fputs(json_object_to_json_string_ext(snapshot,JSON_C_TO_STRING_PLAIN),fp)==EOF||
+    fflush(fp)!=0||fsync(fileno(fp))!=0){
+  fclose(fp);fp=NULL;unlink(tmp);goto done;
+ }
+ if(fclose(fp)!=0){fp=NULL;unlink(tmp);goto done;}fp=NULL;
+ if(rename(tmp,path)!=0){unlink(tmp);goto done;}
+ snprintf(line,sizeof(line),
+          present?"Threat IDs: %zu distinct in current feed; %zu not in previous snapshot\n":
+                  "Threat IDs: baseline established with %zu distinct records\n",
+          seen,new_count);
+ append(out,cap,line);
+ append(out,cap,"Record comparison: new means absent from prior snapshot, not independently verified or newly exploited.\n");
+ ok=1;
+ done:
+ if(fp)fclose(fp);
+ if(fd>=0)close(fd);
+ if(ids)json_object_put(ids);
+ if(snapshot)json_object_put(snapshot);
+ if(prior)json_object_put(prior);
+ if(root)json_object_put(root);
+ return ok;
+}
 static int rictus_summary(const char *path,char *summary,size_t cap){
  FILE *f;char line[2048],last[LOG_TAIL_LINES][512];size_t n=0,i,begin;
  struct stat st;unsigned int count=0;
@@ -340,8 +444,14 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
   else {
    unsigned int j;
    char finding[160];
-   status=https_fetch(url,buf,&http);
+   if(!strcmp(endpoints[i],"/threats"))buf->record_json=malloc(SOURCE_LIMIT+1);
+   status=buf->record_json||strcmp(endpoints[i],"/threats")?https_fetch(url,buf,&http):FETCH_NETWORK;
    add_source_result(&r,endpoints[i],status,buf->len,http);
+   if(!strcmp(endpoints[i],"/threats")&&status==FETCH_OK){
+    if(!threat_records(buf->record_json,r.report,sizeof(r.report),RECORD_PATH))
+     append(r.report,sizeof(r.report),"Threat record comparison: unavailable or invalid source schema\n");
+   }
+   free(buf->record_json);buf->record_json=NULL;
    if(status==FETCH_OK&&strcmp(endpoints[i],"/intel")==0){
     if(buf->intel_len<sizeof(buf->intel_json)&&
        intel_report(buf->intel_json,r.report,sizeof(r.report))){
@@ -414,7 +524,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,6,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,7,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
