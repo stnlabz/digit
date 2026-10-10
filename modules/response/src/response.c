@@ -329,6 +329,23 @@ static int learned_self_identity_answer(const char *question,const corpus_record
 }
 /* [AI:GPT-6 | 2026-10-09] Apply authorized quoted-trigger reply rules.
  * Trigger must exactly match the interpreted utterance. */
+/* [AI:GPT-6 | 2026-10-10] Exact rule matching also accepts a
+ * leading address moved to the end. No name or reply is embedded. */
+static int equivalent_terminal_address(const char *query,const char *trigger)
+{
+ const char *first_space,*last_space;
+ size_t address_size,remainder_size;
+ if(!query||!trigger)return 0;
+ first_space=strchr(trigger,' ');
+ last_space=strrchr(query,' ');
+ if(!first_space||!last_space)return 0;
+ address_size=(size_t)(first_space-trigger);
+ if(address_size==0||(size_t)strlen(last_space+1)!=address_size||
+    strncmp(trigger,last_space+1,address_size)!=0)return 0;
+ remainder_size=strlen(first_space+1);
+ return (size_t)(last_space-query)==remainder_size&&
+        strncmp(query,first_space+1,remainder_size)==0;
+}
 static int learned_quoted_reply(const char *question,const corpus_record_t *record,
                                char *answer,size_t capacity){
  const char *text,*trigger,*end,*relation,*reply,*reply_end;
@@ -345,7 +362,7 @@ static int learned_quoted_reply(const char *question,const corpus_record_t *reco
  n=(size_t)(end-trigger);memcpy(raw_trigger,trigger,n);raw_trigger[n]=0;
  canonical_text(question,qnorm,sizeof(qnorm));
  canonical_text(raw_trigger,tnorm,sizeof(tnorm));
- if(strcmp(qnorm,tnorm)!=0)return 0;
+ if(strcmp(qnorm,tnorm)!=0&&!equivalent_terminal_address(qnorm,tnorm))return 0;
  relation=strstr(end+1,"may use ");
  if(!relation)relation=strstr(end+1,"can be responded to with ");
  if(!relation)return 0;
@@ -483,7 +500,8 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   snprintf(rule.text,sizeof(rule.text),
       "If Digit gets asked \"Digit are you here?\" Digit may use \"Yes I am here\", \"Yes\".");
   passed+=(unsigned)(learned_quoted_reply("Digit are you here?",&rule,reply,sizeof(reply))&&strcmp(reply,"Yes I am here")==0);
-  passed+=(unsigned)!learned_quoted_reply("What is the status?",&rule,reply,sizeof(reply));
+  passed+=(unsigned)(learned_quoted_reply("Are you here, Digit?",&rule,reply,sizeof(reply))&&strcmp(reply,"Yes I am here")==0);
+ passed+=(unsigned)!learned_quoted_reply("What is the status?",&rule,reply,sizeof(reply));
   snprintf(rule.source,sizeof(rule.source),"untrusted");
   passed+=(unsigned)!learned_quoted_reply("Digit are you here?",&rule,reply,sizeof(reply));
  }
@@ -532,7 +550,7 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
       strstr(rendered.answer,"don't have enough grounded information")!=NULL&&
       strstr(rendered.answer,"object")==NULL);
  }
- result->tests_executed=28;result->tests_passed=passed;
+ result->tests_executed=29;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -541,5 +559,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,8,11,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
