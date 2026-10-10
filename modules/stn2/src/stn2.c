@@ -307,9 +307,41 @@ static int intel_state(const char *raw,char *out,size_t cap,const char *path){
  if(root)json_object_put(root);
  return ok;
 }
+/* Exact IP-token match only; no attacker/victim attribution inferred. */
+static int same_ip_token(const char *line,const char *ip){
+ const char *p=line;size_t n;
+ if(!line||!ip||(n=strlen(ip))<7||n>45)return 0;
+ while((p=strstr(p,ip))!=NULL){
+  int left=p==line||(!isdigit((unsigned char)p[-1])&&p[-1]!='.');
+  int right=p[n]==0||(!isdigit((unsigned char)p[n])&&p[n]!='.');
+  if(left&&right)return 1;
+  p++;
+ }
+ return 0;
+}
+static int rictus_ip_match(const char *path,const char *ip){
+ FILE *f;char line[2048],last[LOG_TAIL_LINES][512];
+ size_t n=0,start,i;struct stat st;
+ if(!path||!ip||lstat(path,&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1)return -1;
+ f=fopen(path,"r");if(!f)return -1;
+ while(fgets(line,sizeof(line),f)){
+  size_t len=strlen(line);
+  if(!strchr(line,'\n')&&!feof(f)){
+   int c;while((c=fgetc(f))!=EOF&&c!='\n'){}
+   continue;
+  }
+  if(len>=sizeof(last[0]))len=sizeof(last[0])-1;
+  memcpy(last[n%LOG_TAIL_LINES],line,len);
+  last[n%LOG_TAIL_LINES][len]=0;n++;
+ }
+ if(ferror(f)){fclose(f);return -1;}
+ fclose(f);start=n>LOG_TAIL_LINES?n-LOG_TAIL_LINES:0;
+ for(i=start;i<n;i++)if(same_ip_token(last[i%LOG_TAIL_LINES],ip))return 1;
+ return 0;
+}
 /* Record-level inventory is intentionally separate from aggregate /intel.
  * /events may mirror /threats and is not counted as corroboration. */
-static int threat_records(const char *raw,char *out,size_t cap,const char *path){
+static int threat_records(const char *raw,char *out,size_t cap,const char *path,const char *rictus_path){
  struct json_object *root=NULL,*records=NULL,*prior=NULL,*previous=NULL,*snapshot=NULL,*ids=NULL;
  struct stat st;
  char line[256],tmp[600],idbuf[80];
@@ -368,6 +400,20 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path)
     snprintf(line,sizeof(line),"  New record %s type=%.*s at=%.*s\n",
              idbuf,40,category,32,when);
     append(out,cap,line);
+    if(rictus_path){
+     struct json_object *ipfield=NULL;
+     const char *ip=NULL;
+     int match;
+     if(json_object_object_get_ex(item,"ip",&ipfield)&&
+        json_object_is_type(ipfield,json_type_string))
+      ip=json_object_get_string(ipfield);
+     if(ip){
+      match=rictus_ip_match(rictus_path,ip);
+      if(match==1)append(out,cap,"    Rictus: matching IP token in last 120 log records (not verified linkage)\n");
+      else if(match==0)append(out,cap,"    Rictus: no matching IP token in last 120 records\n");
+      else append(out,cap,"    Rictus: unavailable for correlation\n");
+     }else append(out,cap,"    Rictus: record lacks source IP field\n");
+    }
     reported++;
    }
   }
@@ -448,7 +494,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    status=buf->record_json||strcmp(endpoints[i],"/threats")?https_fetch(url,buf,&http):FETCH_NETWORK;
    add_source_result(&r,endpoints[i],status,buf->len,http);
    if(!strcmp(endpoints[i],"/threats")&&status==FETCH_OK){
-    if(!threat_records(buf->record_json,r.report,sizeof(r.report),RECORD_PATH))
+    if(!threat_records(buf->record_json,r.report,sizeof(r.report),RECORD_PATH,settings.log))
      append(r.report,sizeof(r.report),"Threat record comparison: unavailable or invalid source schema\n");
    }
    free(buf->record_json);buf->record_json=NULL;
@@ -524,7 +570,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,7,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,8,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
