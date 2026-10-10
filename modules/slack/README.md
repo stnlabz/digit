@@ -109,3 +109,7 @@ Authenticated Slack direct messages now invoke the existing `dispatcher.handle_s
 ## Slack 1.0.9 persistent account memory
 
 Authenticated private messages beginning with `remember ` or `I am ` now call `memory.put` using the verified Digit account. `What do you remember about me?` calls `memory.get`. This depends on a loaded Memory 1.0.0 module and shared Digit server, and currently retrieves only the most recent saved record. Without the memory service, Digit reports that persistent memory is unavailable. Linux and live qualification remain pending.
+
+## Slack 1.0.10 — Conversational memory response
+
+Authenticated persistent-memory recall now renders a short grounded conversational reply using the same formatter as the native Interface. The original saved text remains unchanged. Names in a bounded `I am <name>, ...` introduction may be used for the greeting; no new facts are introduced. Local build and live qualification pending.
