@@ -251,7 +251,7 @@ static int evidence_divergence(const char *question, const char *candidate, cons
 static int bounded_word_ci(const char *begin,size_t length,const char *word)
 {
  size_t i;
- if(!begin||!word||strlen(word)!=length)return 0;
+ if(!begin||!word)return 0;
  for(i=0;i<length;++i)
   if(tolower((unsigned char)begin[i])!=tolower((unsigned char)word[i]))return 0;
  return 1;
