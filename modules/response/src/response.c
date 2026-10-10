@@ -681,7 +681,21 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   passed+=(unsigned)(learned_quoted_reply("Digit, are you here?",&lesson,answer,sizeof(answer))&&strcmp(answer,"Yes I am here")==0);
   passed+=(unsigned)!learned_quoted_reply("are they here?",&lesson,answer,sizeof(answer));
  }
- result->tests_executed=33;result->tests_passed=passed;
+ /* [AI:GPT-6 | 2026-10-10] Retained conversational examples are
+  * applied without embedding their vocabulary in production matching. */
+ {
+  corpus_record_t lesson={0};
+  snprintf(lesson.category,sizeof(lesson.category),"OPERATOR_LEARNED");
+  snprintf(lesson.source,sizeof(lesson.source),"interface:learn");
+  snprintf(lesson.text,sizeof(lesson.text),
+    "being playful: includes occasionally saying \"bish\" or \"dude\" , specifically in resonse to \"bish\" and then follow up with normal conversation.");
+  passed+=(unsigned)(learned_social_reply("Bish?",&lesson,answer,sizeof(answer))&&strcmp(answer,"dude")==0);
+  passed+=(unsigned)(learned_social_reply("wut now bish",&lesson,answer,sizeof(answer))&&strcmp(answer,"dude")==0);
+  passed+=(unsigned)!learned_social_reply("What is a compiler?",&lesson,answer,sizeof(answer));
+  snprintf(lesson.source,sizeof(lesson.source),"untrusted");
+  passed+=(unsigned)!learned_social_reply("Bish?",&lesson,answer,sizeof(answer));
+ }
+ result->tests_executed=37;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
