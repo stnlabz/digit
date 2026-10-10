@@ -187,7 +187,7 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     if(compare){explain=0;define=0;status=0;why=0;how=0;fact=0;}
     else if(explain||define){status=0;why=0;how=0;fact=0;}
     if(social&&!action&&!compare&&!explain&&!define&&
-       (has_word(text,"hey")||has_word(text,"hello")||has_word(text,"hi"))){
+       starts_with_command(text,social_words,sizeof(social_words)/sizeof(social_words[0]))){
         status=0;why=0;how=0;fact=0;
     }
     if(fact&&!action){status=0;}
