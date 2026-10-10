@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.9 (historical Rictus correlation)
+# STN-2 Intelligence Module — version 1.0.10 (single-pass Rictus snapshot correlation)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -87,3 +87,7 @@ This revision performs no active probes and does not mutate Rictus, Sentinel or 
 STN-2 now compares **all distinct valid threat IDs in each retrieved /threats snapshot**, not only newly appearing IDs, against whole IP tokens in the latest 120 Rictus log records. It reports the number of records with usable IPs checked, the number with matching Rictus tokens, and up to three illustrative candidate ID/IP matches even when zero IDs are new. This is a read-only historical correlation pass, distinct from snapshot change detection. A missing Rictus source is explicitly marked incomplete; missing IP fields are not counted as matches. Repeated threat IDs are skipped. Matching text alone is not incident confirmation, attribution, or evidence of exploitation.
 
 This is **not** yet persistent case management, automatically scheduled watching, deep investigation, or complete source-evidence retention. Repeated log rescans per ID have a performance cost; benchmarking and concurrent snapshot serialization are outstanding before production-scale qualification. Offline tests include second and third snapshots with no new IDs to verify historical correlations persist.
+
+## Revision 1.0.10
+
+Historical correlation now reads and validates the Rictus log **once per STN-2 threat-record comparison**, retaining only the most recent 120 complete log lines in a bounded in-memory window. Every deduplicated Sentinel record is matched against that same snapshot, avoiding the previous per-record repeated file scans. Existing evidence caveats and per-source permissions remain unchanged. Unavailable Rictus input is explicitly reported as an incomplete correlation rather than as zero evidence. Additional regression checks exercise loaded-window matches and nonmatches. This change does not introduce durable investigations, watch scheduling, active probes or Slack background dispatch; these capabilities remain outstanding. Live build, performance and end-to-end qualification are required.
