@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.2.1 (HIGH relevance admission correction)
+# STN-2 Intelligence Module — version 1.2.2 (investigation evidence visibility)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -113,3 +113,7 @@ This is the first bounded, persistent investigation-state implementation. A new 
 ## Revision 1.2.1 — API relevance admission
 
 Investigation opening now requires the API's explicit top-level `relevance: "HIGH"`, not `severity: "HIGH"`. Severity is independent and retained as the case's `opening_severity` when present; cases also record `opening_relevance: "HIGH"`. For example, a record classified `severity: "MEDIUM", relevance: "HIGH"` opens a provisional case. Conversely `severity: "HIGH", relevance: "LOW"` does not open a case. Existing linked records continue compounding cases by distinct evidence ID. This is a targeted module-only correction; previous case files remain readable. Regression coverage tests both admission directions and retains deduplication checks. Linux build and live validation are pending.
+
+## Revision 1.2.2 — Investigation visibility
+
+The intelligence brief now lists every stored active investigation with a report-local case number, provisional source-IP grouping indicator, opening HIGH relevance, stored opening severity where present, evidence ID count, and up to three stable observation IDs. Evidence beyond the displayed sample remains stored; the brief does not imply that three is a case-size limit. A report-local case number is **not** a durable case ID. The existing state format, admission criteria, deduplication, collection sources, permissions and Core remain unchanged. The current persistence layer retains only observation IDs and opening metadata: full underlying evidence, source timestamps, a durable case identifier, and an investigation conclusion are not available in that file and are not represented as such. Linux build and live report qualification pending.
