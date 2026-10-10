@@ -561,7 +561,7 @@ static int case_contains(struct json_object *ids,const char *id){
 }
 static int investigation_update(const char *raw,const char *path,char *report,size_t cap){
  struct json_object *root=NULL,*threats=NULL,*store=NULL,*cases=NULL;
- struct stat st;char tmp[600],line[180],watch[720]={0};FILE *fp=NULL;
+ struct stat st;char tmp[600],line[180],watch[1024]={0};FILE *fp=NULL;
  size_t watch_events=0;
  int fd=-1,ok=0,persist=0;size_t opened=0,added=0,i,j;
  if(!raw||!path||!report||!cap)return 0;
