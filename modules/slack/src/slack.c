@@ -30,7 +30,7 @@ static int watch_active;
 static int active,stop_flag;
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t intel_mutex=PTHREAD_MUTEX_INITIALIZER;
-typedef struct {char user[64],team[64],identity[DIGIT_ACCOUNT_ID_MAX];time_t expires;} slack_session_t;
+typedef struct {char user[64],team[64],identity[DIGIT_ACCOUNT_ID_MAX];time_t expires;char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];} slack_session_t;
 static slack_session_t sessions[32];
 static char bot_id[64];
 static char last_events[128][128];static unsigned int event_cursor;
@@ -234,6 +234,39 @@ static int authenticate_dm(const char *workspace,const char *slack_user,const ch
  pthread_mutex_unlock(&mutex);
  return 1;
 }
+/* Conversation context is volatile and bound to a verified DM session.
+ * It confers no new Dispatcher capability or organizational authority. */
+static int dm_session_snapshot(const char *team,const char *user,
+                               char *identity,size_t identity_cap,
+                               char *prior,size_t prior_cap){
+ size_t i;int found=0;time_t now=time(NULL);
+ if(!team||!user||!identity||!prior||!identity_cap||!prior_cap)return 0;
+ identity[0]=0;prior[0]=0;
+ pthread_mutex_lock(&mutex);
+ for(i=0;i<32;i++){
+  if(sessions[i].expires<=now)continue;
+  if(strcmp(sessions[i].team,team)||strcmp(sessions[i].user,user))continue;
+  if(digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,sessions[i].identity)){
+   found=bounded(identity,identity_cap,sessions[i].identity);
+   if(sessions[i].previous_answer[0])
+    (void)bounded(prior,prior_cap,sessions[i].previous_answer);
+  }
+  break;
+ }
+ pthread_mutex_unlock(&mutex);return found;
+}
+static void dm_session_set_reply(const char *team,const char *user,const char *answer){
+ size_t i;time_t now=time(NULL);
+ if(!team||!user||!answer)return;
+ pthread_mutex_lock(&mutex);
+ for(i=0;i<32;i++){
+  if(sessions[i].expires<=now||strcmp(sessions[i].team,team)||
+     strcmp(sessions[i].user,user))continue;
+  (void)bounded(sessions[i].previous_answer,sizeof(sessions[i].previous_answer),answer);
+  break;
+ }
+ pthread_mutex_unlock(&mutex);
+}
 static int process_event(struct json_object *root){
  struct json_object *payload=object(root,"payload"),*event=object(payload,"event");
  const char *event_id=field(payload,"event_id"),*type=field(event,"type");
@@ -280,16 +313,45 @@ static int process_event(struct json_object *root){
   }
   return reply(channel,ts?ts:field(event,"ts"),report.report);
  }
- /* A distinct, non-administrative Slack actor scope; no SA or org claims. */
+ /* Preserve the Slack actor boundary: verification is not Core authorization. */
  if(strlen(user)+6>=sizeof(query.actor))return 0;
  snprintf(query.actor,sizeof(query.actor),"slack:%s",user);
  query.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
  snprintf(query.request,sizeof(query.request),"%s",message);
- if(!host||!host->invoke_service||
-    host->invoke_service(DIGIT_DISPATCHER_SCOPED_SERVICE,&query,sizeof(query),
-                         &answer,sizeof(answer),&used)!=STNLABZ_MODULE_OK||
-    used!=sizeof(answer)||!memchr(answer.answer,0,sizeof(answer.answer))||
-    !answer.answer[0])return 0;
+ if(is_dm){
+  digit_dispatcher_scoped_context_request_t contextual={0};
+  char identity[DIGIT_ACCOUNT_ID_MAX]={0};
+  char previous[DIGIT_DISPATCHER_ANSWER_MAX]={0};
+  if(dm_session_snapshot(team,user,identity,sizeof(identity),
+                         previous,sizeof(previous))){
+   if(!strcmp(message,"What is my authenticated Digit account?")||
+      !strcmp(message,"what is my authenticated Digit account?")){
+    char line[160];
+    snprintf(line,sizeof(line),"Your authenticated Digit account is %s.",identity);
+    return reply(channel,ts?ts:field(event,"ts"),line);
+   }
+   contextual.scoped=query;
+   snprintf(contextual.previous_answer,sizeof(contextual.previous_answer),"%s",previous);
+   if(!host||!host->invoke_service||
+      host->invoke_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,
+                           &contextual,sizeof(contextual),&answer,sizeof(answer),&used)!=STNLABZ_MODULE_OK||
+      used!=sizeof(answer)||!memchr(answer.answer,0,sizeof(answer.answer))||
+      !answer.answer[0])return 0;
+   dm_session_set_reply(team,user,answer.answer);
+  }else{
+   if(!host||!host->invoke_service||
+      host->invoke_service(DIGIT_DISPATCHER_SCOPED_SERVICE,&query,sizeof(query),
+                           &answer,sizeof(answer),&used)!=STNLABZ_MODULE_OK||
+      used!=sizeof(answer)||!memchr(answer.answer,0,sizeof(answer.answer))||
+      !answer.answer[0])return 0;
+  }
+ }else{
+  if(!host||!host->invoke_service||
+     host->invoke_service(DIGIT_DISPATCHER_SCOPED_SERVICE,&query,sizeof(query),
+                          &answer,sizeof(answer),&used)!=STNLABZ_MODULE_OK||
+     used!=sizeof(answer)||!memchr(answer.answer,0,sizeof(answer.answer))||
+     !answer.answer[0])return 0;
+ }
  if(!ts)ts=field(event,"ts");
  return reply(channel,ts,answer.answer);
 }
@@ -465,7 +527,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
