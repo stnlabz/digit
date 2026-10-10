@@ -440,6 +440,13 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
  passed+=(unsigned)(terms("Compare C and Python",words)==3);
  passed+=(unsigned)stopword("what");
  passed+=(unsigned)!stopword("compiler");
+ /* [AI:GPT-6 | 2026-10-10] Apostrophe-s fragments do not contribute
+  * lexical evidence matches; meaningful words remain indexable. */
+ memset(words,0,sizeof(words));
+ passed+=(unsigned)(terms("what's the server's name",words)==2&&
+    has_term(words,2,"name")&&has_term(words,2,"server")&&
+    !has_term(words,2,"s"));
+
  passed+=(unsigned)conversational_greeting("hello Digit",answer,sizeof(answer))&&strcmp(answer,"Hello.")==0;
  passed+=(unsigned)!conversational_greeting("who are you?",answer,sizeof(answer));
  parse_intent_envelope("INTENT: COMPARE\nTARGET: KNOWLEDGE\nSUBJECT: C and Python\nREQUEST: Compare C and Python",&parsed);
@@ -502,7 +509,7 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
    passed+=(unsigned)(select_evidence("What is a variable?",&sample,matched)==0);
   }
  }
- result->tests_executed=26;result->tests_passed=passed;
+ result->tests_executed=27;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
