@@ -30,7 +30,9 @@ static int digit_memory_name_reply(const char *saved,char *out,size_t cap){
  if(!p||!isalpha((unsigned char)*p))return 0;
  while((isalpha((unsigned char)*p)||*p=='-'||*p=='\'')&&n+1<sizeof(name))
   name[n++]=*p++;
- if(n<2||(*p&&*p!=','&&*p!='.'&&*p!=';'&&!isspace((unsigned char)*p)))return 0;
+ if(n<2||(*p&&*p!=','&&*p!='.'&&*p!=';')||
+    (n==2&&!strncasecmp(name,"an",2))||
+    (n==3&&!strncasecmp(name,"the",3)))return 0;
  name[n]=0;
  written=snprintf(out,cap,"You told me your name is %s.",name);
  return written>0&&(size_t)written<cap;
