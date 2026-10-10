@@ -418,7 +418,13 @@ static int learned_quoted_reply(const char *question,const corpus_record_t *reco
  n=(size_t)(end-trigger);memcpy(raw_trigger,trigger,n);raw_trigger[n]=0;
  canonical_text(question,qnorm,sizeof(qnorm));
  canonical_text(raw_trigger,tnorm,sizeof(tnorm));
- if(strcmp(qnorm,tnorm)!=0&&!equivalent_terminal_address(qnorm,tnorm))return 0;
+ if(strcmp(qnorm,tnorm)!=0&&!equivalent_terminal_address(qnorm,tnorm)){
+  /* A learned rule may include a leading direct address, while the
+   * transport or speaker may omit it. Match the remaining utterance
+   * exactly; neither the address nor any reply is embedded in code. */
+  const char *suffix=strchr(tnorm,' ');
+  if(!suffix||strcmp(qnorm,suffix+1)!=0)return 0;
+ }
  relation=strstr(end+1,"may use ");
  if(!relation)relation=strstr(end+1,"can be responded to with ");
  if(!relation)return 0;
@@ -620,7 +626,19 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   snprintf(sample.records[0].text,sizeof(sample.records[0].text),"Wut, wut, = What, what");
   passed+=(unsigned)(select_evidence("wut",&sample,found)==1);
  }
- result->tests_executed=30;result->tests_passed=passed;
+ /* [AI:GPT-6 | 2026-10-10] Learned direct-address rules work after
+  * transport strips the address; unrelated questions cannot execute them. */
+ {
+  corpus_record_t lesson={0};
+  snprintf(lesson.category,sizeof(lesson.category),"OPERATOR_LEARNED");
+  snprintf(lesson.source,sizeof(lesson.source),"interface:learn");
+  snprintf(lesson.text,sizeof(lesson.text),
+    "If Digit gets asked \"Digit are you here?\" Digit may use \"Yes I am here\", \"Yes\", or \"Of Course I am :)\"");
+  passed+=(unsigned)(learned_quoted_reply("are you here?",&lesson,answer,sizeof(answer))&&strcmp(answer,"Yes I am here")==0);
+  passed+=(unsigned)(learned_quoted_reply("Digit, are you here?",&lesson,answer,sizeof(answer))&&strcmp(answer,"Yes I am here")==0);
+  passed+=(unsigned)!learned_quoted_reply("are they here?",&lesson,answer,sizeof(answer));
+ }
+ result->tests_executed=33;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
@@ -629,5 +647,5 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
 }
 static stnlabz_module_result_t response_start(const stnlabz_module_host_t *host){if(host==NULL||host->register_service==NULL||host->invoke_service==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(!host->register_service(DIGIT_RESPONSE_SERVICE,answer_service,NULL))return STNLABZ_MODULE_ERR_START_FAILED;response_host=host;if(host->send_message)(void)host->send_message("[RESPONSE] module active: grounded retained-knowledge response registered");return STNLABZ_MODULE_OK;}
 static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&response_host->unregister_service!=NULL)if(!response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL))return STNLABZ_MODULE_ERR_STOP_FAILED;response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
