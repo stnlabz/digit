@@ -18,6 +18,18 @@ int main(void){
   assert(stream.len==SOURCE_LIMIT);
   assert(capture(chunk,1,1,&stream)==0&&stream.exceeded);
  }
+ {
+  response_t parsed={0};
+  const char *p1="something CVE-2026-";
+  const char *p2="12345 and CVE-2026-12345, plus CVE-2025-4321.";
+  assert(capture((char *)p1,1,strlen(p1),&parsed)==strlen(p1));
+  assert(capture((char *)p2,1,strlen(p2),&parsed)==strlen(p2));
+  finish_scan(&parsed);
+  assert(parsed.cve_mentions==3);
+  assert(parsed.unique_cves==2);
+  assert(strcmp(parsed.cves[0],"CVE-2026-12345")==0);
+  assert(strcmp(parsed.cves[1],"CVE-2025-4321")==0);
+ }
  assert(strcmp(fetch_label(FETCH_LIMIT),"SIZE_LIMIT")==0);
  assert(strcmp(fetch_label(FETCH_HTTP),"HTTP_ERROR")==0);
  assert(strcmp(fetch_label(FETCH_EMPTY),"EMPTY_RESPONSE")==0);
