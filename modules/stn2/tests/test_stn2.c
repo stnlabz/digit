@@ -115,7 +115,7 @@ int main(void){
  {
   char dir[]="/tmp/stn2-cases-XXXXXX",path[256],brief[4096]={0};
   const char *low="{\"threats\":[{\"id\":\"low\",\"ip\":\"192.0.2.9\",\"severity\":\"HIGH\",\"relevance\":\"LOW\"}]}";
-  const char *high="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"MEDIUM\",\"relevance\":\"HIGH\"}]}";
+  const char *high="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"MEDIUM\",\"relevance\":\"HIGH\",\"type\":\"pattern_match\",\"created_at\":\"2026-04-22 14:05:46\",\"details\":{\"request_url\":\"/xmlrpc.php?rsd\",\"domain\":\"stn-labz.com\"}}]}";
   const char *follow="{\"threats\":[{\"id\":\"high\",\"ip\":\"192.0.2.9\",\"severity\":\"MEDIUM\",\"relevance\":\"HIGH\"},{\"id\":\"follow\",\"ip\":\"192.0.2.9\",\"severity\":\"LOW\",\"relevance\":\"LOW\"}]}";
   assert(mkdtemp(dir)!=NULL);
   assert(snprintf(path,sizeof(path),"%s/cases.json",dir)<(int)sizeof(path));
@@ -126,6 +126,9 @@ int main(void){
   assert(strstr(brief,"1 active; 1 opened; 1 distinct")!=NULL);
   assert(strstr(brief,"Case 1: source IP=192.0.2.9; opening relevance=HIGH; severity=MEDIUM; evidence IDs=1")!=NULL);
   assert(strstr(brief,"Observation ID: high")!=NULL);
+  assert(strstr(brief,"Activity=pattern_match; observed=2026-04-22 14:05:46")!=NULL);
+  assert(strstr(brief,"Request=/xmlrpc.php?rsd")!=NULL);
+  assert(strstr(brief,"Domain=stn-labz.com")!=NULL);
   {
    struct json_object *saved=json_object_from_file(path),*cases=NULL,*entry=NULL;
    assert(saved&&json_object_object_get_ex(saved,"cases",&cases));
