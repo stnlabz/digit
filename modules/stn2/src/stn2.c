@@ -2,6 +2,7 @@
 /* [AI:GPT-6 | 2026-10-10] STN-2 bounded, read-only intelligence collection.
  * A failed source is never represented as a successful retrieval. */
 #include <curl/curl.h>
+#include <json-c/json.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +21,8 @@ typedef struct {
  int exceeded;
  char window[32];
  size_t window_len;
+ char intel_json[4096];
+ size_t intel_len;
  char cves[8][24];
  unsigned int unique_cves;
  unsigned int cve_mentions;
@@ -110,6 +113,11 @@ static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
  bytes=size*n;
  if(bytes>SOURCE_LIMIT-b->len){b->exceeded=1;return 0;}
  scan_bytes(b,ptr,bytes);
+ if(b->intel_len+bytes<sizeof(b->intel_json)){
+  memcpy(b->intel_json+b->intel_len,ptr,bytes);
+  b->intel_len+=bytes;
+  b->intel_json[b->intel_len]=0;
+ }else b->intel_len=sizeof(b->intel_json);
  b->len+=bytes;return bytes;
 }
 static fetch_status_t https_fetch(const char *url,response_t *body,long *http_code){
@@ -155,6 +163,81 @@ static void add_source_result(digit_stn2_result_t *r,const char *name,
           name,fetch_label(status),bytes,http);
  if(status==FETCH_OK)r->sources_ok++;else r->sources_failed++;
  append(r->report,sizeof(r->report),line);
+}
+/* /intel carries aggregate statistics, not verified incidents.
+ * This parser declines malformed or unexpected representations rather than
+ * creating plausible-looking numbers. */
+static int json_u64(struct json_object *obj,const char *key,int64_t *value){
+ struct json_object *member=NULL;
+ if(!obj||!json_object_object_get_ex(obj,key,&member)||
+    !json_object_is_type(member,json_type_int))return 0;
+ *value=json_object_get_int64(member);
+ return *value>=0;
+}
+static struct json_object *json_member_object(struct json_object *obj,const char *key){
+ struct json_object *member=NULL;
+ if(!obj||!json_object_object_get_ex(obj,key,&member)||
+    !json_object_is_type(member,json_type_object))return NULL;
+ return member;
+}
+static int intel_report(const char *raw,char *out,size_t capacity){
+ struct json_object *root,*stats,*types,*analysis,*trending,*patterns;
+ int64_t total,day=0;char line[256];
+ unsigned int count=0;
+ if(!raw||!out||!capacity)return 0;
+ root=json_tokener_parse(raw);
+ if(!root||!json_object_is_type(root,json_type_object)){
+  if(root)json_object_put(root);
+  return 0;
+ }
+ stats=json_member_object(root,"stats");
+ analysis=json_member_object(root,"analysis");
+ types=json_member_object(stats,"by_type");
+ if(!json_u64(stats,"total_threats",&total)||!types){json_object_put(root);return 0;}
+ snprintf(line,sizeof(line),"Sentinel assessment (reported historical total): %lld observations\n",(long long)total);
+ append(out,capacity,line);
+ json_object_object_foreach(types,key,val){
+  int64_t number;
+  if(!json_object_is_type(val,json_type_int))continue;
+  number=json_object_get_int64(val);
+  if(number<0)continue;
+  snprintf(line,sizeof(line),"  %.*s: %lld\n",64,key,(long long)number);
+  append(out,capacity,line);
+  count++;
+ }
+ if(!count){json_object_put(root);return 0;}
+ if(json_u64(analysis,"total_24h",&day)){
+  snprintf(line,sizeof(line),"Sentinel reported last 24h: %lld observations\n",(long long)day);
+  append(out,capacity,line);
+ }
+ trending=json_member_object(analysis,"trending");
+ if(trending){
+  json_object_object_foreach(trending,key,val){
+   if(json_object_is_type(val,json_type_int)&&json_object_get_int64(val)>=0){
+    snprintf(line,sizeof(line),"  24h trend %.*s: %lld\n",64,key,
+             (long long)json_object_get_int64(val));
+    append(out,capacity,line);
+   }
+  }
+ }
+ patterns=NULL;
+ if(json_object_object_get_ex(root,"patterns",&patterns)&&
+    json_object_is_type(patterns,json_type_array)){
+  int i,limit=json_object_array_length(patterns);
+  if(limit>12)limit=12;
+  append(out,capacity,"Reported pattern indicators (not proof of compromise):\n");
+  for(i=0;i<limit;i++){
+   struct json_object *item=json_object_array_get_idx(patterns,i);
+   const char *value=json_object_is_type(item,json_type_string)?
+                      json_object_get_string(item):NULL;
+   if(value&&strlen(value)<80&&strchr(value,'\n')==NULL){
+    snprintf(line,sizeof(line),"  %s\n",value);
+    append(out,capacity,line);
+   }
+  }
+ }
+ json_object_put(root);
+ return 1;
 }
 static int rictus_summary(const char *path,char *summary,size_t cap){
  FILE *f;char line[2048],last[LOG_TAIL_LINES][512];size_t n=0,i,begin;
@@ -203,6 +286,13 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    char finding[160];
    status=https_fetch(url,buf,&http);
    add_source_result(&r,endpoints[i],status,buf->len,http);
+   if(status==FETCH_OK&&strcmp(endpoints[i],"/intel")==0){
+    if(buf->intel_len<sizeof(buf->intel_json)&&
+       intel_report(buf->intel_json,r.report,sizeof(r.report)))
+      append(r.report,sizeof(r.report),
+       "Assessment: reported web probing is not evidence of successful compromise.\n");
+    else append(r.report,sizeof(r.report),"Sentinel /intel schema: UNPARSEABLE\n");
+   }
    if(status==FETCH_OK){
     snprintf(finding,sizeof(finding),"  CVE references detected: %u mentions; up to %u distinct identifiers sampled\n",
              buf->cve_mentions,buf->unique_cves);
@@ -267,7 +357,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,4,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,5,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
