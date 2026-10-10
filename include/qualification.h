@@ -5,7 +5,7 @@
 
 #include "module.h"
 
-#define DIGIT_QUALIFICATION_MAX 128
+#define DIGIT_QUALIFICATION_MAX 4096
 
 typedef struct
 {
