@@ -1,0 +1,24 @@
+name: Digit native Slack C module
+on:
+  push:
+    paths:
+      - 'modules/slack/**'
+      - '.github/workflows/slack-c.yml'
+  pull_request:
+    paths:
+      - 'modules/slack/**'
+      - '.github/workflows/slack-c.yml'
+  workflow_dispatch:
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native libraries
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libjson-c-dev
+      - name: Obtain external ABI
+        run: git clone --depth 1 https://github.com/stnlabz/ABI.git ../ABI
+      - name: Build and run module tests
+        run: make -C modules/slack test
+      - name: Compile module
+        run: make -C modules/slack all
