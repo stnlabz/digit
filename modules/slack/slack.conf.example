@@ -3,3 +3,6 @@ enabled=false
 workspace_id=
 app_token=
 bot_token=
+
+# Restricts gen intel to the private Intel-Briefs Slack channel ID.
+intel_channel_id=
