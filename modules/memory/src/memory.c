@@ -86,9 +86,13 @@ static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q)
  if(!q)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  memset(q,0,sizeof(*q));q->tests_executed=10;
  q->tests_passed=(unsigned)valid_actor("poemei")+(unsigned)!valid_actor("../other")+
-                 (unsigned)!valid_actor("");
+                 (unsigned)!valid_actor("")+(unsigned)valid_actor("user_001")+
+                 (unsigned)valid_actor("account-2")+(unsigned)!valid_actor("a/b")+
+                 (unsigned)!valid_actor("has space")+(unsigned)!valid_actor("invalid.name")+
+                 (unsigned)!valid_actor("a\\b")+(unsigned)!valid_actor("a.b");
  q->negative_test_executed=1;q->negative_test_passed=1;
- return q->tests_passed==3?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
+ q->tests_failed=q->tests_executed-q->tests_passed;
+ return q->tests_passed==10?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 static stnlabz_module_result_t start(const stnlabz_module_host_t *h){
  if(!h||!h->register_service||!h->unregister_service)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
