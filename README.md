@@ -6,6 +6,28 @@
 
 Digit follows **Core → Modules → Mission**. The common Core binds through its platform interface, with target-specific behavior outside shared Core semantics. Architecture, authorization and deployment remain under human control.
 
+## Status update — 2026-10-10
+
+**Architecture:** Digit uses implied MVC: Interface = View; Dispatcher = Controller; Intent → Interpretation → Corpus = Model. Runtime currently invokes Interpretation before Intent. Response constructs a candidate and Validator checks it independently. This mapping does not change Core → Modules → Mission or authorize Core/ABI edits.
+
+**Production learned data:** The operator confirmed retained OPERATOR_LEARNED records from interface:learn in /opt/digit/corpus/corpus.tsv: a playful bish/dude response rule (line 47751), bounded kitty-talk policy (47753), WTF alternatives (48546), two overlapping stoopid definitions (48547–48548), and girl/gurl/gerl variants (48549). Read-only NUL and unexpected-control-byte checks both found zero. A successful 'Learned.' indicates storage, not semantic or conversational acceptance.
+
+**Runtime evidence:** At 2026-10-10 23:39:27 UTC the operator observed Intent 1.3.1 VERSION_CHANGED, QUALIFICATION_GREEN and HOTLOAD_ACTIVE (sequences 64–66). Response 1.9.5 was committed to GitHub main, but exact installed Response version was not independently confirmed in the presented logs.
+
+| Latest observed request | Digit response | Result |
+| --- | --- | --- |
+| Bish? | dude | PASS (narrow learned rule) |
+| WTF Bish? | dude | PASS (later live report) |
+| Gurl; Girl?; Gurl?; gerl? | I couldn't produce a grounded answer that passed validation. | FAIL |
+| Girl are you stoopid?; girl wtf? | I don't have enough grounded information to answer that. | FAIL |
+| yous stoopid; NOOOOO Yous a dude | I don't have enough grounded information to answer that. | FAIL |
+| oh wows, no you says something like Dude? | I don't have enough grounded information to answer that. | FAIL |
+| What is a compiler? | A C implementation consists of a compiler and supporting implementation facilities. | PASS (observed factual answer) |
+
+**Acceptance: OPEN.** Corpus lexical matching does not prove semantic relation or authorized conversational response. Interpretation rejects ambiguous or multiword meanings for substitution; Intent, retrieval/ranking and Response social-rule execution use different acceptance criteria. The outbound Validator rejection needs its actual candidate and diagnostic reason; do not bypass the Validator. The next work is coordinated end-to-end qualification through the real Interface/Slack, Dispatcher, Model, Response and Validator path, including all listed inputs, unrelated-evidence negatives, context follow-ups, and regression tests. No LLM, hardcoded slang/replies, unauthorized Corpus edits or Core modification.
+
+Historical milestones below retain their original evidence and dates.
+
 ## General Orders
 
 1. Remain at the assigned mission.
