@@ -235,7 +235,7 @@ static stnlabz_module_result_t dispatcher_scoped_context_service(
  memset(&legacy,0,sizeof(legacy));
  memcpy(legacy.request,in->scoped.request,strlen(in->scoped.request)+1);
  return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,
-                           (void *)in->previous_answer);
+                           (void *)in);
 }
 
 /* [AI:GPT-6 | 2026-10-09] Executed, deterministic local qualification;
