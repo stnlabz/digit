@@ -195,7 +195,9 @@ static int authenticate_dm(const char *workspace,const char *slack_user,const ch
                            char *answer,size_t capacity){
  size_t i,slot=32;
  time_t now=time(NULL);
- if(!workspace||!slack_user||!input||!answer||!capacity)return 0;
+ if(!workspace||!slack_user||!input||!answer||!capacity||
+    !*workspace||!*slack_user||strlen(workspace)>=sizeof(sessions[0].team)||
+    strlen(slack_user)>=sizeof(sessions[0].user))return 0;
  pthread_mutex_lock(&mutex);
  for(i=0;i<32;i++){
   if(sessions[i].expires<=now){memset(&sessions[i],0,sizeof(sessions[i]));if(slot==32)slot=i;}
@@ -454,6 +456,7 @@ fail:
 }
 static stnlabz_module_result_t stop(void){
  if(active){stop_flag=1;pthread_join(thread,NULL);if(watch_active){pthread_join(watch_thread,NULL);watch_active=0;}active=0;}
+ pthread_mutex_lock(&mutex);erase(sessions,sizeof(sessions));pthread_mutex_unlock(&mutex);
  host=NULL;erase(&cfg,sizeof(cfg));erase(bot_id,sizeof(bot_id));curl_global_cleanup();
  return STNLABZ_MODULE_OK;
 }
