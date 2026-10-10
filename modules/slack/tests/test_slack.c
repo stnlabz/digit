@@ -30,11 +30,36 @@ static void test_fail_closed(void){
  assert(!process_event(j));
  json_object_put(j);
 }
+static void test_alert_outbox(void){
+ char path[]="/tmp/digit-alert-test-XXXXXX";
+ char message[ALERT_CAP]={0};
+ int fd=mkstemp(path);
+ assert(fd>=0);assert(close(fd)==0);
+ assert(unlink(path)==0);
+ snprintf(cfg.intel_channel,sizeof(cfg.intel_channel),"C_INTEL");
+ assert(alert_load(path,message,sizeof(message))==0);
+ assert(alert_save(path,"INTELLIGENCE BRIEF: new evidence"));
+ assert(alert_load(path,message,sizeof(message))==1);
+ assert(strcmp(message,"INTELLIGENCE BRIEF: new evidence")==0);
+ assert(alert_clear(path));
+ assert(alert_load(path,message,sizeof(message))==0);
+ assert(alert_save(path,"new alert"));
+ assert(chmod(path,0644)==0);
+ assert(alert_load(path,message,sizeof(message))<0);
+ assert(!alert_save(path,"must not overwrite insecure file"));
+ assert(!alert_clear(path));
+ assert(unlink(path)==0);
+ assert(alert_save(path,"restore"));
+ snprintf(cfg.intel_channel,sizeof(cfg.intel_channel),"C_OTHER");
+ assert(alert_load(path,message,sizeof(message))<0);
+ snprintf(cfg.intel_channel,sizeof(cfg.intel_channel),"C_INTEL");
+ assert(alert_clear(path));
+}
 int main(void){
  stnlabz_module_qualification_result_t result;
  assert(stnlabz_module_get_descriptor()->qualify(&result)==STNLABZ_MODULE_OK);
  assert(result.tests_executed>=10&&result.tests_failed==0);
- test_config();test_fail_closed();
+ test_config();test_fail_closed();test_alert_outbox();
  assert(!intelligence_change("INTELLIGENCE BRIEF\nInvestigations: 2 active; 0 opened; 0 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 1 opened; 1 distinct evidence IDs added\n"));
  assert(intelligence_change("Investigations: 2 active; 0 opened; 3 distinct evidence IDs added\n"));
