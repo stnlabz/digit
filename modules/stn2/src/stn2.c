@@ -778,27 +778,33 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
   }
   fclose(list);
  }
- /* Present findings by relevance, independent of the feed collection order. */
+ /* Render the collected intelligence as a sectioned Slack brief. */
  {
   char ordered[sizeof(r.report)]={0};
-  append(ordered,sizeof(ordered),"STN-2 Intelligence Brief\n");
+  char *cases=strstr(record_section,"  Case 1:");
+  char *cross=strstr(record_section,"Rictus overlap:");
+  char *change=strstr(record_section,"Sentinel records tracked:");
+  char *tail=r.report+strlen("STN-2 Intelligence Brief\n");
+  append(ordered,sizeof(ordered),"*STN-2 INTELLIGENCE BRIEF*\n\n");
+  append(ordered,sizeof(ordered),"*1. CURRENT INTELLIGENCE*\n");
   append(ordered,sizeof(ordered),intel_section);
-  {
-   char *change=strstr(record_section,"Sentinel records tracked:");
-   if(!change)change=strstr(record_section,"Sentinel baseline established:");
-   if(change){
-    append(ordered,sizeof(ordered),change);
-    *change=0;
-   }
-   append(ordered,sizeof(ordered),record_section);
-  }
+  append(ordered,sizeof(ordered),"\n*2. ACTIVE INVESTIGATIONS*\n");
+  if(cases){
+   char *end=cross&&cross>cases?cross:NULL;
+   if(end){char saved=*end;*end=0;append(ordered,sizeof(ordered),cases);*end=saved;}
+   else append(ordered,sizeof(ordered),cases);
+  }else append(ordered,sizeof(ordered),"No case evidence details available.\n");
+  append(ordered,sizeof(ordered),"\n*3. COLLECTION CHANGES*\n");
+  if(change)append(ordered,sizeof(ordered),change);
+  append(ordered,sizeof(ordered),"\n*4. CROSS-SOURCE CORRELATION*\n");
+  if(cross)append(ordered,sizeof(ordered),cross);
   if(log_summary[0])append(ordered,sizeof(ordered),log_summary);
-  append(ordered,sizeof(ordered),r.report+strlen("STN-2 Intelligence Brief\n"));
-  strncpy(r.report,ordered,sizeof(r.report)-1);
-  r.report[sizeof(r.report)-1]=0;
+  append(ordered,sizeof(ordered),"\n*5. EVIDENCE GAPS*\n");
+  if(tail[0])append(ordered,sizeof(ordered),tail);
+  append(ordered,sizeof(ordered),"\n*6. ASSESSMENT*\n");
+  append(ordered,sizeof(ordered),"Observed indicators do not establish compromise or confirmed incident linkage.\n");
+  memcpy(r.report,ordered,sizeof(r.report));
  }
- append(r.report,sizeof(r.report),
-  "Confidence: observed indicators only; no verified compromise established.\n");
  free(buf);memcpy(output,&r,sizeof(r));*used=sizeof(r);
  return STNLABZ_MODULE_OK;
 }
@@ -835,7 +841,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,2,3,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,2,4,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
