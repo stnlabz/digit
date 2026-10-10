@@ -638,7 +638,7 @@ static int investigation_update(const char *raw,const char *path,char *report,si
   if(!ip||!json_object_object_get_ex(entry,"evidence_ids",&evidence)||
      !json_object_is_type(evidence,json_type_array))continue;
   n=(size_t)json_object_array_length(evidence);
-  snprintf(line,sizeof(line),"  Case %zu: source IP=%.*s; opening relevance=HIGH; severity=%.*s; evidence IDs=%zu\n",
+  snprintf(line,sizeof(line),"\n*Investigation %zu* | Source IP: `%.*s` | HIGH relevance | %.*s severity | %zu evidence IDs\n",
            i+1,45,ip,16,severity?severity:"unknown",n);
   append(report,cap,line);
   shown=n<3?n:3;
@@ -646,7 +646,7 @@ static int investigation_update(const char *raw,const char *path,char *report,si
    struct json_object *v=json_object_array_get_idx(evidence,(int)k);
    const char *id=json_object_is_type(v,json_type_string)?json_object_get_string(v):NULL;
    if(id){
-    snprintf(line,sizeof(line),"    Observation ID: %.*s\n",64,id);
+    snprintf(line,sizeof(line),"    Evidence: `%.*s`\n",64,id);
     append(report,cap,line);
     {
      size_t m;
@@ -781,7 +781,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  /* Render the collected intelligence as a sectioned Slack brief. */
  {
   char ordered[sizeof(r.report)]={0};
-  char *cases=strstr(record_section,"  Case 1:");
+  char *cases=strstr(record_section,"\n*Investigation 1*");
   char *cross=strstr(record_section,"Rictus overlap:");
   char *change=strstr(record_section,"Sentinel records tracked:");
   char *tail=r.report+strlen("STN-2 Intelligence Brief\n");
