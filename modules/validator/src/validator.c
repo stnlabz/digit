@@ -246,33 +246,53 @@ static int evidence_divergence(const char *question, const char *candidate, cons
 /* [AI:GPT-6 | 2026-10-10] A definition answer needs a subject-to-
  * definition relation in evidence. Merely mentioning the subject is not
  * evidence that the sentence defines it. Conservative: reject if unclear. */
+/* [AI:GPT-6 | 2026-10-10] Definition claims require an attested
+ * subject/predicate relation, not a vocabulary-only match. */
+static int bounded_word_ci(const char *begin,size_t length,const char *word)
+{
+ size_t i;
+ if(!begin||!word||strlen(word)!=length)return 0;
+ for(i=0;i<length;++i)
+  if(tolower((unsigned char)begin[i])!=tolower((unsigned char)word[i]))return 0;
+ return 1;
+}
 static int unsupported_definition(const char *question,const char *evidence)
 {
- const char *p=question,*subject;char token[VALIDATOR_TERM_MAX];
+ const char *p=question,*subject,*e;
  size_t n;
  if(!question||!evidence)return 0;
  while(isspace((unsigned char)*p))++p;
- if(!contains_ci(p," mean?")&&!contains_ci(p," means?"))return 0;
  if(strncasecmp(p,"what does ",10)!=0)return 0;
  p+=10;subject=p;
  while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
  n=(size_t)(p-subject);
- if(!n||n>=sizeof(token))return 1;
- memcpy(token,subject,n);token[n]=0;
- /* The subject must be in the attested relation, not just anywhere
-  * in a surrounding technical paragraph. */
- {const char *e=evidence;while(*e){
-   while(*e&&!isalnum((unsigned char)*e)&&*e!='_'&&*e!='-')++e;
-   if(!*e)break;
-   if(strncasecmp(e,token,n)==0 &&
-      !isalnum((unsigned char)e[n])&&e[n]!='_'&&e[n]!='-'){
-    const char *after=e+n;
-    while(isspace((unsigned char)*after))++after;
-    if(*after=='='||strncasecmp(after,"means ",6)==0||
-       strncasecmp(after,"is ",3)==0)return 0;
+ if(!n||!isspace((unsigned char)*p))return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"mean",4)!=0)return 0;
+ p+=4;while(isspace((unsigned char)*p))++p;
+ if(*p!='?'&&*p!='.'&&*p!='\0')return 0;
+ if(*p&&p[1])return 0;
+ for(e=evidence;*e;){
+  const char *word,*after;
+  size_t len;
+  while(*e&&!isalnum((unsigned char)*e)&&*e!='_'&&*e!='-')++e;
+  word=e;
+  while(*e&&(isalnum((unsigned char)*e)||*e=='_'||*e=='-'))++e;
+  len=(size_t)(e-word);
+  if(!len)break;
+  if(len!=n||!bounded_word_ci(word,len,subject))continue;
+  after=e;
+  while(isspace((unsigned char)*after))++after;
+  if(*after=='='||*after==',') {
+   /* A comma-separated alias list is not a predicate on its own. */
+   if(*after=='=')return 0;
+   if(*after==','){
+    const char *eq=strchr(after,'=');
+    if(eq&&!(memchr(after,'\n',(size_t)(eq-after))))return 0;
    }
-   while(*e&&(isalnum((unsigned char)*e)||*e=='_'||*e=='-'))++e;
   }
+  if(strncasecmp(after,"means ",6)==0||strncasecmp(after,"is ",3)==0)
+   return 0;
  }
  return 1;
 }
@@ -352,7 +372,8 @@ static stnlabz_module_result_t validator_qualify(stnlabz_module_qualification_re
         {"What is the service state?","","The service is active.",1},
         {"What is the service state?","The service is broken.","The service is active.",1},
         {"What does widget mean?","An object has a type.","An object does not mean it has no type.",1},
-        {"What does widget mean?","A widget is a component.","widget means component",0}
+        {"What does widget mean?","A widget is a component.","widget means component",0},
+        {"What does widget mean?","A widget is a component.","widget, widget, = component, component",0}
     };
     size_t i;unsigned int passed=0;
     if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -406,7 +427,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 6,
+        "validator", "Validator", 1, 0, 7,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
