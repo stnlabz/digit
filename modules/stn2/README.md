@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.1.2 (intelligence brief ordering)
+# STN-2 Intelligence Module — version 1.2.0 (HIGH relevance investigation state)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -103,3 +103,9 @@ The Slack-facing `@Digit gen intel` report now prioritizes observed Sentinel cat
 ## Revision 1.1.2 — Intelligence brief ordering
 
 Report presentation now leads with recent Sentinel observations and trends, followed by historical threat categories and reported indicators, historical aggregate changes, distinct-ID changes, Rictus overlap evidence, and the qualified assessment. Source collection, prior baselines and module services remain unchanged; this is an editorial-only STN-2 module change. Qualification must be repeated on Linux before deployment.
+
+## Version 1.2.0 — HIGH-triggered investigation records
+
+This is the first bounded, persistent investigation-state implementation. A new provisional investigation opens **only** for a Sentinel `/threats` record carrying an explicit top-level `severity: "HIGH"` and usable top-level `ip` plus stable `id`. The module does **not** infer HIGH from general threat types, frequency, or generic pattern matches. Related records with the same source IP join an already-open case regardless of their reported severity, with stable observation IDs deduplicated across repeated collection cycles. Case state is stored in `/opt/digit/auth/stn2/investigations.json` as an owner-controlled private 0600 JSON file and written using a temporary file and rename. The brief reports current open case count, newly opened cases and newly admitted evidence IDs. Low-severity observations cannot initiate cases, and failed state access is reported rather than silently asserting success.
+
+**Important boundaries:** The currently demonstrated live Threat API schema has **not** established a `severity` field. If it does not provide explicit `HIGH`, this implementation will open no investigations; HIGH relevance mapping requires separate source-backed criteria and human approval. Case keys currently use top-level source IP as a *provisional* linkage indicator, not confirmed actor identity, independent corroboration or incident proof. The implementation does not yet store full raw evidence, timestamps, status transitions, watch schedules or investigation conclusions; these are outstanding and are not claimed as delivered. Concurrency and file-write failure testing remain outstanding. Compile, regression testing and live verification are required before qualification.
