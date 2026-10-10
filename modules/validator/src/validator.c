@@ -297,6 +297,70 @@ static int unsupported_definition(const char *question,const char *evidence)
  return 1;
 }
 
+/* [AI:GPT-6 | 2026-10-10] Verbatim relationship support for
+ * definition answers. A candidate's predicate must match the attested
+ * meaning, not merely repeat the question's subject. */
+static int word_present_ci(const char *text,const char *word,size_t length)
+{
+ const char *p=text,*start;
+ if(!text||!word||!length)return 0;
+ while(*p){
+  while(*p&&!isalnum((unsigned char)*p)&&*p!='_'&&*p!='-')++p;
+  start=p;
+  while(*p&&(isalnum((unsigned char)*p)||*p=='_'||*p=='-'))++p;
+  if((size_t)(p-start)==length&&bounded_word_ci(start,length,word))return 1;
+ }
+ return 0;
+}
+static int is_definition_form(const char *question)
+{
+ const char *p=question;
+ if(!p)return 0;
+ while(isspace((unsigned char)*p))++p;
+ return strncasecmp(p,"what does ",10)==0&&contains_ci(p," mean");
+}
+static int definition_answer_diverges(const char *question,const char *candidate,
+                                     const char *evidence)
+{
+ const char *p=question,*subject,*rhs=NULL,*e;
+ size_t subject_length,meaning_length;
+ if(!is_definition_form(question))return 0;
+ if(!candidate||!evidence)return 1;
+ while(isspace((unsigned char)*p))++p;
+ p+=10;subject=p;
+ while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+ subject_length=(size_t)(p-subject);
+ if(!subject_length||!word_present_ci(candidate,subject,subject_length))return 1;
+ /* The first attested authorized subject relation determines the
+  * predicate; ambiguous/multiple relations are rejected upstream. */
+ for(e=evidence;*e;){
+  const char *start,*after,*eq;
+  size_t n;
+  while(*e&&!isalnum((unsigned char)*e)&&*e!='_'&&*e!='-')++e;
+  start=e;
+  while(*e&&(isalnum((unsigned char)*e)||*e=='_'||*e=='-'))++e;
+  n=(size_t)(e-start);
+  if(!n)break;
+  if(n!=subject_length||!bounded_word_ci(start,n,subject))continue;
+  after=e;
+  while(isspace((unsigned char)*after))++after;
+  if(*after=='=')rhs=after+1;
+  else if(strncasecmp(after,"means ",6)==0)rhs=after+6;
+  else if(strncasecmp(after,"is ",3)==0)rhs=after+3;
+  else if(*after==','){
+   eq=strchr(after,'=');
+   if(eq&&!memchr(after,'\n',(size_t)(eq-after)))rhs=eq+1;
+  }
+  if(rhs)break;
+ }
+ if(!rhs)return 1;
+ while(*rhs&&!(isalnum((unsigned char)*rhs)||*rhs=='_'||*rhs=='-'))++rhs;
+ p=rhs;
+ while(isalnum((unsigned char)*p)||*p=='_'||*p=='-')++p;
+ meaning_length=(size_t)(p-rhs);
+ return !meaning_length||!word_present_ci(candidate,rhs,meaning_length);
+}
+
 static stnlabz_module_result_t inbound_service(const void *request, size_t request_size, void *response, size_t response_size, size_t *response_used, void *context)
 {
     const digit_validator_inbound_request_t *in;
@@ -341,11 +405,12 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
 
     if (in->candidate[0] == '\0') snprintf(out->reason, sizeof(out->reason), "EMPTY_RESPONSE");
     else if (unsupported_definition(question, in->evidence)) snprintf(out->reason, sizeof(out->reason), "DEFINITION_RELATION_MISSING");
+    else if (definition_answer_diverges(question,in->candidate,in->evidence)) snprintf(out->reason,sizeof(out->reason),"DEFINITION_ANSWER_DIVERGENCE");
     else if (nearly_echo(question, in->candidate)) snprintf(out->reason, sizeof(out->reason), "ECHO");
     else if (asks_explain(question) && weak_explanation(in->candidate)) snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
     else if (contradictory_relationship(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
     else if (unsupported_primary_responsibility(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "OVERBROAD_CLAIM");
-    else if (evidence_divergence(question, in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "EVIDENCE_DIVERGENCE");
+    else if (!is_definition_form(question) && evidence_divergence(question, in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "EVIDENCE_DIVERGENCE");
     else if (!evidence_supports(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
     else {
         out->status = DIGIT_VALIDATOR_PASS;
@@ -373,7 +438,8 @@ static stnlabz_module_result_t validator_qualify(stnlabz_module_qualification_re
         {"What is the service state?","The service is broken.","The service is active.",1},
         {"What does widget mean?","An object has a type.","An object does not mean it has no type.",1},
         {"What does widget mean?","A widget is a component.","widget means component",0},
-        {"What does widget mean?","A widget is a component.","widget, widget, = component, component",0}
+        {"What does widget mean?","A widget is a component.","widget, widget, = component, component",0},
+        {"What does widget mean?","A widget is a gadget.","widget means component",1}
     };
     size_t i;unsigned int passed=0;
     if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -427,7 +493,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 7,
+        "validator", "Validator", 1, 0, 8,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
