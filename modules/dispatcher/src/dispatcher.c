@@ -226,12 +226,13 @@ static stnlabz_module_result_t dispatcher_scoped_context_service(
  if(!in||size!=sizeof(*in)||!response||!used||
     capacity<sizeof(digit_dispatcher_result_t)||
     !dispatcher_scoped_valid(&in->scoped)||
-    !memchr(in->previous_answer,0,sizeof(in->previous_answer)))
+    !memchr(in->previous_answer,0,sizeof(in->previous_answer))||
+    !memchr(in->previous_user_message,0,sizeof(in->previous_user_message)))
   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  /* Channel context is not sourced from a verified channel-history
   * provider yet. Never use a caller-provided prior turn in that scope. */
  if(in->scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE&&
-    in->previous_answer[0])return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    (in->previous_answer[0]||in->previous_user_message[0]))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  memset(&legacy,0,sizeof(legacy));
  memcpy(legacy.request,in->scoped.request,strlen(in->scoped.request)+1);
  return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,
@@ -294,5 +295,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
