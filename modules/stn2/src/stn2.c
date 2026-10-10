@@ -354,6 +354,19 @@ static int rictus_load(const char *path,rictus_window_t *window){
  window->available=1;
  return 1;
 }
+static const char *json_text_member(struct json_object *obj,const char *key){
+ struct json_object *v=NULL;
+ if(!obj||!json_object_object_get_ex(obj,key,&v)||!json_object_is_type(v,json_type_string))return NULL;
+ return json_object_get_string(v);
+}
+/* Case-sensitive literal tokens: a path match suggests shared targeting only. */
+static int rictus_window_indicator(const rictus_window_t *w,const char *indicator){
+ size_t i,n;
+ if(!w||!w->available)return -1;
+ if(!indicator||(n=strlen(indicator))<4||n>160)return 0;
+ for(i=0;i<w->count;i++)if(strstr(w->lines[i],indicator))return 1;
+ return 0;
+}
 static int rictus_window_match(const rictus_window_t *window,const char *ip){
  size_t i;
  if(!window||!window->available)return -1;
@@ -367,6 +380,7 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
  struct stat st;
  char line[256],tmp[600],idbuf[80];
  size_t i,new_count=0,seen=0,reported=0,ip_checked=0,ip_matches=0,ip_samples=0;
+ size_t path_checked=0,path_matches=0,path_samples=0;
  rictus_window_t *window=NULL;
  int rictus_available=1;
  int present=0,fd=-1,ok=0;
@@ -433,6 +447,24 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
     }
    }
   }
+  if(rictus_path&&window&&window->available){
+   struct json_object *details=json_member_object(item,"details");
+   const char *path_value=json_text_member(details,"request_url");
+   int match=rictus_window_indicator(window,path_value);
+   if(path_value&&strlen(path_value)>=4&&strlen(path_value)<=160){
+    path_checked++;
+    if(match==1){
+     path_matches++;
+     if(path_samples<2){
+      snprintf(line,sizeof(line),
+        "  Path candidate: record=%.*s path=%.*s (literal Rictus overlap)\n",
+        64,identifier,100,path_value);
+      append(out,cap,line);
+      path_samples++;
+     }
+    }
+   }
+  }
   duplicate=0;
   if(present)for(j=0;j<json_object_array_length(previous);j++){
    const char *oldid=json_object_get_string(json_object_array_get_idx(previous,j));
@@ -476,6 +508,14 @@ static int threat_records(const char *raw,char *out,size_t cap,const char *path,
             ip_checked,ip_matches);
    append(out,cap,line);
   }
+  snprintf(line,sizeof(line),
+   "Historical path assessment: %zu usable request paths checked; %zu literal Rictus matches\n",
+   path_checked,path_matches);
+  append(out,cap,line);
+  if(!rictus_available)append(out,cap,"Investigation outcome: INSUFFICIENT EVIDENCE (Rictus unavailable)\n");
+  else if(ip_matches||path_matches)
+   append(out,cap,"Investigation outcome: CANDIDATE OVERLAP; verify timestamps, roles and independent provenance\n");
+  else append(out,cap,"Investigation outcome: NO OVERLAP IN BOUNDED RICTUS WINDOW; historical relationship unresolved\n");
   append(out,cap,"Candidate matches are textual overlap, not proof of common incident or compromise.\n");
  }
  json_object_object_add(snapshot,"ids",ids);ids=NULL;
@@ -631,7 +671,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,10,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,1,0,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
