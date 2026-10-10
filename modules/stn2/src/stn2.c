@@ -106,7 +106,6 @@ static void finish_scan(response_t *b){
 }
 static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
  response_t *b=ctx;size_t bytes;
- (void)ptr;
  if(n&&size>SIZE_MAX/n){b->exceeded=1;return 0;}
  bytes=size*n;
  if(bytes>SOURCE_LIMIT-b->len){b->exceeded=1;return 0;}
@@ -268,7 +267,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,3,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,4,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
