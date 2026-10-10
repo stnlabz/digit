@@ -210,18 +210,6 @@ static int intel_report(const char *raw,char *out,size_t capacity){
  analysis=json_member_object(root,"analysis");
  types=json_member_object(stats,"by_type");
  if(!json_u64(stats,"total_threats",&total)||!types){json_object_put(root);return 0;}
- snprintf(line,sizeof(line),"Sentinel assessment (reported historical total): %lld observations\n",(long long)total);
- append(out,capacity,line);
- json_object_object_foreach(types,key,val){
-  int64_t number;
-  if(!json_object_is_type(val,json_type_int))continue;
-  number=json_object_get_int64(val);
-  if(number<0)continue;
-  snprintf(line,sizeof(line),"  %.*s: %lld\n",64,key,(long long)number);
-  append(out,capacity,line);
-  count++;
- }
- if(!count){json_object_put(root);return 0;}
  if(json_u64(analysis,"total_24h",&day)){
   snprintf(line,sizeof(line),"Sentinel reported last 24h: %lld observations\n",(long long)day);
   append(out,capacity,line);
@@ -236,6 +224,18 @@ static int intel_report(const char *raw,char *out,size_t capacity){
    }
   }
  }
+ snprintf(line,sizeof(line),"Sentinel assessment (reported historical total): %lld observations\n",(long long)total);
+ append(out,capacity,line);
+ json_object_object_foreach(types,key,val){
+  int64_t number;
+  if(!json_object_is_type(val,json_type_int))continue;
+  number=json_object_get_int64(val);
+  if(number<0)continue;
+  snprintf(line,sizeof(line),"  %.*s: %lld\n",64,key,(long long)number);
+  append(out,capacity,line);
+  count++;
+ }
+ if(!count){json_object_put(root);return 0;}
  patterns=NULL;
  if(json_object_object_get_ex(root,"patterns",&patterns)&&
     json_object_is_type(patterns,json_type_array)){
@@ -576,6 +576,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  static const char *const endpoints[]={"/threats","/events","/intel","/patterns","/rss"};
  const digit_stn2_request_t *in=request;digit_stn2_result_t r={0};response_t *buf;size_t i;long http=0;fetch_status_t status;
  FILE *list;char url[1024],line[1024],log_summary[256];
+ char intel_section[DIGIT_STN2_TEXT_MAX]={0},record_section[DIGIT_STN2_TEXT_MAX]={0};
  (void)ctx;
  if(!owner||!in||req_size!=sizeof(*in)||!output||output_size<sizeof(r)||!used||
     !memchr(in->command,0,sizeof(in->command))||!memchr(in->actor,0,sizeof(in->actor))||
@@ -584,7 +585,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  buf=calloc(1,sizeof(*buf));if(!buf)return STNLABZ_MODULE_ERR_START_FAILED;
  append(r.report,sizeof(r.report),"STN-2 Intelligence Brief\n");
  if(rictus_summary(settings.log,log_summary,sizeof(log_summary))){
-  r.sources_ok++;append(r.report,sizeof(r.report),log_summary);
+  r.sources_ok++;
  }else add_source_result(&r,"Rictus",FETCH_NETWORK,0,0);
  for(i=0;i<sizeof(endpoints)/sizeof(endpoints[0]);i++){
   if(snprintf(url,sizeof(url),"%s%s",settings.base,endpoints[i])>=(int)sizeof(url))
@@ -596,16 +597,16 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    status=buf->record_json||strcmp(endpoints[i],"/threats")?https_fetch(url,buf,&http):FETCH_NETWORK;
    add_source_result(&r,endpoints[i],status,buf->len,http);
    if(!strcmp(endpoints[i],"/threats")&&status==FETCH_OK){
-    if(!threat_records(buf->record_json,r.report,sizeof(r.report),RECORD_PATH,settings.log))
-     append(r.report,sizeof(r.report),"Threat record comparison: unavailable or invalid source schema\n");
+    if(!threat_records(buf->record_json,record_section,sizeof(record_section),RECORD_PATH,settings.log))
+     append(record_section,sizeof(record_section),"Threat record comparison: unavailable or invalid source schema\n");
    }
    free(buf->record_json);buf->record_json=NULL;
    if(status==FETCH_OK&&strcmp(endpoints[i],"/intel")==0){
     if(buf->intel_len<sizeof(buf->intel_json)&&
-       intel_report(buf->intel_json,r.report,sizeof(r.report))){
-      (void)intel_state(buf->intel_json,r.report,sizeof(r.report),STATE_PATH);
+       intel_report(buf->intel_json,intel_section,sizeof(intel_section))){
+      (void)intel_state(buf->intel_json,intel_section,sizeof(intel_section),STATE_PATH);
       
-    }else append(r.report,sizeof(r.report),"Sentinel /intel schema: UNPARSEABLE\n");
+    }else append(intel_section,sizeof(intel_section),"Sentinel /intel schema: UNPARSEABLE\n");
    }
    if(status==FETCH_OK&&buf->unique_cves){
     snprintf(finding,sizeof(finding),"  CVE references (%u textual mentions; unverified):\n",buf->cve_mentions);
@@ -631,6 +632,17 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    status=https_fetch(line,buf,&http);add_source_result(&r,label,status,buf->len,http);checked++;
   }
   fclose(list);
+ }
+ /* Present findings by relevance, independent of the feed collection order. */
+ {
+  char ordered[DIGIT_STN2_TEXT_MAX]={0};
+  append(ordered,sizeof(ordered),"STN-2 Intelligence Brief\n");
+  append(ordered,sizeof(ordered),intel_section);
+  append(ordered,sizeof(ordered),record_section);
+  if(log_summary[0])append(ordered,sizeof(ordered),log_summary);
+  append(ordered,sizeof(ordered),r.report+strlen("STN-2 Intelligence Brief\n"));
+  strncpy(r.report,ordered,sizeof(r.report)-1);
+  r.report[sizeof(r.report)-1]=0;
  }
  append(r.report,sizeof(r.report),
   "Confidence: observed indicators only; no verified compromise established.\n");
@@ -670,7 +682,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,1,1,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,1,2,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
