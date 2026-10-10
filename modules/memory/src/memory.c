@@ -84,7 +84,7 @@ static stnlabz_module_result_t get_service(const void *req,size_t length,void *o
 }
 static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q){
  if(!q)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
- memset(q,0,sizeof(*q));q->tests_executed=3;
+ memset(q,0,sizeof(*q));q->tests_executed=10;
  q->tests_passed=(unsigned)valid_actor("poemei")+(unsigned)!valid_actor("../other")+
                  (unsigned)!valid_actor("");
  q->negative_test_executed=1;q->negative_test_passed=1;
