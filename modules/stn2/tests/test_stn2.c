@@ -124,6 +124,8 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(high,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 1 opened; 1 distinct")!=NULL);
+  assert(strstr(brief,"Case 1: source IP=192.0.2.9; opening relevance=HIGH; severity=MEDIUM; evidence IDs=1")!=NULL);
+  assert(strstr(brief,"Observation ID: high")!=NULL);
   {
    struct json_object *saved=json_object_from_file(path),*cases=NULL,*entry=NULL;
    assert(saved&&json_object_object_get_ex(saved,"cases",&cases));
@@ -135,6 +137,8 @@ int main(void){
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 1 distinct")!=NULL);
+  assert(strstr(brief,"evidence IDs=2")!=NULL);
+  assert(strstr(brief,"Observation ID: follow")!=NULL);
   brief[0]=0;
   assert(investigation_update(follow,path,brief,sizeof(brief)));
   assert(strstr(brief,"1 active; 0 opened; 0 distinct")!=NULL);
