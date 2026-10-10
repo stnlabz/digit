@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.0.2 (qualification fix)
+# STN-2 Intelligence Module — version 1.0.3 (CVE reference extraction)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -51,3 +51,7 @@ Corrected false UNAVAILABLE results for large Threat API responses (such as ~613
 ## Revision 1.0.2
 
 Fixes the streaming test assertion by capturing the remaining capacity before the callback mutates the received-byte counter. Separates misleadingly indented conditional statements in the module source. Module descriptor bumped to 1.0.2. Native build and runtime qualification still require verification.
+
+## Revision 1.0.3
+
+The bounded streaming collector now detects syntactically recognizable CVE identifiers across transfer chunk boundaries in each retrieved Threat API feed and reports the number of textual mentions plus up to eight distinct examples per source. Repeated identifiers within a feed are deduplicated for display. These are **unverified text references**, not security findings, and not yet evidence of affected products or exploitation. No JSON schema interpretation, historical correlation, severity determination, affected-product analysis, durable intelligence record or completed weekly brief is claimed. Tests cover split-chunk extraction, duplicates, and prior transfer limits.
