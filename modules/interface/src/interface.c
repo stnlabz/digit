@@ -454,17 +454,39 @@ static int interface_alert_channel_messages(int client,const char *channel,
     if(n<0||(size_t)n>=sizeof(json))goto invalid;
     off=(size_t)n;
     for(i=0;i<result.count;++i){
-        char id[160],detail[2400],summary[700],source[200],content[4096],escaped[8200];
+        char id[160],content[4096],escaped[8200],module[64]="UNKNOWN";
         const digit_alert_t *a=&result.alerts[i];
-        interface_json_escape(a->id,id,sizeof(id));
-        interface_json_escape(a->summary,summary,sizeof(summary));
-        interface_json_escape(a->source,source,sizeof(source));
-        interface_json_escape(a->detail,detail,sizeof(detail));
-        n=snprintf(content,sizeof(content),"[%s] %s | Source: %s | Time: %llu | ID: %s%s%s%s",
-                   interface_alert_severity_string(a->severity),summary,
-                   source[0]?source:"unspecified",a->created_at,id,
-                   detail[0]?" | ":"",detail,a->acknowledged?" [ACK]":"");
+        const char *source=a->source;
+        const char *prefix="module:";
+        size_t k;
+        /* [AI:GPT-6 | 2026-10-09] Project verified Core alert evidence
+         * into the Desktop incident-card contract. A source is NOT a module
+         * identity unless explicitly tagged module:<id>. Missing provenance
+         * and causes stay UNKNOWN, not fabricated. */
+        if(strncmp(source,prefix,strlen(prefix))==0){
+            const char *candidate=source+strlen(prefix);
+            size_t length=strlen(candidate);
+            int valid=length>0&&length<sizeof(module);
+            for(k=0;k<length;++k)
+                if(!((candidate[k]>='a'&&candidate[k]<='z')||
+                     (candidate[k]>='A'&&candidate[k]<='Z')||
+                     (candidate[k]>='0'&&candidate[k]<='9')||
+                     candidate[k]=='_'||candidate[k]=='-'))valid=0;
+            if(valid)snprintf(module,sizeof(module),"%s",candidate);
+        }
+        /* Core stores source, detail and state, but has no separate module
+         * version, verified cause or action fields. Preserve that distinction. */
+        n=snprintf(content,sizeof(content),
+          "severity: %s\\nsummary: %s\\nmodule: %s\\nsubsystem: %s\\n"
+          "version: UNKNOWN\\nevent_id: %s\\ntimestamp: %llu\\n"
+          "cause: UNKNOWN\\naction: UNKNOWN\\n"
+          "operational_state: %s\\nacknowledged: %s\\n"
+          "detail: %s",
+          interface_alert_severity_string(a->severity),a->summary,
+          module,a->source,a->id,a->created_at,a->operational_state,
+          a->acknowledged?"yes":"no",a->detail[0]?a->detail:"UNKNOWN");
         if(n<0||(size_t)n>=sizeof(content))goto invalid;
+        interface_json_escape(a->id,id,sizeof(id));
         interface_json_escape(content,escaped,sizeof(escaped));
         n=snprintf(json+off,sizeof(json)-off,
           "%s{\"id\":\"%s\",\"channel_id\":\"%s\",\"created_at\":%llu,\"origin\":\"digit\",\"body\":\"%s\"}",
