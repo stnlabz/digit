@@ -132,3 +132,7 @@ Dispatcher 1.3.7 accepts a bounded `previous_user_message` alongside `previous_a
 ### Digit Memory v1.0.0 (candidate; Linux qualification pending)
 
 An additive `modules/memory` service provides durable account-keyed private personal statements across Slack 1.0.9 and Interface 1.7.9, provided both access the same Digit installation and use the same authenticated Digit account. Currently captures authenticated `remember ...` and `I am ...` messages and retrieves the most recent record via `What do you remember about me?`. This is **not** generalized autonomous learning, complete chat-history recall, distributed synchronization, or a production-qualified privacy subsystem. Service activation, storage authorization, Linux tests, and live qualification are still required.
+
+### Conversational memory recall presentation (2026-10-10)
+
+Interface 1.7.10 and Slack 1.0.10 share bounded conversational formatting for authenticated `What do you remember about me?` retrieval. Stored records remain unchanged; rendering uses prior saved text only and does not add profile facts. Test/deployment qualification pending.
