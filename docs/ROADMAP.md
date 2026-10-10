@@ -1,11 +1,11 @@
 # Digit Development Roadmap
 
 **Organization:** STN-LABZ  
-**Status:** APPROVED — PM 20261009:0123 UTC  
-**Last confirmed active Interface:** 1.5.10 — Qualification GREEN / HOTLOAD_ACTIVE (2026-10-09 15:25:50 UTC)  
-**Latest tested Interface:** 1.5.10 — 16/16 milestone checks, 37/37 historical suites; zero failures  
+**Status:** APPROVED historical roadmap; language-pipeline acceptance gate OPEN (2026-10-09)  
+**Historical confirmed active Interface milestone:** 1.5.10 — Qualification GREEN / HOTLOAD_ACTIVE (2026-10-09 15:25:50 UTC); later versions require separate evidence  
+**Historical tested Interface milestone:** 1.5.10 — 16/16 milestone checks, 37/37 historical suites; later test evidence summarized below  
 **Prepared:** 2026-10-08  
-**Evidence updated:** 2026-10-09 UTC; operator-reported milestones through Interface 1.5.10
+**Evidence updated:** 2026-10-09; historical milestones, more recent language CI and live operator interactions distinguished below
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
 
@@ -119,6 +119,30 @@ These observations establish a baseline, not a claim that every project-wide tes
 
 **Acceptance principle:** Natural conversation and evidence-based recommendations may improve; **authority remains deterministic, explicitly delegated, and human controlled**. Test passing never substitutes for demonstrated runtime or mission behavior.
 
+## Current priority — coordinated language-pipeline recovery (2026-10-09)
+
+**Status: OPEN. Acceptance: NOT ESTABLISHED. Release promotion: BLOCKED pending evidence.**
+
+This section updates current engineering priorities without rewriting the historical Interface milestones. Earlier Interface GREEN/ACTIVE entries establish only their individual tested scope. The language system is **Corpus → Interpretation → Intent → Dispatcher → Response → Validator**; Interface is the authenticated ingress and scope boundary. The Core is not part of the authorized language-module repair.
+
+### Evidence and defects
+
+- **Observed PASS:** “Digit are you here?” → “Yes I am here”; “Digit, who are you?” → “I am Digit, the STN-Labz Autonomous Engineering Agent.”; “What does wut mean?” → “wut means What.”
+- **Observed FAIL:** “What's your name and what do you do?” → “I don't have enough grounded information to answer that.” Digit did not combine related known facts into an answer.
+- **Previous CI evidence:** Language-pipeline GitHub Actions run `38013641615` passed module build/test stages. Its success does **not** establish a complete end-to-end pass of the 14-case Codex behavioral audit or live acceptance.
+- **Open system-level failure modes:** Multi-clause request handling; deterministic routing across Intent, Dispatcher and Response; supported evidence selection and response composition; independent Validator grounding; learned-relationship grammar and paraphrase handling; authorized conversational context continuity; negative tests for unrelated evidence and unsupported actions. No single module's GREEN state closes these findings.
+- **Separate operational incident:** On restart, Interface qualification persistence failed at 128 stored version records even though previous live hotload events reported Interface qualified. `include/qualification.h` currently fixes inventory capacity at 128. There is no approved qualification-history truncation policy. A durable, history-preserving Core fix requires express human authorization, separately from this language-pipeline repair.
+
+### Required work package — one coordinated release
+
+1. **Reconcile cross-module contracts first.** Define the request envelope, normalized intent, authorized evidence, composition rules, validation input, response provenance and error/UNKNOWN treatment across all six language modules, with Interface-supplied authenticated context. Preserve stable service consumers and Core/ABI interfaces.
+2. **Implement as a unit.** Repair interdependent components together, without hardcoded subject-specific identities, canned question-answer tables, hidden authority inference or unauthorized Corpus modifications. A combined request may require multiple independently supported claims; unsupported portions must remain explicit.
+3. **Run one complete executable qualification matrix.** Replay all 14 Codex audit cases; preserve the four live operator exchanges; include paraphrases, multi-part fact composition, misleading/irrelevant evidence, exact learned definitions, negative action-routing cases, private-context separation, channel and cross-organization denial, malformed requests and historical regressions. Require reproducible inputs, expected predicates, actual outputs and failure reports.
+4. **Close failures within the same candidate.** Rebuild and rerun all impacted module tests plus the complete integrated suite after any change. Do not advance the release based only on module-specific GREEN or a favorable subset.
+5. **Promote only with evidence.** Record COMMITTED → TESTED → QUALIFIED → ACTIVE separately. Integrated tests, operator acceptance and relevant running-system observations determine disposition. No automatic production promotion, no silent scope expansion and no changes to Core without explicit approval.
+
+**Release objective:** A deterministic, evidence-grounded language pipeline that understands ordinary and multi-part questions without inventing facts, escaping authorization boundaries or regressing previously accepted conversations. **This is the next engineering gate, not a claim of completion.**
+
 ## Development phases
 
 ### Phase 1 — Interface foundation
@@ -231,9 +255,9 @@ These findings do **not** revoke the observed Interface 1.4.7 GREEN/ACTIVE runti
 
 ---
 
-**Roadmap disposition:** Existing APPROVED planning document; evidence update dated 2026-10-09 UTC, not a new policy approval.  
+**Roadmap disposition:** Existing APPROVED planning document; current language-pipeline recovery is OPEN pending integrated qualification. This update is not a new policy approval.  
 **Last confirmed active Interface:** 1.5.10 (operator-reported 2026-10-09 15:25:50 UTC).  
 **Latest operator-qualified milestone:** 1.5.10 (16/16 dedicated assertions, 37/37 historical suites, GREEN / ACTIVE).  
-**Next development series:** 1.6.x — planning, implementation and qualification pending.
+**Next development priority:** One coordinated language-pipeline recovery and integrated acceptance gate; historical version-series planning remains for reference.
 
 *Engineering systems worthy of trust when trust matters most.*
