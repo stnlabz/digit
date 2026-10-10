@@ -1,0 +1,26 @@
+name: STN-2 native C module
+on:
+  push:
+    paths:
+      - "modules/stn2/**"
+      - "modules/slack/**"
+      - ".github/workflows/stn2-c.yml"
+  pull_request:
+    paths:
+      - "modules/stn2/**"
+      - "modules/slack/**"
+      - ".github/workflows/stn2-c.yml"
+  workflow_dispatch:
+jobs:
+  native-qualification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libjson-c-dev
+      - name: External ABI
+        run: git clone --depth 1 https://github.com/stnlabz/ABI.git ../ABI
+      - name: STN-2 qualification
+        run: make -C modules/stn2 test all
+      - name: Slack integration regression
+        run: make -C modules/slack test all
