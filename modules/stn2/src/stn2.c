@@ -6,15 +6,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include "stn2.h"
 #define CONFIG_PATH "/opt/digit/auth/stn2/stn2.conf"
-#define SOURCE_MAX 32768
+#define SOURCE_LIMIT (8U * 1024U * 1024U)
 #define LOG_TAIL_LINES 120
 typedef struct {int enabled;char log[512],base[512],advisories[512];} settings_t;
-typedef struct {char data[SOURCE_MAX];size_t len;} response_t;
+typedef struct {size_t len;int exceeded;} response_t;
+typedef enum {FETCH_OK=0,FETCH_INVALID_URL,FETCH_NETWORK,FETCH_HTTP,FETCH_EMPTY,FETCH_LIMIT} fetch_status_t;
 static settings_t settings;
 static const stnlabz_module_host_t *owner;
 static int is_private(const char *path){
@@ -49,14 +51,18 @@ static int parse_settings(const char *path,settings_t *out){
  if(ok)*out=c;return ok;
 }
 static size_t capture(char *ptr,size_t size,size_t n,void *ctx){
- response_t *b=ctx;size_t bytes=size*n;
- if(bytes>sizeof(b->data)-1-b->len)return 0;
- memcpy(b->data+b->len,ptr,bytes);b->len+=bytes;b->data[b->len]=0;return bytes;
+ response_t *b=ctx;size_t bytes;
+ (void)ptr;
+ if(n&&size>SIZE_MAX/n){b->exceeded=1;return 0;}
+ bytes=size*n;
+ if(bytes>SOURCE_LIMIT-b->len){b->exceeded=1;return 0;}
+ b->len+=bytes;return bytes;
 }
-static int https_fetch(const char *url,response_t *body){
+static fetch_status_t https_fetch(const char *url,response_t *body,long *http_code){
  CURL *h;CURLcode result;long code=0;
- if(!url||strncmp(url,"https://",8)||!body)return 0;
- memset(body,0,sizeof(*body));h=curl_easy_init();if(!h)return 0;
+ if(!url||strncmp(url,"https://",8)||!body)return FETCH_INVALID_URL;
+ memset(body,0,sizeof(*body));if(http_code)*http_code=0;
+ h=curl_easy_init();if(!h)return FETCH_NETWORK;
  curl_easy_setopt(h,CURLOPT_URL,url);
  curl_easy_setopt(h,CURLOPT_WRITEFUNCTION,capture);
  curl_easy_setopt(h,CURLOPT_WRITEDATA,body);
@@ -65,17 +71,34 @@ static int https_fetch(const char *url,response_t *body){
  curl_easy_setopt(h,CURLOPT_FOLLOWLOCATION,0L);
  curl_easy_setopt(h,CURLOPT_PROTOCOLS_STR,"https");
  result=curl_easy_perform(h);
- if(result==CURLE_OK)curl_easy_getinfo(h,CURLINFO_RESPONSE_CODE,&code);
+ curl_easy_getinfo(h,CURLINFO_RESPONSE_CODE,&code);
  curl_easy_cleanup(h);
- return result==CURLE_OK&&code==200&&body->len>0;
+ if(http_code)*http_code=code;
+ if(body->exceeded)return FETCH_LIMIT;
+ if(result!=CURLE_OK)return FETCH_NETWORK;
+ if(code!=200)return FETCH_HTTP;
+ return body->len?FETCH_OK:FETCH_EMPTY;
+}
+static const char *fetch_label(fetch_status_t status){
+ switch(status){
+ case FETCH_OK:return "RETRIEVED";
+ case FETCH_INVALID_URL:return "INVALID_URL";
+ case FETCH_NETWORK:return "NETWORK_ERROR";
+ case FETCH_HTTP:return "HTTP_ERROR";
+ case FETCH_EMPTY:return "EMPTY_RESPONSE";
+ case FETCH_LIMIT:return "SIZE_LIMIT";
+ default:return "UNKNOWN_ERROR";
+ }
 }
 static void append(char *out,size_t size,const char *line){
  size_t used=strlen(out),n=strlen(line);if(used+n<size-1)memcpy(out+used,line,n+1);
 }
-static void add_source_result(digit_stn2_result_t *r,const char *name,int success,size_t bytes){
- char line[256];snprintf(line,sizeof(line),"%-18s %s (%zu bytes)\n",name,
- success?"RETRIEVED":"UNAVAILABLE",success?bytes:0U);
- if(success)r->sources_ok++;else r->sources_failed++;
+static void add_source_result(digit_stn2_result_t *r,const char *name,
+                              fetch_status_t status,size_t bytes,long http){
+ char line[256];
+ snprintf(line,sizeof(line),"%-18s %s (%zu bytes; HTTP %ld)\n",
+          name,fetch_label(status),bytes,http);
+ if(status==FETCH_OK)r->sources_ok++;else r->sources_failed++;
  append(r->report,sizeof(r->report),line);
 }
 static int rictus_summary(const char *path,char *summary,size_t cap){
@@ -105,7 +128,7 @@ static int authorized_command(const char *s){
 }
 static stnlabz_module_result_t execute(const void *request,size_t req_size,void *output,size_t output_size,size_t *used,void *ctx){
  static const char *const endpoints[]={"/threats","/events","/intel","/patterns","/rss"};
- const digit_stn2_request_t *in=request;digit_stn2_result_t r={0};response_t *buf;size_t i;
+ const digit_stn2_request_t *in=request;digit_stn2_result_t r={0};response_t *buf;size_t i;long http=0;fetch_status_t status;
  FILE *list;char url[1024],line[1024],log_summary[256];
  (void)ctx;
  if(!owner||!in||req_size!=sizeof(*in)||!output||output_size<sizeof(r)||!used||
@@ -116,11 +139,11 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
  append(r.report,sizeof(r.report),"STN-2 Intelligence Collection\nSource status (read-only):\n");
  if(rictus_summary(settings.log,log_summary,sizeof(log_summary))){
   r.sources_ok++;append(r.report,sizeof(r.report),log_summary);
- }else add_source_result(&r,"Rictus",0,0);
+ }else add_source_result(&r,"Rictus",FETCH_NETWORK,0,0);
  for(i=0;i<sizeof(endpoints)/sizeof(endpoints[0]);i++){
   if(snprintf(url,sizeof(url),"%s%s",settings.base,endpoints[i])>=(int)sizeof(url))
-   add_source_result(&r,endpoints[i],0,0);
-  else add_source_result(&r,endpoints[i],https_fetch(url,buf),buf->len);
+   add_source_result(&r,endpoints[i],FETCH_INVALID_URL,0,0);
+  else {status=https_fetch(url,buf,&http);add_source_result(&r,endpoints[i],status,buf->len,http);}
  }
  list=NULL;
  if(is_private(settings.advisories))list=fopen(settings.advisories,"r");
@@ -133,7 +156,7 @@ static stnlabz_module_result_t execute(const void *request,size_t req_size,void 
    len=strcspn(line,"\r\n");line[len]=0;
    if(!*line||line[0]=='#')continue;
    snprintf(label,sizeof(label),"Advisory %u",checked+1);
-   add_source_result(&r,label,https_fetch(line,buf),buf->len);checked++;
+   status=https_fetch(line,buf,&http);add_source_result(&r,label,status,buf->len,http);checked++;
   }
   fclose(list);
  }
@@ -174,7 +197,7 @@ static stnlabz_module_result_t stop(void){
  owner=NULL;memset(&settings,0,sizeof(settings));curl_global_cleanup();return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "stn2","Digit STN-2 Intelligence",1,0,0,STNLABZ_MODULE_API_MAJOR,
+ "stn2","Digit STN-2 Intelligence",1,0,1,STNLABZ_MODULE_API_MAJOR,
  STNLABZ_MODULE_API_MINOR,qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
