@@ -1,4 +1,4 @@
-# STN-2 Intelligence Module — version 1.1.0 (multi-indicator historical assessment)
+# STN-2 Intelligence Module — version 1.1.1 (intelligence-first reporting)
 
 Native ISO C11 Digit module. It registers `stn2.generate_intel` on the existing
 module ABI service bus. The Slack module invokes this service for
@@ -95,3 +95,7 @@ Historical correlation now reads and validates the Rictus log **once per STN-2 t
 ## Version 1.1.0 — Initial structured investigation assessments
 
 STN-2 correlates the historical, deduplicated Sentinel threat records against a single bounded window of recent Rictus observations, using two independent textual candidates: the top-level `ip` token and `details.request_url` literal path. It reports checked and matching record counts separately, up to three IP examples and two path examples, and an explicit outcome: candidate overlap, no overlap in the bounded window, or insufficient evidence when Rictus is inaccessible. These are *candidate investigative assessments*, not verified incidents or successful exploitation. Request paths may contain query strings and are compared literally, not normalized. Timestamp chronology, domain identity, IP role attribution, provenance validation, evidence retention, durable case records, scheduled watches, and asynchronous Slack progress are **not implemented** in this release. Testing and operational qualification remain necessary.
+
+## Revision 1.1.1 — Intelligence brief presentation
+
+The Slack-facing `@Digit gen intel` report now prioritizes observed Sentinel categories, recent activity, tracked/new IDs, Rictus findings, candidate overlaps, and evidence-limited assessment. Successful transport byte counts, HTTP codes, per-feed status banners, repeated zero-CVE lines and generic collector notes are suppressed from the intelligence brief. Failed collection remains visible as a coverage gap; CVEs appear only when actual textual references exist. No source collection, analysis, access-control, or Core behavior changed. Tests are updated for the new report language. Remaining absence of case workflows is unchanged.
