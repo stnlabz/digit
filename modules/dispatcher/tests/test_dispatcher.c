@@ -12,6 +12,7 @@
 
 static stnlabz_module_service_handler_fn dispatcher_handler;
 static stnlabz_module_service_handler_fn scoped_handler;
+static stnlabz_module_service_handler_fn scoped_context_handler;
 static unsigned response_calls;
 static digit_intent_class_t chosen_intent;
 static unsigned int chosen_established=1;
@@ -21,11 +22,14 @@ static unsigned int arithmetic_calls=0;
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
  if(!strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE)){scoped_handler=fn;return 1;}
+ if(!strcmp(name,DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE)){scoped_context_handler=fn;return 1;}
  if(strcmp(name,DIGIT_DISPATCHER_SERVICE))return 0;
  dispatcher_handler=fn;return 1;
 }
 static int unregister_dispatcher(const char *name,void *ctx){
- (void)ctx;return !strcmp(name,DIGIT_DISPATCHER_SERVICE)||!strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE);
+ (void)ctx;return !strcmp(name,DIGIT_DISPATCHER_SERVICE)||
+ !strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE)||
+ !strcmp(name,DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE);
 }
 static stnlabz_module_result_t mock_invoke(const char *name,const void *input,size_t isize,
  void *output,size_t osize,size_t *used){
@@ -84,7 +88,7 @@ static int dispatch_case(const char *request,digit_intent_class_t intent,
 int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
- if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=4||!d->qualify){
+ if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=5||!d->qualify){
   fprintf(stderr,"Dispatcher descriptor invalid\\n");return 1;
  }
  memset(&q,0,sizeof(q));
