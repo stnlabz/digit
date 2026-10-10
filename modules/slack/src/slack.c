@@ -255,6 +255,20 @@ static int dm_session_snapshot(const char *team,const char *user,
  }
  pthread_mutex_unlock(&mutex);return found;
 }
+static void dm_session_prior_user(const char *team,const char *user,char *out,size_t capacity){
+ size_t i;time_t now=time(NULL);
+ if(!team||!user||!out||!capacity)return;
+ out[0]=0;
+ pthread_mutex_lock(&mutex);
+ for(i=0;i<32;i++){
+  if(sessions[i].expires<=now||strcmp(sessions[i].team,team)||
+     strcmp(sessions[i].user,user))continue;
+  if(sessions[i].previous_user_message[0])
+   (void)bounded(out,capacity,sessions[i].previous_user_message);
+  break;
+ }
+ pthread_mutex_unlock(&mutex);
+}
 static void dm_session_set_reply(const char *team,const char *user,const char *message,const char *answer){
  size_t i;time_t now=time(NULL);
  if(!team||!user||!message||!answer)return;
@@ -332,6 +346,7 @@ static int process_event(struct json_object *root){
     return reply(channel,ts?ts:field(event,"ts"),line);
    }
    contextual.scoped=query;
+   dm_session_prior_user(team,user,contextual.previous_user_message,sizeof(contextual.previous_user_message));
    snprintf(contextual.previous_answer,sizeof(contextual.previous_answer),"%s",previous);
    if(!host||!host->invoke_service||
       host->invoke_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,
@@ -528,7 +543,7 @@ static stnlabz_module_result_t stop(void){
  return STNLABZ_MODULE_OK;
 }
 static const stnlabz_module_descriptor_t descriptor={
- "slack","Digit Slack",1,0,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
+ "slack","Digit Slack",1,0,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
  qualify,start,stop
 };
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
