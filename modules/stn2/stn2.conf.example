@@ -1,0 +1,6 @@
+# Install privately at /opt/digit/auth/stn2/stn2.conf, mode 0600
+enabled=false
+rictus_log=/var/log/rictus/rictus.log
+api_base=https://api.stn-labz.com
+# Authorized advisory URL list, one absolute HTTPS URL per line:
+advisory_list=/opt/digit/auth/stn2/advisories.list
