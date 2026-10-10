@@ -55,6 +55,14 @@ These four exchanges are not a comprehensive regression result. The same grounde
 
 **Independent operational issue:** Qualification persistence reached its fixed 128-entry implementation capacity and prevented an Interface startup after restart despite prior hotload qualification evidence. The source currently declares `DIGIT_QUALIFICATION_MAX 128` in `include/qualification.h`. This is not a qualification-history retention policy. Increasing the constant is only temporary capacity relief; an uncapped, history-preserving design requires separately authorized Core engineering. No Core modification is authorized by this README.
 
+### Structured Alerts channel projection — 2026-10-09
+
+The Interface now presents already-authorized Core alert records in the protected operations Alerts channel as labeled incident fields consumed by Digit Desktop: `severity`, `summary`, `module`, `subsystem`, `version`, `event_id`, `timestamp`, `cause`, `action`, plus original `detail`, `operational_state` and acknowledgment status. It retains the existing Core service, organization-specific SA/project-membership checks, channel binding and fail-closed response handling.
+
+**Provenance rule:** `module` is filled only when the Core alert source explicitly uses `module:<valid-id>`. The originating `source` is retained as `subsystem`. Core's existing alert record does not separately encode a verified cause, module version or remediation action, so the projection returns `UNKNOWN` for those fields; it never invents a diagnosis. The Desktop provides readable incident cards and detail expansion for this representation.
+
+**Disposition:** Interface source COMMITTED. No Linux build, integrated GUI/Interface runtime acceptance, or operator activation has been verified for this new change. Reliable module attribution for other alert-source formats requires upstream alert-producer evidence and integrated qualification, not a client-side guess. No Core change is implied or authorized here.
+
 ## Interface and Windows GUI
 
 - HTTPS endpoint: **`https://digit.stn-labz.com:8081`**. Interface listens on the IPv4 wildcard address and requires TLS. Windows HTTPS validation was confirmed against the operator-installed temporary self-signed certificate; replace it with an appropriately trusted certificate for sustained operations.
