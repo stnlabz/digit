@@ -194,7 +194,7 @@ static int learned_social_context(const char *text)
      strcmp(r->source,"interface:learn"))continue;
   if(!strstr(r->text,"playful")&&!strstr(r->text,"respond to")&&
      !strstr(r->text,"resonse to")&&!strstr(r->text,"can be responded to with")&&
-     !strstr(r->text,"may use")&&!strstr(r->text," means "))continue;
+     !strstr(r->text,"may use")&&!strstr(r->text," means"))continue;
   p=r->text;
   while((p=strchr(p,'"'))!=NULL){
    const char *end=strchr(++p,'"');
@@ -211,7 +211,7 @@ static int learned_social_context(const char *text)
   /* Operator-learned definition subjects can establish short social
    * utterances; only left-hand side aliases count as vocabulary. */
   {
-   const char *relation=strstr(r->text," means ");
+   const char *relation=strstr(r->text," means");
    if(relation){
     const char *cursor=r->text;
     while(cursor<relation){
@@ -491,7 +491,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 3, 0,
+    "intent", "Digit Intent", 1, 3, 1,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
