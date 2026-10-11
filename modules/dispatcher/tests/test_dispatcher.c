@@ -95,7 +95,8 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
    out->retrieved_count=2;out->selected_count=1;
    out->diagnostic_phase=DIGIT_RESPONSE_PHASE_NO_COMPOSITION;
   }else{
-   snprintf(out->answer,sizeof(out->answer),"Bounded response");
+   snprintf(out->answer,sizeof(out->answer),"%s",
+    strstr(((const digit_response_request_t *)input)->question,"solve 3*x - 6 = 0")?"x = 2.":"Bounded response");
    out->diagnostic_phase=DIGIT_RESPONSE_PHASE_APPROVED;
   }
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
