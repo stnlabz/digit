@@ -185,8 +185,12 @@ static const char *social_utterance_after_address(const char *text){
  start=p;
  while(isalpha((unsigned char)*p))++p;
  if(p==start||p-start>63)return text;
- if(*p==',')++p;
- else if(!isspace((unsigned char)*p))return text;
+ if(*p==','){
+  ++p;
+  if(!isspace((unsigned char)*p))return text;
+  while(isspace((unsigned char)*p))++p;
+  return *p?p:text;
+ }
  if(!isspace((unsigned char)*p))return text;
  while(isspace((unsigned char)*p))++p;
  /* Only strip an unpunctuated leading address when the remainder is
