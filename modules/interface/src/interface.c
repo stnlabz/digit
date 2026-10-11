@@ -1009,12 +1009,24 @@ if(strncmp(request,"POST /session/logout ",21)==0){
 if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
  char key[DIGIT_SESSION_TOKEN_SIZE],actor[64]={0};
  digit_session_entry_t *session=NULL;
- if(!digit_http_bearer_token(request,key)||
-    !digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,
-                                 DIGIT_MCP_CREDENTIALS,key,actor)||
-    !(session=interface_mcp_key_session(key,actor))){
-  memset(key,0,sizeof(key));
-  interface_reply(client,401,"{\"error\":\"AI MCP bearer authentication required\"}\n");return;
+ {
+  const char *stage=NULL;
+  if(!digit_http_bearer_token(request,key))stage="HEADER_REJECTED";
+  else if(!digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,
+                                       DIGIT_MCP_CREDENTIALS,key,actor))
+   stage="ACCOUNT_OR_PERMISSION_REJECTED";
+  else if(!(session=interface_mcp_key_session(key,actor)))
+   stage="PRIVATE_SESSION_UNAVAILABLE";
+  if(stage){
+   if(interface_host && interface_host->send_message){
+    char note[144];
+    snprintf(note,sizeof(note),"[INTERFACE] MCP AUTH_DENIED stage=%s",stage);
+    (void)interface_host->send_message(note);
+   }
+   memset(key,0,sizeof(key));
+   interface_reply(client,401,"{\"error\":\"AI MCP bearer authentication required\"}\n");
+   return;
+  }
  }
  memset(key,0,sizeof(key));
  interface_mcp_handle(client,request,actor,session,body);return;
@@ -1742,5 +1754,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,9,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
