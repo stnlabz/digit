@@ -26,6 +26,11 @@ int digit_chatgpt_oauth_exchange(digit_chatgpt_code_store_t *codes,
     const char *client_id,const char *redirect_uri,
     const char *verifier,const char *audience,time_t now,
     char token[DIGIT_CHATGPT_TOKEN_LENGTH]);
+/* Validates the one OAuth bearer issued by the PKCE exchange.
+ * This does not replace current SA permission checks or HTTP authentication.
+ * The MCP transport must call this before executing an authorized request. */
+int digit_chatgpt_oauth_validate_mcp(const digit_chatgpt_token_store_t *tokens,
+    const char *authorization_header,time_t now,char principal[64]);
 int digit_chatgpt_oauth_route(const digit_chatgpt_oauth_request_t *request,
                              digit_chatgpt_oauth_response_t *response);
 #endif
