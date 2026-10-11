@@ -579,10 +579,11 @@ static int validate_outbound(const char *raw,const char *normalized,const char *
 /* Convert structured Root relationship evidence to a bounded reply. */
 static int root_sibling_reply(const char *question,char *answer,size_t cap,char *evidence,size_t ecap){
  digit_root_facts_result_t records={0};size_t used=0,i;
- char words[TERM_COUNT][TERM_MAX]={{0}};size_t n=terms(question,words);
+ char words[TERM_COUNT][TERM_MAX]={{0}},plain[CORPUS_TEXT_MAX];size_t n=terms(question,words);
  int younger=has_term(words,n,"younger"),older=has_term(words,n,"older");
+ canonical_text(question,plain,sizeof(plain));
  if(!has_term(words,n,"sister")||
-    !(has_term(words,n,"you")||has_term(words,n,"your"))||
+    !(strstr(plain," your ")||strstr(plain," you ")||!strncmp(plain,"your ",5)||!strncmp(plain,"you ",4))||
     !response_host||!response_host->invoke_service)return 0;
  if(response_host->invoke_service(DIGIT_ROOT_FACTS_SERVICE,NULL,0,&records,
      sizeof(records),&used)!=STNLABZ_MODULE_OK||
