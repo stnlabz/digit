@@ -1,35 +1,57 @@
-# Digit Self-Diagnostics (DSD) 1.0.0
+# Digit Self-Diagnostics (DSD) 1.1.0
 
-**Status: source candidate — Linux build, qualification and runtime acceptance pending.**
+**Status: committed source candidate; local Linux build, qualification and live acceptance pending.**
 
-DSD is a stateless, read-only module exposing `dsd.diagnose`. It accepts a
-bounded array of verified stage observations and counts of retrieved/selected
-evidence and outbound-candidate status. It returns **OBSERVED**, **INFERRED**
-or **UNKNOWN**, including the affected processing boundary and a bounded
-explanation. It never writes runtime state, repairs code, or authorizes deployment.
+DSD remains a deterministic, read-only module exposing `dsd.diagnose`.
+Its input consists of a bounded list of verified stage observations, plus
+retrieved/selected evidence counts and candidate/validation flags. Its output
+distinguishes reported processing boundaries from unverified root causes.
 
-DSD does **not** yet capture live diagnostic events or implement
-`diagnose my last request`. No authenticated session-scoped correlation
-service is currently exposed by this module; implementing that command without
-one would risk disclosing another user's previous request. A separate,
-human-approved integration design is required before enabling conversational
-access. No Core or external ABI edits are proposed here.
+## Request-local live telemetry path
 
-Build using `cd modules/dsd && make clean && make && make test`, with
-the sibling external ABI at `../../../ABI/includes/module.h`.
+1. Response 1.9.7 provides the **additive** `response.answer_observed` service.
+   It exposes evidence retrieval and selection counts, composition disposition,
+   and Validator outcome codes. Existing `response.answer` output remains
+   byte-compatible.
+2. Dispatcher 1.3.9 provides the **additive**
+   `dispatcher.handle_scoped_context_observed` service.
+   It records Interpretation and Intent status, invokes observed Response,
+   and builds a bounded DSD request. Existing Dispatcher services retain their
+   original request and response schemas.
+3. Interface 1.8.1 carries only the immediately prior turn's bounded
+   observations in the authenticated private session. Session revocation or
+   expiry discards them; no cross-account or channel history is consulted.
+4. A private `Digit, diagnose my last request.` routes the prior observations
+   to `dsd.diagnose`. If the previous turn supplied no stage evidence, DSD
+   explicitly reports that limitation.
 
-The caller must provide telemetry it has already verified. DSD will not
-represent caller-supplied observations as independently collected facts.
-Unknown data remains unknown.
+This is **processing-outcome telemetry**, not a complete independent trace of
+every module's internal execution. A Corpus record count comes from Response's
+retrieval result; a Response composition failure is the observed response phase,
+not an established defect in a specific source file. The root cause may remain
+unknown.
 
-## Example request
+No autonomous repair, deployment authority, Core modification, external ABI
+modification, or production Corpus modification is included.
 
-```c
-digit_dsd_request_t request = {0};
-request.retrieved = 1;
-request.selected = 1;
-request.candidate_constructed = 0;
-/* Expected: INFERRED / NO_ANSWER_CANDIDATE. */
+## Qualification order
+
+From a development checkout with the sibling `ABI` available:
+
+```bash
+cd modules/response && make clean && make && make test
+cd ../dsd && make clean && make && make test
+cd ../dispatcher && make clean && make && make test
+cd ../interface && make clean && make && make test
 ```
 
-No production Corpus, Core, Interface, Dispatcher, or ABI changes.
+Only after all builds/tests succeed should the operator proceed to
+independent runtime qualification and verify the qualified module versions.
+Then exercise a two-turn conversation inside the **same authenticated private
+session**; a new session intentionally cannot see the earlier request.
+
+Recommended activation order: Response → DSD → Dispatcher → Interface.
+During partial activation, additive-service fallback preserves ordinary
+conversation but provides reduced or unavailable telemetry.
+
+No fabricated diagnoses, no global last-request state, and no self-approval.
