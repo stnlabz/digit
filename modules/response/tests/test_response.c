@@ -193,7 +193,7 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    unsigned int before=corpus_queries;
    memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
    snprintf(request.question,sizeof(request.question),
-    "INTENT: FACT\\nTARGET: KNOWLEDGE\\nSUBJECT: \\nREQUEST: %s",cases[k].question);
+    "INTENT: FACT\nTARGET: KNOWLEDGE\nSUBJECT: \nREQUEST: %s",cases[k].question);
    check(response_handler(&request,sizeof(request),&answer,sizeof(answer),
        &used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
        answer.answered&&!strcmp(answer.answer,cases[k].expected)&&
