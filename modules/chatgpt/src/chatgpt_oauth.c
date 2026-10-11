@@ -113,12 +113,11 @@ static int oauth_param(const char *form,const char *key,char *dst,size_t cap){
  }
  return n&&matches==1;
 }
+/* Exact registered public client and ChatGPT callback. No client secret. */
+#define DIGIT_OAUTH_CLIENT_ID "digit-chatgpt"
+#define DIGIT_OAUTH_CALLBACK "https://chatgpt.com/connector/oauth/50yEgv2B3ONp"
 static int oauth_chatgpt_redirect(const char *uri){
- const char *hosts[]={"https://chatgpt.com/","https://chat.openai.com/"};
- size_t i;
- if(!uri||strlen(uri)>510||strchr(uri,'#')||strchr(uri,'\r')||strchr(uri,'\n'))return 0;
- for(i=0;i<2;i++)if(strncmp(uri,hosts[i],strlen(hosts[i]))==0)return 1;
- return 0;
+ return uri && strcmp(uri,DIGIT_OAUTH_CALLBACK)==0;
 }
 static int oauth_safe_state(const char *state){
  const unsigned char *p=(const unsigned char*)state;size_t n=0;
@@ -130,6 +129,7 @@ static int oauth_request_fields(const char *params,char *client,char *redirect,c
  char method[16],type[32];
  return oauth_param(params,"response_type",type,sizeof(type))&&!strcmp(type,"code")&&
  oauth_param(params,"client_id",client,DIGIT_CHATGPT_CLIENT_MAX)&&
+ strcmp(client,DIGIT_OAUTH_CLIENT_ID)==0&&
  oauth_param(params,"redirect_uri",redirect,DIGIT_CHATGPT_REDIRECT_MAX)&&
  oauth_chatgpt_redirect(redirect)&&
  oauth_param(params,"code_challenge_method",method,sizeof(method))&&!strcmp(method,"S256")&&
@@ -186,7 +186,9 @@ int digit_chatgpt_oauth_route_with_stores(const digit_chatgpt_oauth_request_t *r
      strcmp(grant,"authorization_code")||
      !oauth_param(request->parameters,"code",code,sizeof(code))||
      !oauth_param(request->parameters,"client_id",client,sizeof(client))||
+     strcmp(client,DIGIT_OAUTH_CLIENT_ID)||
      !oauth_param(request->parameters,"redirect_uri",redirect,sizeof(redirect))||
+     !oauth_chatgpt_redirect(redirect)||
      !oauth_param(request->parameters,"code_verifier",verifier,sizeof(verifier)))
      goto bad_request;
   if(!digit_chatgpt_oauth_exchange(codes,tokens,code,client,redirect,
