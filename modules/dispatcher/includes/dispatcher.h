@@ -2,6 +2,7 @@
 #define DIGIT_DISPATCHER_H
 
 #include "module.h"
+#include "../../dsd/includes/dsd.h"
 
 #define DIGIT_DISPATCHER_SERVICE "dispatcher.handle"
 #define DIGIT_DISPATCHER_SCOPED_SERVICE "dispatcher.handle_scoped"
@@ -22,6 +23,8 @@ typedef struct
 {
     int answered;
     char answer[DIGIT_DISPATCHER_ANSWER_MAX];
+    unsigned int diagnostic_valid;
+    digit_dsd_request_t diagnostic;
 } digit_dispatcher_result_t;
 
 /* [AI:GPT-6 | 2026-10-09] Additive, request-local context contract.
@@ -46,6 +49,8 @@ typedef struct
     digit_dispatcher_scoped_request_t scoped;
     char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];
     char previous_user_message[DIGIT_DISPATCHER_REQUEST_MAX];
+    unsigned int previous_diagnostic_valid;
+    digit_dsd_request_t previous_diagnostic;
 } digit_dispatcher_scoped_context_request_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
