@@ -30,6 +30,13 @@ int main(void){
  check(write_data(path,"ai.chatgpt\t1\t1\t1\t0\t0\t1\n")&&
        chmod(path,0644)==0&&
        !digit_ai_platform_permissions(path,"ai.chatgpt",&p),"world-readable denied");
+ chmod(path,0600);
+ {char linkpath[96];int n=snprintf(linkpath,sizeof(linkpath),"%s-link",path);
+  if(n>0&&(size_t)n<sizeof(linkpath)&&symlink(path,linkpath)==0){
+   check(!digit_ai_platform_permissions(linkpath,"ai.chatgpt",&p),"registry symlink denied");
+   unlink(linkpath);
+  }else check(0,"symlink fixture");
+ }
  unlink(path);
  check(!digit_ai_platform_permissions(path,"ai.chatgpt",&p),"missing registry denied");
  printf("AI platform permissions: %d checks, %d failures\n",tests,failed);
