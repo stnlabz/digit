@@ -76,8 +76,9 @@ static void dispatch_intent_response(const char *request,const digit_intent_resu
     memset(&rr,0,sizeof(rr));memset(&ro,0,sizeof(ro));
     if(snprintf(rr.question,sizeof(rr.question),"INTENT: %s\nTARGET: %s\nSUBJECT: %s\nREQUEST: %s",intent_name,target_name,intent->subject,request)>=(int)sizeof(rr.question)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"The interpreted request is too large to dispatch safely.");return;}
     sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),&ro,sizeof(ro),&used);
-    if(sr!=STNLABZ_MODULE_OK||used!=sizeof(ro)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because one of my internal services is unavailable.");return;}
+    if(sr!=STNLABZ_MODULE_OK||used!=sizeof(ro)){observed_stage(out,"response",DIGIT_DSD_FAILED,"RESPONSE_SERVICE_FAILURE");out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because one of my internal services is unavailable.");return;}
     out->answered=1;snprintf(out->answer,sizeof(out->answer),"%s",ro.answer[0]?ro.answer:"I couldn't produce an answer for that request.");
+    observed_stage(out,"response",DIGIT_DSD_OK,"RETURNED_ANSWER");
 }
 
 /* [AI:GPT-6 | 2026-10-09] No generator/executor is registered in the
@@ -121,8 +122,9 @@ static void scoped_diagnostic(const digit_dispatcher_scoped_context_request_t *c
            "I have no complete previous request and reply in this private session. No diagnosis is available.");
   return;
  }
- /* Prior text is not stage telemetry. Do not invent retrieval, Intent,
-  * Validator or Response results from a generic user-facing fallback. */
+ if(context->previous_diagnostic_valid==1U)
+  request=context->previous_diagnostic;
+ /* Prior session-local observations only; never replay an action. */
  status=dispatcher_host->invoke_service(DIGIT_DSD_SERVICE,&request,sizeof(request),
                                         &result,sizeof(result),&used);
  if(status!=STNLABZ_MODULE_OK||used!=sizeof(result)){
@@ -131,10 +133,20 @@ static void scoped_diagnostic(const digit_dispatcher_scoped_context_request_t *c
   return;
  }
  snprintf(out->answer,sizeof(out->answer),
-          "Previous private request and reply are available. DSD: %.768s I cannot identify which module caused that reply without correlated stage telemetry.",
+          "Previous private request and reply are available. DSD: %.768s",
           result.report);
 }
 
+static void observed_stage(digit_dispatcher_result_t *out,const char *name,
+                            digit_dsd_stage_state_t state,const char *reason){
+ digit_dsd_stage_t *st;
+ if(out->diagnostic.stage_count>=DIGIT_DSD_STAGE_COUNT)return;
+ st=&out->diagnostic.stages[out->diagnostic.stage_count++];
+ snprintf(st->module,sizeof(st->module),"%s",name);
+ st->state=state;
+ snprintf(st->reason,sizeof(st->reason),"%s",reason);
+ out->diagnostic_valid=1;
+}
 static stnlabz_module_result_t dispatcher_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
 {
     const digit_dispatcher_request_t *in=request;
@@ -162,14 +174,17 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     snprintf(interpretation_request.text,sizeof(interpretation_request.text),"%s",in->request);
     interpretation_sr=dispatcher_host->invoke_service(DIGIT_INTERPRETATION_SERVICE,&interpretation_request,sizeof(interpretation_request),&interpretation_result,sizeof(interpretation_result),&interpretation_used);
     if(interpretation_sr!=STNLABZ_MODULE_OK||interpretation_used!=sizeof(interpretation_result)||!interpretation_result.resolved){
+        observed_stage(&out,"interpretation",DIGIT_DSD_FAILED,"INTERPRETATION_UNAVAILABLE");
         out.answered=1;
         snprintf(out.answer,sizeof(out.answer),"I couldn't interpret that request because my Interpretation service is unavailable.");
         normalize_answer(out.answer);
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
     }
+    observed_stage(&out,"interpretation",DIGIT_DSD_OK,"RESOLVED");
     if(memchr(interpretation_result.normalized,'\0',sizeof(interpretation_result.normalized))==NULL||
        interpretation_result.normalized[0]=='\0'){
         out.answered=1;
+        observed_stage(&out,"interpretation",DIGIT_DSD_FAILED,"INVALID_NORMALIZED_REQUEST");
         snprintf(out.answer,sizeof(out.answer),"Interpretation returned an invalid request.");
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
     }
@@ -186,6 +201,7 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     snprintf(intent_request.text,sizeof(intent_request.text),"%s",interpreted_request);
     intent_sr=dispatcher_host->invoke_service(DIGIT_INTENT_SERVICE,&intent_request,sizeof(intent_request),&intent_result,sizeof(intent_result),&intent_used);
     if(intent_sr!=STNLABZ_MODULE_OK||intent_used!=sizeof(intent_result)){
+        observed_stage(&out,"intent",DIGIT_DSD_FAILED,"INTENT_SERVICE_FAILURE");
         char diagnostic[256];
         out.answered=1;
         if(intent_sr!=STNLABZ_MODULE_OK)
@@ -204,6 +220,7 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     else if(intent_result.intent==DIGIT_INTENT_UNKNOWN||
             intent_result.intent==DIGIT_INTENT_AMBIGUOUS){
         out.answered=1;
+        observed_stage(&out,"intent",DIGIT_DSD_FAILED,"INTENT_UNCLASSIFIED");
         snprintf(out.answer,sizeof(out.answer),
           "I can't establish what you want me to do from that request.");
     }
@@ -211,9 +228,11 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
             (intent_result.intent==DIGIT_INTENT_ACTION &&
              intent_result.target!=DIGIT_INTENT_TARGET_CAPABILITY)){
         out.answered=1;
+        observed_stage(&out,"intent",DIGIT_DSD_FAILED,"INTENT_UNESTABLISHED");
         snprintf(out.answer,sizeof(out.answer),"I can't establish an authorized request to dispatch.");
     }
     else if(intent_result.intent==DIGIT_INTENT_CONTEXT){
+        observed_stage(&out,"intent",DIGIT_DSD_OK,"CONTEXT");
         out.answered=1;
         if(strcmp(intent_result.subject,"prior_answer")==0&&
            previous_answer&&previous_answer[0])
@@ -231,12 +250,18 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
                      "I don't have an established prior reply in this conversation.");
     }
     else if(intent_result.intent==DIGIT_INTENT_ACTION){
+        observed_stage(&out,"intent",DIGIT_DSD_OK,"ACTION");
         if(lesson_action(interpreted_request,&out)){}
         else if(source_action(interpreted_request))source_scan(interpreted_request,&out);
         else unsupported_action(&out);
     }
-    else if(intent_result.intent==DIGIT_INTENT_STATUS&&source_action(interpreted_request))source_scan(interpreted_request,&out);
-    else dispatch_intent_response(interpreted_request,&intent_result,&out);
+    else if(intent_result.intent==DIGIT_INTENT_STATUS&&source_action(interpreted_request)){
+        observed_stage(&out,"intent",DIGIT_DSD_OK,"STATUS");
+        source_scan(interpreted_request,&out);
+    }else{
+        observed_stage(&out,"intent",DIGIT_DSD_OK,"ESTABLISHED");
+        dispatch_intent_response(interpreted_request,&intent_result,&out);
+    }
     normalize_answer(out.answer);
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
 }
@@ -281,7 +306,8 @@ static stnlabz_module_result_t dispatcher_scoped_context_service(
     capacity<sizeof(digit_dispatcher_result_t)||
     !dispatcher_scoped_valid(&in->scoped)||
     !memchr(in->previous_answer,0,sizeof(in->previous_answer))||
-    !memchr(in->previous_user_message,0,sizeof(in->previous_user_message)))
+    !memchr(in->previous_user_message,0,sizeof(in->previous_user_message))||
+    in->previous_diagnostic_valid>1U)
   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  /* Channel context is not sourced from a verified channel-history
   * provider yet. Never use a caller-provided prior turn in that scope. */
@@ -349,5 +375,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
