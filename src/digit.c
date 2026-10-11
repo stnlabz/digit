@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "agent_root.h"
 #include "alert.h"
 #include "audit.h"
 #include "channel.h"
@@ -63,6 +64,21 @@ int digit_initialize(void)
     }
 
     (void)digit_audit_event("CORE", "START", NULL);
+    /* Root identity is foundational; never enter degraded mode on failure. */
+    {
+        const stnlabz_agent_root_t *root=stnlabz_agent_root_identity();
+        if (!stnlabz_agent_root_validate(root))
+        {
+            fprintf(stderr,"[CORE] Agent Root validation failed. Startup denied.\n");
+            (void)digit_audit_event("ROOT","VALIDATION_FAILED","startup_denied=true");
+            (void)digit_audit_event("CORE","STOP","reason=agent_root_invalid");
+            digit_audit_close();
+            return 1;
+        }
+        snprintf(detail,sizeof(detail),"agent_id=%s schema=%u.%u revision=%u",
+                 root->agent_id,root->schema_major,root->schema_minor,root->revision);
+        (void)digit_audit_event("ROOT","VALIDATED",detail);
+    }
     if (!digit_channel_init()) (void)digit_audit_event("CHANNEL", "INIT_FAILED", "Core continuing without persistent channels");
     if (!digit_alert_init()) (void)digit_audit_event("ALERT", "INIT_FAILED", "Core continuing without persistent alerts");
     if (!digit_core_services_register())
