@@ -791,7 +791,23 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   passed+=(unsigned)(select_evidence("wut now bish",&source,selected)==1);
   passed+=(unsigned)(select_evidence("What is a compiler?",&source,selected)==0);
  }
- result->tests_executed=41;result->tests_passed=passed;
+ /* Authorized definition of a single salient term, with negative cases. */
+ {
+  corpus_result_t sample={0};
+  ranked_record_t matched[SELECTED_MAX]={0};
+  snprintf(sample.records[0].category,sizeof(sample.records[0].category),"OPERATOR_LEARNED");
+  snprintf(sample.records[0].source,sizeof(sample.records[0].source),"interface:learn");
+  snprintf(sample.records[0].text,sizeof(sample.records[0].text),"quirky means unusual");
+  sample.count=1;
+  passed+=(unsigned)(select_evidence("You are quirky",&sample,matched)==1);
+  passed+=(unsigned)(select_evidence("You are unrelated",&sample,matched)==0);
+  snprintf(sample.records[0].category,sizeof(sample.records[0].category),"source");
+  passed+=(unsigned)(select_evidence("You are quirky",&sample,matched)==0);
+  snprintf(sample.records[0].category,sizeof(sample.records[0].category),"OPERATOR_LEARNED");
+  snprintf(sample.records[0].text,sizeof(sample.records[0].text),"ordinary means quirky");
+  passed+=(unsigned)(select_evidence("You are quirky",&sample,matched)==0);
+ }
+ result->tests_executed=45;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
