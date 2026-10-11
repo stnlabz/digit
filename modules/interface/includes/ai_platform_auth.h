@@ -4,6 +4,8 @@
 /* Operator-maintained, private records:
  * identity<TAB>active<TAB>dm<TAB>diagnostics<TAB>memory_write<TAB>learning<TAB>developer
  * Each capability must be 0 or 1. Developer is descriptive, not SA authority. */
+#define DIGIT_MCP_REGISTRY "/opt/digit/auth/mcp/permissions.tsv"
+#define DIGIT_MCP_CREDENTIALS "/opt/digit/auth/mcp/accounts.tsv"
 #define DIGIT_AI_PLATFORM_REGISTRY "/opt/digit/state/auth/ai_platform_permissions.tsv"
 #define DIGIT_AI_PLATFORM_CREDENTIALS "/opt/digit/state/auth/ai_platform_accounts.tsv"
 typedef struct {
