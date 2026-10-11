@@ -10,6 +10,8 @@ typedef struct {
  unsigned int active,dm,diagnostics,memory_write,learning,developer;
 } digit_ai_platform_permissions_t;
 /* 1 = exact, unique, valid record; 0 = deny. */
+int digit_ai_platform_verify_key(const char *registry,const char *credentials,
+                                 const char *key,char identity[64]);
 int digit_ai_platform_permissions(const char *path,const char *identity,
                                   digit_ai_platform_permissions_t *out);
 #endif
