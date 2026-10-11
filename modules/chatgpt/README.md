@@ -1,4 +1,4 @@
-# Digit ChatGPT Integration — 1.0.5 source candidate
+# Digit ChatGPT Integration — 1.0.6 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
 ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
@@ -27,7 +27,17 @@ matching code is consumed even when redemption is rejected. It is in-memory,
 not persisted, and is not exposed as a remote service or public route. The
 caller must independently verify SA-approved principal authorization, client
 registration, redirect URI ownership, consent, and permissions **before**
-issuing a code. No bearer access tokens are minted by this component.
+issuing a code. The authorization-code component does not mint bearer tokens; the separate token lifecycle library does, but neither is connected to a public OAuth exchange.
+
+## OAuth bearer lifecycle (ChatGPT module only)
+
+`chatgpt_oauth_tokens.c` now implements a bounded, in-memory bearer-token
+store: CSPRNG generation, SHA-256 digests instead of plaintext stored tokens,
+explicit identity and audience binding, 3600-second expiry, and revocation.
+The matching test checks invalid principals, wrong audiences, invalid bearer
+values, expiration, and revocation. These primitives are not an OAuth token
+endpoint; the caller must check live account permissions and consent. They
+have not yet been bound to `/oauth/token` or the public `/mcp` route.
 
 ## /oauth route namespace (ChatGPT module only)
 
