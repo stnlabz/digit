@@ -167,6 +167,36 @@ static int render_lesson_definition(const char *subject, ranked_record_t selecte
     }
     return 0;
 }
+static int learned_glossary_acknowledgment(const char *question,
+ const corpus_record_t *record,char *answer,size_t capacity){
+ char q[TERM_COUNT][TERM_MAX]={{0}},lhs[CORPUS_TEXT_MAX],normalized[CORPUS_TEXT_MAX];
+ const char *text,*relation,*meaning,*word=NULL;
+ size_t count,i,n;unsigned salient=0;
+ if(!question||!record||!answer||!capacity||
+    strcmp(record->category,"OPERATOR_LEARNED")||
+    strcmp(record->source,"interface:learn"))return 0;
+ count=terms(question,q);
+ if(!count||count>3)return 0;
+ for(i=0;i<count;i++){
+  if(!strcmp(q[i],"you")||!strcmp(q[i],"me")||
+     !strcmp(q[i],"my")||!strcmp(q[i],"we"))continue;
+  word=q[i];salient++;
+ }
+ if(salient!=1||!word)return 0;
+ text=presentation_text(record);
+ relation=strstr(text," means ");
+ if(!relation)return 0;
+ n=(size_t)(relation-text);
+ if(n==0||n>=sizeof(lhs))return 0;
+ memcpy(lhs,text,n);lhs[n]=0;
+ canonical_text(lhs,normalized,sizeof(normalized));
+ if(strcmp(normalized,word))return 0;
+ meaning=relation+7;
+ n=strlen(meaning);
+ if(!n||n>300)return 0;
+ return snprintf(answer,capacity,"The learned meaning of '%s' is %.*s.",
+                 word,(int)n,meaning)>0;
+}
 static void render_intent_answer(const response_intent_t *intent,const char *question,ranked_record_t selected[SELECTED_MAX],size_t selected_count,digit_response_result_t *output,char *comparison_evidence,size_t comparison_evidence_size){digit_reasoning_explain_request_t request;digit_reasoning_explain_result_t result;stnlabz_module_result_t status;size_t used=0,i,count;if(intent!=NULL&&(strcmp(intent->intent,"CONVERSATION")==0||strcmp(intent->intent,"FACT")==0)){
  size_t social_i;
  for(social_i=0;social_i<selected_count;social_i++)
