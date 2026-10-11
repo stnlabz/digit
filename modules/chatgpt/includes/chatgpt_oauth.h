@@ -14,6 +14,7 @@
 typedef struct {
     char method[8];
     char path[96];
+    char parameters[2048];
 } digit_chatgpt_oauth_request_t;
 typedef struct {
     unsigned int status;
