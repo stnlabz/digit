@@ -193,6 +193,51 @@ static int unsupported_primary_responsibility(const char *candidate, const char 
     return 0;
 }
 
+/* Semantic validation for the bounded subject-predicate-object Root relation.
+ * Return -1 when evidence is not in this schema, otherwise 0/1 for reject/accept. */
+static int root_relation_supported(const char *question,const char *candidate,const char *evidence)
+{
+ char subject[128],predicate[128],object[128],extra;
+ char q[4096],c[4096],needle[140];
+ int fact_older,question_older,question_younger,claims_yes,claims_no;
+ int question_named,claimed_younger,claimed_older,relation_true;
+ if(!question||!candidate||!evidence)return -1;
+ if(sscanf(evidence,"%127s %127s %127s %c",subject,predicate,object,&extra)!=3)return -1;
+ fact_older=!strcmp(predicate,"older_sister_of");
+ if(!fact_older&&strcmp(predicate,"younger_sister_of"))return -1;
+ canonical_text(question,q,sizeof(q));
+ canonical_text(candidate,c,sizeof(c));
+ if(!contains_ci(q,"sister")||!contains_ci(c,"sister"))return 0;
+ snprintf(needle,sizeof(needle)," %s ",object);
+ {
+  char padded[4098];
+  snprintf(padded,sizeof(padded)," %s ",c);
+  if(!strstr(padded,needle))return 0;
+ }
+ question_older=contains_ci(q,"older sister");
+ question_younger=contains_ci(q,"younger sister");
+ claimed_younger=contains_ci(c,"younger sister");
+ claimed_older=contains_ci(c,"older sister");
+ if(claimed_younger==claimed_older)return 0;
+ if((fact_older&&!claimed_younger)||(!fact_older&&!claimed_older))return 0;
+ claims_yes=!strncmp(c,"yes ",4)||!strcmp(c,"yes");
+ claims_no=!strncmp(c,"no ",3)||!strcmp(c,"no");
+ snprintf(needle,sizeof(needle)," %s ",object);
+ {
+  char padded[4098];
+  snprintf(padded,sizeof(padded)," %s ",q);
+  question_named=strstr(padded,needle)!=NULL;
+ }
+ if(question_named){
+  if(claims_yes==claims_no||question_older==question_younger)return 0;
+  relation_true=(question_older&&fact_older)||(question_younger&&!fact_older);
+  return (claims_yes&&relation_true)||(claims_no&&!relation_true);
+ }
+ if(claims_yes||claims_no)return 0;
+ if(question_older==question_younger)return 0;
+ return (question_younger&&fact_older)||(question_older&&!fact_older);
+}
+
 static int evidence_divergence(const char *question, const char *candidate, const char *evidence)
 {
     char qt[VALIDATOR_TERM_COUNT][VALIDATOR_TERM_MAX];
@@ -410,7 +455,9 @@ static stnlabz_module_result_t outbound_service(const void *request, size_t requ
     else if (asks_explain(question) && weak_explanation(in->candidate)) snprintf(out->reason, sizeof(out->reason), "OPERATION_INCOMPLETE");
     else if (contradictory_relationship(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "CONTRADICTORY_RELATIONSHIP");
     else if (unsupported_primary_responsibility(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "OVERBROAD_CLAIM");
-    else if (!is_definition_form(question) && evidence_divergence(question, in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "EVIDENCE_DIVERGENCE");
+    else if (root_relation_supported(question,in->candidate,in->evidence)==0) snprintf(out->reason,sizeof(out->reason),"ROOT_RELATION_MISMATCH");
+    else if (root_relation_supported(question,in->candidate,in->evidence)<0 &&
+             !is_definition_form(question) && evidence_divergence(question, in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "EVIDENCE_DIVERGENCE");
     else if (!evidence_supports(in->candidate, in->evidence)) snprintf(out->reason, sizeof(out->reason), "UNSUPPORTED_CLAIM");
     else {
         out->status = DIGIT_VALIDATOR_PASS;
@@ -439,7 +486,15 @@ static stnlabz_module_result_t validator_qualify(stnlabz_module_qualification_re
         {"What does widget mean?","An object has a type.","An object does not mean it has no type.",1},
         {"What does widget mean?","A widget is a component.","widget means component",0},
         {"What does widget mean?","A widget is a component.","widget, widget, = component, component",0},
-        {"What does widget mean?","A widget is a gadget.","widget means component",1}
+        {"What does widget mean?","A widget is a gadget.","widget means component",1},
+        {"Are you Ezra's older sister?","Yes. ezra is my younger sister.","digit older_sister_of ezra",0},
+        {"Who is your younger sister?","ezra is my younger sister.","digit older_sister_of ezra",0},
+        {"Are you Ezra's younger sister?","No. ezra is my younger sister.","digit older_sister_of ezra",0},
+        {"Are you Ezra's older sister?","No. ezra is my younger sister.","digit older_sister_of ezra",1},
+        {"Are you Ezra's younger sister?","Yes. ezra is my younger sister.","digit older_sister_of ezra",1},
+        {"Are you Ezra's older sister?","Yes. marai is my younger sister.","digit older_sister_of ezra",1},
+        {"Are you Ezra's older sister?","Yes. ezra is my older sister.","digit older_sister_of ezra",1},
+        {"Are you Ezra's older sister?","Yes. ezra is my younger sister.","unrelated mission facts",1}
     };
     size_t i;unsigned int passed=0;
     if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -493,7 +548,7 @@ static stnlabz_module_result_t validator_stop(void)
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void)
 {
     static const stnlabz_module_descriptor_t descriptor = {
-        "validator", "Validator", 1, 0, 8,
+        "validator", "Validator", 1, 0, 9,
         STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
         validator_qualify, validator_start, validator_stop
     };
