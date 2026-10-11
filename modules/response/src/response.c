@@ -352,7 +352,7 @@ if(qn>=2&&matches<2){
              strcmp(record->source,"interface:learn")==0;
  char definition[TERM_COUNT][TERM_MAX]={{0}};
  char target[TERM_COUNT][TERM_MAX]={{0}};
- size_t tn=0,k;int salient=0;
+ size_t tn=0,k;int salient=0;const char *salient_word=NULL;
  const char *relation=strstr(record->text," means ");
  if(!learned||!relation)return 0;
  tn=terms(question,target);
@@ -360,7 +360,7 @@ if(qn>=2&&matches<2){
   if(strcmp(target[k],"you")==0||strcmp(target[k],"me")==0||
      strcmp(target[k],"my")==0||strcmp(target[k],"we")==0||
      strcmp(target[k],"digit")==0)continue;
-  salient++;
+  salient++;salient_word=target[k];
  }
  /* An authorized definition of the single salient term must be present
   * in the record's left-hand-side; a coincidental right-side match fails. */
@@ -368,7 +368,7 @@ if(qn>=2&&matches<2){
  {size_t n=(size_t)(relation-record->text);char lhs[CORPUS_TEXT_MAX];
   if(n>=sizeof(lhs))return 0;
   memcpy(lhs,record->text,n);lhs[n]=0;
-  if(terms(lhs,definition)==0||!has_term(definition,TERM_COUNT,target[tn-1]))return 0;
+  if(terms(lhs,definition)==0||!has_term(definition,TERM_COUNT,salient_word))return 0;
  }
 }if(qn>0)coverage=(unsigned int)((matches*200U)/qn);if(rn>0)precision=(unsigned int)((matches*100U)/rn);score=matches*100U+coverage+precision+lesson_bonus(question,record)+phrase_match_bonus(question,record->text);qr=reference_value(question);rr=reference_value(record->text);if(qr>0&&rr>0){if(qr==rr)score+=600U;else score=score>400U?score-400U:1U;}if(strcmp(record->category,"source")==0&&source_intent(question))score+=25U;return score;}
 static size_t select_evidence(const char *question,const corpus_result_t *evidence,ranked_record_t selected[SELECTED_MAX]){ranked_record_t ranked[CORPUS_MAX];size_t count=evidence->count>CORPUS_MAX?CORPUS_MAX:evidence->count,i,j,out=0;int qr=reference_value(question);unsigned int reference_matches=0;for(i=0;i<count;++i){int rr;ranked[i].record=evidence->records[i];/* [AI:GPT-6 | 2026-10-10] An authorized learned relation
