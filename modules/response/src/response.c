@@ -344,7 +344,33 @@ static int complete_phrase_match(const char *phrase,const char *record)
     }
     return 0;
 }
-static unsigned int record_score(const char *question,const corpus_record_t *record,unsigned int *matches_out){char qt[TERM_COUNT][TERM_MAX],rt[TERM_COUNT][TERM_MAX];size_t qn,rn,q;unsigned int matches=0,coverage=0,precision=0,score;int qr,rr;memset(qt,0,sizeof(qt));memset(rt,0,sizeof(rt));qn=terms(question,qt);rn=terms(record->text,rt);for(q=0;q<qn;++q)if(has_term(rt,rn,qt[q]))++matches;if(matches_out)*matches_out=matches;/* [AI:GPT-6 | 2026-10-09] Reject evidence backed by only one shared term in a multi-term request; lexical coincidence is not sufficient grounding. */if(matches==0||(qn>=2&&matches<2))return 0;if(qn>0)coverage=(unsigned int)((matches*200U)/qn);if(rn>0)precision=(unsigned int)((matches*100U)/rn);score=matches*100U+coverage+precision+lesson_bonus(question,record)+phrase_match_bonus(question,record->text);qr=reference_value(question);rr=reference_value(record->text);if(qr>0&&rr>0){if(qr==rr)score+=600U;else score=score>400U?score-400U:1U;}if(strcmp(record->category,"source")==0&&source_intent(question))score+=25U;return score;}
+static unsigned int record_score(const char *question,const corpus_record_t *record,unsigned int *matches_out){char qt[TERM_COUNT][TERM_MAX],rt[TERM_COUNT][TERM_MAX];size_t qn,rn,q;unsigned int matches=0,coverage=0,precision=0,score;int qr,rr;memset(qt,0,sizeof(qt));memset(rt,0,sizeof(rt));qn=terms(question,qt);rn=terms(record->text,rt);for(q=0;q<qn;++q)if(has_term(rt,rn,qt[q]))++matches;if(matches_out)*matches_out=matches;/* [AI:GPT-6 | 2026-10-09] Reject evidence backed by only one shared term in a multi-term request; lexical coincidence is not sufficient grounding. *//* [AI:GPT-6 | 2026-10-11] Operator-taught definitions can match a
+ * single salient word in social framing; do not loosen factual scoring. */
+if(matches==0)return 0;
+if(qn>=2&&matches<2){
+ int learned=strcmp(record->category,"OPERATOR_LEARNED")==0&&
+             strcmp(record->source,"interface:learn")==0;
+ char definition[TERM_COUNT][TERM_MAX]={{0}};
+ char target[TERM_COUNT][TERM_MAX]={{0}};
+ size_t tn=0,k;int salient=0;
+ const char *relation=strstr(record->text," means ");
+ if(!learned||!relation)return 0;
+ tn=terms(question,target);
+ for(k=0;k<tn;k++){
+  if(strcmp(target[k],"you")==0||strcmp(target[k],"me")==0||
+     strcmp(target[k],"my")==0||strcmp(target[k],"we")==0||
+     strcmp(target[k],"digit")==0)continue;
+  salient++;
+ }
+ /* An authorized definition of the single salient term must be present
+  * in the record's left-hand-side; a coincidental right-side match fails. */
+ if(salient!=1||qn>3)return 0;
+ {size_t n=(size_t)(relation-record->text);char lhs[CORPUS_TEXT_MAX];
+  if(n>=sizeof(lhs))return 0;
+  memcpy(lhs,record->text,n);lhs[n]=0;
+  if(terms(lhs,definition)==0||!has_term(definition,TERM_COUNT,target[tn-1]))return 0;
+ }
+}if(qn>0)coverage=(unsigned int)((matches*200U)/qn);if(rn>0)precision=(unsigned int)((matches*100U)/rn);score=matches*100U+coverage+precision+lesson_bonus(question,record)+phrase_match_bonus(question,record->text);qr=reference_value(question);rr=reference_value(record->text);if(qr>0&&rr>0){if(qr==rr)score+=600U;else score=score>400U?score-400U:1U;}if(strcmp(record->category,"source")==0&&source_intent(question))score+=25U;return score;}
 static size_t select_evidence(const char *question,const corpus_result_t *evidence,ranked_record_t selected[SELECTED_MAX]){ranked_record_t ranked[CORPUS_MAX];size_t count=evidence->count>CORPUS_MAX?CORPUS_MAX:evidence->count,i,j,out=0;int qr=reference_value(question);unsigned int reference_matches=0;for(i=0;i<count;++i){int rr;ranked[i].record=evidence->records[i];/* [AI:GPT-6 | 2026-10-10] An authorized learned relation
   * may use only stopwords in its predicate; it is not a question echo. */
 /* A verified operator-taught social rule can match a trigger word
@@ -800,5 +826,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
