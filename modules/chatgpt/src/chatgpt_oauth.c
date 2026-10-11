@@ -1,5 +1,27 @@
 #include <string.h>
 #include "chatgpt_oauth.h"
+#include <openssl/crypto.h>
+
+/* Single OAuth code-to-bearer path. Codes are consumed by the PKCE
+ * verifier; a redeemed code cannot mint a second access token. Authorization
+ * and registered-client consent MUST happen prior to code issuance. */
+int digit_chatgpt_oauth_exchange(digit_chatgpt_code_store_t *codes,
+    digit_chatgpt_token_store_t *tokens,const char *code,
+    const char *client_id,const char *redirect_uri,
+    const char *verifier,const char *audience,time_t now,
+    char token[DIGIT_CHATGPT_TOKEN_LENGTH])
+{
+    char principal[64]={0};
+    int ok;
+    if(token)token[0]=0;
+    if(!token||!codes||!tokens||!audience||!audience[0])return 0;
+    if(!digit_chatgpt_code_redeem(codes,code,client_id,redirect_uri,
+                                  verifier,now,principal))return 0;
+    ok=digit_chatgpt_token_issue(tokens,principal,audience,now,token);
+    OPENSSL_cleanse(principal,sizeof(principal));
+    return ok;
+}
+
 
 /* [AI:GPT-6 | 2026-10-11] Deny-by-default OAuth route dispatcher.
  * This must not issue codes or tokens until SA authorization,
