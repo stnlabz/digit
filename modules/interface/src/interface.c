@@ -913,7 +913,8 @@ static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[D
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* Delegated OAuth HTTP namespace: the ChatGPT module is the sole owner.
  * The module currently returns 503 rather than issuing unapproved grants. */
-if(strncmp(request,"GET /oauth/authorize HTTP/1.1",29)==0||
+if((strncmp(request,"GET /oauth/authorize",20)==0 &&
+    (request[20]=='?' || request[20]==' ')) ||
    strncmp(request,"POST /oauth/token HTTP/1.1",26)==0){
     digit_chatgpt_oauth_request_t in={{0}};
     digit_chatgpt_oauth_response_t out={0};
