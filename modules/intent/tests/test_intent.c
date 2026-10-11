@@ -111,11 +111,17 @@ int main(int argc, char **argv)
     {
         const stnlabz_module_descriptor_t *descriptor=stnlabz_module_get_descriptor();
         if(!descriptor||descriptor->version_major!=1||
-           descriptor->version_minor!=3||descriptor->version_patch!=2){
-            fprintf(stderr,"FAIL Intent 1.3.2 version contract\n");
+           descriptor->version_minor!=3||descriptor->version_patch!=3){
+            fprintf(stderr,"FAIL Intent 1.3.3 version contract\n");
             ++failures;
         }
     }
+    expect_intent("social assessment", "Digit, you are stoopid",
+                  DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
+    expect_intent("direct assessment", "You are inaccurate",
+                  DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
+    expect_intent("contraction assessment", "Digit, you're thoughtful",
+                  DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
     expect_intent("conversation", "hello Digit",
                   DIGIT_INTENT_CONVERSATION, DIGIT_INTENT_TARGET_SOCIAL, 1U);
     /* [AI:GPT-6 | 2026-10-09] Exercise classification, not enum names. */
