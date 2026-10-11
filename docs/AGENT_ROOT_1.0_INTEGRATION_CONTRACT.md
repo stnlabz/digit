@@ -1,6 +1,6 @@
 # Agent Root 1.0 — Integration Contract (DRAFT)
 
-Status: IMPLEMENTATION DESIGN — pending explicit approval for Core modification.
+Status: IMPLEMENTATION DESIGN — APPROVED [PM: 20261011:0225Z] for Core modification.
 Date: 2026-10-10
 Scope: Digit agent Root; reusable common Root contract for future STN-LABZ agents.
 Authority: Human-directed STN-LABZ development. This document does not grant deployment or Core-edit authorization.
