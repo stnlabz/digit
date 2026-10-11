@@ -256,6 +256,17 @@ static int interface_memory_private(const char *body,const char *identity,
                result.ok?"Saved to your Digit account memory.":"I could not save that memory.");
  return 1;
 }
+/* Mirror Dispatcher explicit DSD command grammar for permission admission. */
+static int interface_ai_dsd_command(const char *text){
+ const char *p=text,*command="diagnose my last request";size_t n;
+ if(!p)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"digit,",6)==0){p+=6;while(isspace((unsigned char)*p))++p;}
+ n=strlen(command);
+ if(strncasecmp(p,command,n)!=0)return 0;
+ p+=n;while(isspace((unsigned char)*p))++p;
+ return *p==0||(*p=='.'&&p[1]==0)||(*p=='?'&&p[1]==0);
+}
 static int interface_dispatch_private(const char *body,const char *identity,
                                        const char *previous_answer,const char *previous_user_message,
                                        unsigned int previous_diagnostic_valid,const digit_dsd_request_t *previous_diagnostic,
@@ -1339,6 +1350,9 @@ if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};di
  if(!digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
   interface_reply(client,403,"{\"error\":\"AI platform DM access denied\"}\n");return;
  }
+ if(!perm.diagnostics&&interface_ai_dsd_command(body)){
+  interface_reply(client,403,"{\"error\":\"AI platform diagnostics denied\"}\n");return;
+ }
  if(!perm.memory_write &&
     (!strncasecmp(body,"remember ",9)||!strncasecmp(body,"i am ",5))){
   interface_reply(client,403,"{\"error\":\"AI platform memory write denied\"}\n");return;
@@ -1457,7 +1471,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[31];
+    int tests[35];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -1512,6 +1526,10 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     tests[28]=interface_private_name_recall("What's my name?");
     tests[29]=!interface_private_name_recall("What is a variable name?");
     tests[30]=!interface_private_name_recall("What is another user's name?");
+    tests[31]=interface_ai_dsd_command("Digit, diagnose my last request.");
+    tests[32]=interface_ai_dsd_command("diagnose my last request");
+    tests[33]=!interface_ai_dsd_command("diagnose your module");
+    tests[34]=!interface_ai_dsd_command("diagnose my last requester");
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -1571,5 +1589,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
