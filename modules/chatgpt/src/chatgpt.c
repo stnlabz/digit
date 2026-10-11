@@ -1,5 +1,6 @@
 #include <string.h>
 #include "chatgpt.h"
+#include "chatgpt_oauth.h"
 /* [AI:GPT-6 | 2026-10-11] In-process ISO C integration module.
  * Learning requires authenticated identity AND explicit write authority.
  * This read-only module grants neither. Never forward text to operational
@@ -45,6 +46,19 @@ static stnlabz_module_result_t mcp_request(const void *request,size_t request_si
     memset(out,0,sizeof(*out));
     memcpy(out->json,reply,n+1);
     *used=sizeof(*out);
+    return STNLABZ_MODULE_OK;
+}
+/* In-process OAuth route service; public HTTP routing is a separate binding. */
+static stnlabz_module_result_t oauth_request(const void *request,size_t request_size,
+    void *response,size_t response_size,size_t *used,void *ctx){
+    (void)ctx;
+    if(used)*used=0;
+    if(!request||request_size!=sizeof(digit_chatgpt_oauth_request_t)||
+       !response||response_size<sizeof(digit_chatgpt_oauth_response_t)||!used)
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    if(!digit_chatgpt_oauth_route(request,response))
+        return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    *used=sizeof(digit_chatgpt_oauth_response_t);
     return STNLABZ_MODULE_OK;
 }
 static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q){
@@ -103,6 +117,12 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *host){
         (void)host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL);
         return STNLABZ_MODULE_ERR_START_FAILED;
     }
+    if(!host->register_service(DIGIT_CHATGPT_OAUTH_SERVICE,oauth_request,NULL)){
+        (void)host->unregister_service(DIGIT_CHATGPT_MCP_SERVICE,NULL);
+        (void)host->unregister_service(DIGIT_CHATGPT_TEST_SERVICE,NULL);
+        (void)host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL);
+        return STNLABZ_MODULE_ERR_START_FAILED;
+    }
     active_host=host;
     if(host->send_message)(void)host->send_message("[CHATGPT] integration registered; execution denied until qualified authenticated test scope");
     return STNLABZ_MODULE_OK;
@@ -110,12 +130,13 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *host){
 static stnlabz_module_result_t stop(void){
     int ok=1;
     if(active_host&&active_host->unregister_service){
+        if(!active_host->unregister_service(DIGIT_CHATGPT_OAUTH_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_MCP_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_TEST_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL))ok=0;
     }
     active_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,3,
+static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,4,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
