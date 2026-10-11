@@ -852,7 +852,7 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
  interface_dispatcher_result_t out={0};
  digit_dsd_request_t diagnostic={0};unsigned int diagnostic_valid=0;
  if(strncmp(identity,"ai.",3)!=0||
-    !digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
+    !digit_ai_platform_permissions(DIGIT_MCP_REGISTRY,identity,&perm)||!perm.dm){
   interface_reply(client,403,"{\"error\":\"AI platform required\"}\n");return;
  }
  if(!session||!body||strlen(body)>=INTERFACE_BUFFER_MAX||
@@ -1010,8 +1010,8 @@ if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
  char key[DIGIT_SESSION_TOKEN_SIZE],actor[64]={0};
  digit_session_entry_t *session=NULL;
  if(!digit_http_bearer_token(request,key)||
-    !digit_ai_platform_verify_key(DIGIT_AI_PLATFORM_REGISTRY,
-                                 DIGIT_AI_PLATFORM_CREDENTIALS,key,actor)||
+    !digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,
+                                 DIGIT_MCP_CREDENTIALS,key,actor)||
     !(session=interface_mcp_key_session(key,actor))){
   memset(key,0,sizeof(key));
   interface_reply(client,401,"{\"error\":\"AI MCP bearer authentication required\"}\n");return;
@@ -1742,5 +1742,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
