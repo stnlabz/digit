@@ -577,13 +577,18 @@ static void validator_evidence(ranked_record_t selected[SELECTED_MAX],size_t sel
 static int validate_outbound_evidence(const char *raw,const char *normalized,const char *candidate,const char *evidence,unsigned int attempt,validator_outbound_result_t *validation){validator_outbound_request_t request;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||candidate==NULL||validation==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(validation,0,sizeof(*validation));snprintf(request.raw,sizeof(request.raw),"%s",raw);snprintf(request.normalized,sizeof(request.normalized),"%s",normalized);snprintf(request.candidate,sizeof(request.candidate),"%s",candidate);if(evidence!=NULL)snprintf(request.evidence,sizeof(request.evidence),"%s",evidence);request.attempt=attempt;status=response_host->invoke_service(VALIDATOR_OUTBOUND_SERVICE,&request,sizeof(request),validation,sizeof(*validation),&used);return status==STNLABZ_MODULE_OK&&used==sizeof(*validation);}
 static int validate_outbound(const char *raw,const char *normalized,const char *candidate,ranked_record_t selected[SELECTED_MAX],size_t selected_count,unsigned int attempt,validator_outbound_result_t *validation){char evidence[VALIDATOR_TEXT_MAX];memset(evidence,0,sizeof(evidence));validator_evidence(selected,selected_count,evidence,sizeof(evidence));return validate_outbound_evidence(raw,normalized,candidate,evidence,attempt,validation);}
 /* Convert structured Root relationship evidence to a bounded reply. */
+/* Root relationship resolution: verify subject/predicate/object, including inverse
+ * relations. A named entity requires a yes/no answer; no Corpus substitution. */
 static int root_sibling_reply(const char *question,char *answer,size_t cap,char *evidence,size_t ecap){
  digit_root_facts_result_t records={0};size_t used=0,i;
- char words[TERM_COUNT][TERM_MAX]={{0}},plain[CORPUS_TEXT_MAX];size_t n=terms(question,words);
+ char words[TERM_COUNT][TERM_MAX]={{0}},plain[CORPUS_TEXT_MAX];
+ size_t n=terms(question,words);
  int younger=has_term(words,n,"younger"),older=has_term(words,n,"older");
+ int named=0,match=0,seen=0;const digit_root_fact_t *chosen=NULL;
  canonical_text(question,plain,sizeof(plain));
  if(!has_term(words,n,"sister")||
-    !(strstr(plain," your ")||strstr(plain," you ")||!strncmp(plain,"your ",5)||!strncmp(plain,"you ",4))||
+    !(strstr(plain," your ")||strstr(plain," you ")||
+      !strncmp(plain,"your ",5)||!strncmp(plain,"you ",4))||
     !response_host||!response_host->invoke_service)return 0;
  if(response_host->invoke_service(DIGIT_ROOT_FACTS_SERVICE,NULL,0,&records,
      sizeof(records),&used)!=STNLABZ_MODULE_OK||
@@ -592,15 +597,24 @@ static int root_sibling_reply(const char *question,char *answer,size_t cap,char 
   const digit_root_fact_t *f=&records.facts[i];
   int is_older=!strcmp(f->predicate,"older_sister_of");
   int is_younger=!strcmp(f->predicate,"younger_sister_of");
+  char entity[CORPUS_TEXT_MAX];
   if(!is_older&&!is_younger)continue;
-  if(younger&&is_younger)continue;
-  if(older&&is_older)continue;
-  if(snprintf(answer,cap,"%s is my %s sister.",f->object,
-       is_older?"younger":"older")<0)return 0;
-  if(snprintf(evidence,ecap,"%s %s %s",f->subject,f->predicate,f->object)<0)return 0;
-  return 1;
+  ++seen;
+  canonical_text(f->object,entity,sizeof(entity));
+  if(entity[0]&&strstr(plain,entity)!=NULL)named=1;
+  if((younger&& !is_older)||(older&& !is_older))continue;
+  if(entity[0]&&strstr(plain,entity)!=NULL){chosen=f;match=1;break;}
+  if(!chosen)chosen=f;
  }
- return 0;
+ if(!seen||!chosen)return 0;
+ if(named){
+  if(snprintf(answer,cap,"%s, %s is my younger sister.",match?"Yes":"No",
+       chosen->object)<0)return 0;
+ }else if(snprintf(answer,cap,"%s is my %s sister.",chosen->object,
+       !strcmp(chosen->predicate,"older_sister_of")?"younger":"older")<0)return 0;
+ if(snprintf(evidence,ecap,"%s %s %s",
+       chosen->subject,chosen->predicate,chosen->object)<0)return 0;
+ return 1;
 }
 static stnlabz_module_result_t answer_service_observed(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_observed_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_INPUT_REJECTED;output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_introduction(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_personal_context(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}{
   char root_evidence[512]={0};
