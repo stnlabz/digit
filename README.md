@@ -6,6 +6,16 @@
 
 Digit follows **Core → Modules → Mission**. The common Core binds through its platform interface, with target-specific behavior outside shared Core semantics. Architecture, authorization and deployment remain under human control.
 
+## Verified language milestone and open personality gate — 2026-10-11 UTC
+
+**Operator-confirmed runtime:** Intent **1.3.4** reached `VERSION_CHANGED`, `QUALIFICATION_GREEN` and `HOTLOAD_ACTIVE` at **04:34:34 UTC**. Response **2.0.5** reached the same gates at **04:47:34 UTC**. These are module-specific qualification and activation observations, not full conversational-system acceptance.
+
+**Live GUI observation:** `Digit, you are stoopid` → `I hear your feedback. What would you like me to improve?` — **PASS for this individual input/output behavior only**. Earlier attempts yielded `NO_CONVERSATIONAL_COMPOSITION`; DSD and Response evidence traces exposed irrelevant identity-record selection and helped locate the retrieval path defect. Response 2.0.5 strips an optional leading vocative from social-feedback retrieval queries while preserving the original request for processing and diagnostics.
+
+**Personality-expression acceptance: OPEN / NOT ACCEPTED.** This observed acknowledgment comes from a literal sentence embedded in Response's `learned_feedback_acknowledgment()`; it is **hardcoded output**, even though the slang term itself is not hardcoded in that path. Therefore the successful utterance **does not** demonstrate generalized personality or genuine language composition. The operator expressly rejected canned conversational answers and scenario-specific language exceptions. Replace the fixed acknowledgment with general, context-aware, evidence-grounded composition expressing existing Root traits; preserve Core, Root, General Orders, independent Validator, mission/authority boundaries, and the external ABI. Do not present deterministic templates as autonomous personality. Broader conversational regressions, safe variation, context and negatives require qualification and operator acceptance.
+
+**Engineering disposition:** Core/Root retained; Intent 1.3.4 and Response 2.0.5 operator-confirmed GREEN/ACTIVE; one live social acknowledgment PASS; **personality architecture and integrated conversational acceptance remain OPEN**. No personality-composition replacement is committed or qualified by this status entry. The 2026-10-10 status below remains historical evidence at its original cutoff.
+
 ## Status update — 2026-10-10
 
 **Architecture:** Digit uses implied MVC: Interface = View; Dispatcher = Controller; Intent → Interpretation → Corpus = Model. Runtime currently invokes Interpretation before Intent. Response constructs a candidate and Validator checks it independently. This mapping does not change Core → Modules → Mission or authorize Core/ABI edits.
