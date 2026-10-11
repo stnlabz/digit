@@ -579,39 +579,68 @@ static int validate_outbound(const char *raw,const char *normalized,const char *
 /* Convert structured Root relationship evidence to a bounded reply. */
 /* Root relationship resolution: verify subject/predicate/object, including inverse
  * relations. A named entity requires a yes/no answer; no Corpus substitution. */
-static int root_sibling_reply(const char *question,char *answer,size_t cap,char *evidence,size_t ecap){
- digit_root_facts_result_t records={0};size_t used=0,i;
+static int root_sibling_question(const char *question){
  char words[TERM_COUNT][TERM_MAX]={{0}},plain[CORPUS_TEXT_MAX];
  size_t n=terms(question,words);
- int younger=has_term(words,n,"younger"),older=has_term(words,n,"older");
- int named=0,match=0,seen=0;const digit_root_fact_t *chosen=NULL;
  canonical_text(question,plain,sizeof(plain));
- if(!has_term(words,n,"sister")||
-    !(strstr(plain," your ")||strstr(plain," you ")||
-      !strncmp(plain,"your ",5)||!strncmp(plain,"you ",4))||
-    !response_host||!response_host->invoke_service)return 0;
+ return has_term(words,n,"sister")&&
+   (strstr(plain," your ")||strstr(plain," you ")||
+    !strncmp(plain,"your ",5)||!strncmp(plain,"you ",4));
+}
+/* Relationship request shapes are decoded as a predicate and argument
+ * binding; answers come from authoritative Root facts, never Q/A strings. */
+static int root_sibling_reply(const char *question,char *answer,size_t cap,char *evidence,size_t ecap){
+ digit_root_facts_result_t records={0};
+ char words[TERM_COUNT][TERM_MAX]={{0}},plain[CORPUS_TEXT_MAX];
+ size_t n=terms(question,words),i;
+ int younger=has_term(words,n,"younger"),older=has_term(words,n,"older");
+ int yes_no=0,desired_older=0,entity_present=0;
+ const digit_root_fact_t *chosen=NULL,*fallback=NULL;
+ canonical_text(question,plain,sizeof(plain));
+ if(!root_sibling_question(question)||!response_host||
+    !response_host->invoke_service||!answer||!evidence)return 0;
+ yes_no=strstr(plain,"are you ")!=NULL||!strncmp(plain,"are you ",8);
+ /* "Are you X's older sister" describes the subject; "your
+  * younger sister" describes the object and reverses the predicate. */
+ desired_older=yes_no?older:younger;
  if(response_host->invoke_service(DIGIT_ROOT_FACTS_SERVICE,NULL,0,&records,
-     sizeof(records),&used)!=STNLABZ_MODULE_OK||
-    used!=sizeof(records)||records.count>DIGIT_ROOT_FACTS_MAX)return 0;
- for(i=0;i<records.count;i++){
+     sizeof(records),&n)!=STNLABZ_MODULE_OK||
+    n!=sizeof(records)||records.count>DIGIT_ROOT_FACTS_MAX)return 0;
+ for(i=0;i<records.count;++i){
   const digit_root_fact_t *f=&records.facts[i];
   int is_older=!strcmp(f->predicate,"older_sister_of");
   int is_younger=!strcmp(f->predicate,"younger_sister_of");
-  char entity[CORPUS_TEXT_MAX];
+  char name[CORPUS_TEXT_MAX],needle[CORPUS_TEXT_MAX];
   if(!is_older&&!is_younger)continue;
-  ++seen;
-  canonical_text(f->object,entity,sizeof(entity));
-  if(entity[0]&&strstr(plain,entity)!=NULL)named=1;
-  if((younger&& !is_older)||(older&& !is_older))continue;
-  if(entity[0]&&strstr(plain,entity)!=NULL){chosen=f;match=1;break;}
-  if(!chosen)chosen=f;
+  if(!fallback)fallback=f;
+  canonical_text(f->object,name,sizeof(name));
+  if(!name[0])continue;
+  snprintf(needle,sizeof(needle)," %s ",name);
+  {
+   char padded[CORPUS_TEXT_MAX+2];
+   snprintf(padded,sizeof(padded)," %s ",plain);
+   if(strstr(padded,needle)!=NULL){entity_present=1;
+    if((desired_older&&is_older)||((younger||older)&&!desired_older&&is_younger)||
+       (!younger&&!older)){chosen=f;break;}
+   }
+  }
+  if(!yes_no&&((desired_older&&is_older)||(!desired_older&&is_younger))&&!chosen)chosen=f;
  }
- if(!seen||!chosen)return 0;
- if(named){
-  if(snprintf(answer,cap,"%s, %s is my younger sister.",match?"Yes":"No",
-       chosen->object)<0)return 0;
- }else if(snprintf(answer,cap,"%s is my %s sister.",chosen->object,
+ if(yes_no){
+  if(!entity_present||!fallback)return 0;
+  if(chosen){
+   if(snprintf(answer,cap,"Yes. %s is my %s sister.",chosen->object,
        !strcmp(chosen->predicate,"older_sister_of")?"younger":"older")<0)return 0;
+  }else {
+   if(snprintf(answer,cap,"No. %s is my %s sister.",fallback->object,
+       !strcmp(fallback->predicate,"older_sister_of")?"younger":"older")<0)return 0;
+   chosen=fallback;
+  }
+ }else{
+  if(!chosen)return 0;
+  if(snprintf(answer,cap,"%s is my %s sister.",chosen->object,
+       !strcmp(chosen->predicate,"older_sister_of")?"younger":"older")<0)return 0;
+ }
  if(snprintf(evidence,ecap,"%s %s %s",
        chosen->subject,chosen->predicate,chosen->object)<0)return 0;
  return 1;
@@ -632,6 +661,14 @@ static stnlabz_module_result_t answer_service_observed(const void *request,size_
    memcpy(response,&output,sizeof(output));*response_used=sizeof(output);
    return STNLABZ_MODULE_OK;
   }
+ }
+ if(root_sibling_question(normalized)){
+  output.answered=1;
+  output.diagnostic_phase=DIGIT_RESPONSE_PHASE_EVIDENCE_UNAVAILABLE;
+  snprintf(output.answer,sizeof(output.answer),
+   "I cannot verify that relationship from my Root facts right now.");
+  memcpy(response,&output,sizeof(output));*response_used=sizeof(output);
+  return STNLABZ_MODULE_OK;
  }
  /* Bounded refusal rather than a wrong numeric answer from lexical evidence. */
  /* [AI:GPT-6 | 2026-10-09] Arithmetic is a shared capability.
@@ -941,5 +978,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,11,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
