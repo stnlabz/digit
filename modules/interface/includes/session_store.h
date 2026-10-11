@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
+#include "../../dsd/includes/dsd.h"
 
 /* [AI:GPT-6 | 2026-10-08] Bounded identity-bound session storage.
  * Tokens may be issued ONLY after successful server-side authentication.
@@ -22,6 +23,8 @@ typedef struct {
     /* [AI:GPT-6 | 2026-10-10] Volatile authenticated-session reply context. */
     char last_reply[DIGIT_SESSION_LAST_REPLY_MAX];
     char last_user_message[DIGIT_SESSION_LAST_REPLY_MAX];
+    unsigned int last_diagnostic_valid;
+    digit_dsd_request_t last_diagnostic;
     time_t expires_at;
     int active;
 } digit_session_entry_t;
