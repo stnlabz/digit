@@ -13,6 +13,7 @@ ACCESS_TEST_TARGET := bin/test_access_policy
 SESSION_TEST_TARGET := bin/test_session_store
 HTTP_AUTH_TEST_TARGET := bin/test_http_auth
 ACCOUNT_AUTH_TEST_TARGET := bin/test_account_auth
+AI_PLATFORM_TEST_TARGET := bin/test_ai_platform_auth
 CHANNEL_ACL_TEST_TARGET := bin/test_channel_acl
 PROJECT_TEST_TARGET := bin/test_project_provision
 MILESTONE_TEST_TARGET := bin/test_1_6_0
@@ -48,7 +49,7 @@ SA_TEST_TARGET := bin/test_security_sa
 SA_MANAGEMENT_TEST_TARGET := bin/test_sa_management
 MESSAGE_ORIGIN_TEST_TARGET := bin/test_message_origin
 PROJECT_ADMIN_ROUTE_TEST_TARGET := bin/test_project_admin_route
-SOURCE := src/alerts_channel.c src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c src/sa_management.c
+SOURCE := src/alerts_channel.c src/grant_store.c src/grant_request.c src/project_list.c src/channel_create_policy.c src/dashboard_response.c src/interface.c src/builder_response.c src/corpus_response.c src/channel_results.c src/alert_results.c src/message_results.c src/http_write.c src/knowledge_query.c src/controlled_communication.c src/interface_audit.c src/http_limits.c src/session_store.c src/http_auth.c src/account_auth.c src/ai_platform_auth.c src/channel_acl.c src/project_provision.c src/project_channel_bridge.c src/security_sa.c src/sa_management.c
 TEST_SOURCE := tests/test_interface.c
 
 DIGIT_PREFIX ?= /opt/digit
@@ -80,6 +81,9 @@ $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_sto
 
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
+
+$(AI_PLATFORM_TEST_TARGET): tests/test_ai_platform_auth.c src/ai_platform_auth.c includes/ai_platform_auth.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_ai_platform_auth.c src/ai_platform_auth.c -o $@
 
 $(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h includes/project_channel_bridge.h includes/project_provision.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c -o $@ -lcrypt
