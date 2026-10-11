@@ -767,6 +767,20 @@ static stnlabz_module_result_t answer_service_observed(const void *request,size_
   return STNLABZ_MODULE_OK;
  }
  memset(&evidence,0,sizeof(evidence));memset(selected,0,sizeof(selected));query=intent.structured?retrieval_text(&intent):normalized;
+ /* Strip an optional single-word vocative ONLY for conversational
+  * second-person feedback retrieval. Preserve the original operator
+  * request for composition, diagnostics, and all authorization checks. */
+ if(!strcmp(intent.intent,"CONVERSATION")){
+  const char *p=query;
+  while(isalpha((unsigned char)*p))++p;
+  if(p>query&&p-query<64&&(*p==','||isspace((unsigned char)*p))){
+   const char *body=p;
+   if(*body==',')++body;
+   while(isspace((unsigned char)*body))++body;
+   if(!strncasecmp(body,"you are ",8)||!strncasecmp(body,"you're ",7)||
+      !strncasecmp(body,"you were ",9))query=body;
+  }
+ }
     /* A quoted subject in an explicit knowledge request takes precedence over
      * framing instructions such as "in your own words". */
     {
@@ -1062,5 +1076,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
