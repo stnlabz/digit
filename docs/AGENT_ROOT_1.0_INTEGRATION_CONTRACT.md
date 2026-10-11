@@ -1,9 +1,9 @@
-# Agent Root 1.0 — Integration Contract (DRAFT)
+# Agent Root 1.0 — Integration Contract
 
 Status: IMPLEMENTATION DESIGN — APPROVED [PM: 20261011:0225Z]
 Date: 2026-10-10
 Scope: Digit agent Root; reusable common Root contract for future STN-LABZ agents.
-Authority: Human-directed STN-LABZ development. This document does not grant deployment or Core-edit authorization.
+Authority: Human-directed STN-LABZ development. Scoped Core source implementation authorized by the operator on 2026-10-10; deployment remains separately gated.
 
 ## 1. Approved architectural decisions
 
@@ -36,7 +36,7 @@ Ezra identity is separately compiled and independently validated; relation=young
 
 The common Core MUST NOT embed the string 'Digit' as the universal agent identity. Agent-specific fields belong to agent-bound build artifacts, not mutable Corpus records, runtime lessons, or mission configuration.
 
-## 3. Proposed integration mechanics (not yet authorized)
+## 3. Integration mechanics (Core-private initial scope authorized)
 
 1. Define a small, versioned, read-only agent Root descriptor in agent-specific source. Prefer a narrow static constant with bounded strings/fields and explicit enum relationships.
 2. At startup, before module discovery, validate descriptor schema, required fields, approved General Orders and compiled-root integrity metadata. Fail closed if identity or governing Root integrity fails; report through available Core diagnostics/audit.
@@ -58,15 +58,13 @@ The common Core MUST NOT embed the string 'Digit' as the universal agent identit
 - Character rules do not inject canned conversational text; Response/Intent/Validator remain responsible for expression and factual acceptance.
 - Qualification tests execute measured positive/negative cases; runtime activation and conversational acceptance are separate gates.
 
-## 5. Decision gate before source changes
+## 5. Source authorization and deployment gate
 
-Explicit operator approval is required for the precise Core files, API exposure mechanism, startup failure semantics, integrity trust anchor, and build-time choice of agent-specific descriptor.
-
-Until that approval: no Core source edits, no ABI change, no install, no hotload.
+Operator authorization was given to implement the exact Core integration scope described in Section 6. The chosen initial API is Core-private; no external ABI modifications or module-visible Root service are authorized. The compiled descriptor is schema-validated, not cryptographically attested. Production installation and deployment remain unauthorized until Linux qualification and a separate operator deployment decision.
 
 Engineering principle: Determinism != Probably.
 
-## 6. Proposed Core implementation scope — pending separate source authorization
+## 6. Authorized Core implementation scope
 
 Repository inspection (2026-10-10) identified these existing integration points:
 - src/digit.c: digit_initialize() opens audit, registers services, then discovers modules. Root validation should run immediately after audit opens and before module discovery or service registration.
@@ -94,4 +92,8 @@ Portability: Use only common C11 logic in the descriptor and validator. Platform
 
 Qualification gates: descriptor identity and version, exact General Orders, mandatory traits, bounded strings, duplicate/conflicting identifiers, malformed relationships, agent-swap test (with independent fixture), no root-to-authority elevation, rejection before discovery, and existing Core regression tests. A module-visible query must be separately tested if it is eventually approved.
 
-This section scopes a proposed Core change only. The PM design approval at the top does not itself authorize editing src/digit.c, Makefile, or other executable Core files. No deployment authorization is implied.
+The operator subsequently authorized the scoped Core implementation. Source has been committed to GitHub main for Linux qualification. No deployment authorization is implied.
+
+## 7. Implementation record
+
+Committed initial Core-private Agent Root v1.0: include/agent_root.h, src/agent_root.c, src/identity_digit.c, tests/test_agent_root.c; amended src/digit.c and Makefile. Root validation occurs after audit initialization and before any module discovery or registration. Invalid Root prevents Core startup; successful validation emits a ROOT VALIDATED audit event. Existing STN-LABZ external ABI is unchanged. No module-visible identity service, cryptographic build attestation, or production deployment is claimed. Linux build and regression evidence remain pending.
