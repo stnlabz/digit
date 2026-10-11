@@ -20,6 +20,55 @@ static int code_valid(const char *value,size_t size){
     }
     return 1;
 }
+/* [AI:GPT-6 | 2026-10-11] Source-relative investigation targets,
+ * NOT claims of source fault. Only known module IDs are mapped, and the
+ * exact function/line remains unverified until source-level investigation. */
+static const char *source_target(const char *module){
+    static const struct {const char *module,*path;} known[]={
+        {"interpretation","modules/interpretation/src/interpretation.c"},
+        {"intent","modules/intent/src/intent.c"},
+        {"response","modules/response/src/response.c"},
+        {"validator","modules/validator/src/validator.c"},
+        {"dispatcher","modules/dispatcher/src/dispatcher.c"},
+        {"dsd","modules/dsd/src/dsd.c"}
+    };
+    size_t i;
+    for(i=0;i<sizeof(known)/sizeof(known[0]);++i)
+        if(strcmp(module,known[i].module)==0)return known[i].path;
+    return NULL;
+}
+static void engineering_handoff(digit_dsd_result_t *out){
+    const char *target;
+    if(out->finding==DIGIT_DSD_UNKNOWN || !out->affected_module[0]){
+        snprintf(out->symptom,sizeof(out->symptom),
+                 "Insufficient module-stage evidence to establish an affected module");
+        out->location_status=DIGIT_DSD_LOCATION_UNRESOLVED;
+        out->source_location[0]=0;
+    }else{
+        snprintf(out->symptom,sizeof(out->symptom),
+                 "Processing stage reported %s",out->reason[0]?out->reason:"UNSPECIFIED_FAILURE");
+        target=source_target(out->affected_module);
+        if(target){
+            snprintf(out->source_location,sizeof(out->source_location),"%s",target);
+            out->location_status=DIGIT_DSD_LOCATION_INVESTIGATE;
+        }else{
+            out->source_location[0]=0;
+            out->location_status=DIGIT_DSD_LOCATION_UNRESOLVED;
+        }
+    }
+    {char narrative[DIGIT_DSD_REPORT_MAX];
+     snprintf(narrative,sizeof(narrative),"%s",out->report);
+     snprintf(out->report,sizeof(out->report),
+         "Module: %s. Symptom: %s. Source investigation location: %s. "
+         "Location evidence: %s. Diagnostic reason: %s. %.260s",
+         out->affected_module[0]?out->affected_module:"NOT_IDENTIFIED",
+         out->symptom,
+         out->source_location[0]?out->source_location:"NOT_ESTABLISHED",
+         out->location_status==DIGIT_DSD_LOCATION_INVESTIGATE?
+             "INVESTIGATION_TARGET_NOT_VERIFIED_ROOT_CAUSE":"UNRESOLVED",
+         out->reason,narrative);
+    }
+}
 static int inspect(const digit_dsd_request_t *in,digit_dsd_result_t *out){
     size_t i;
     unsigned int ok=0;
@@ -80,6 +129,7 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_result_t *out){
                  "Available telemetry: %u stage(s), %u reporting success, retrieved %u record(s), selected %u. No failed boundary was established. Additional stage telemetry is required to determine the underlying cause.",
                  in->stage_count,ok,in->retrieved,in->selected);
     }
+    engineering_handoff(out);
     return 1;
 }
 static stnlabz_module_result_t diagnose_service(const void *request,size_t request_size,
@@ -155,7 +205,7 @@ static stnlabz_module_result_t dsd_stop(void){
     return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 static const stnlabz_module_descriptor_t descriptor={
-    "dsd","Digit Self-Diagnostics",1,1,0,
+    "dsd","Digit Self-Diagnostics",1,2,0,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
     dsd_qualify,dsd_start,dsd_stop
 };
