@@ -31,6 +31,7 @@ static const char *arithmetic_expected_answer;
 static int arithmetic_available=1;
 static int learned_definition_fixture=0;
 static int root_relationship_fixture=0;
+static int feedback_fixture=0;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -89,6 +90,15 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
  }
  if(!strcmp(name,"corpus.search")){
   corpus_queries++;
+  if(feedback_fixture){
+   digit_corpus_search_result_t *out=response;
+   if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+   memset(out,0,sizeof(*out));out->count=1;
+   snprintf(out->records[0].category,sizeof(out->records[0].category),"OPERATOR_LEARNED");
+   snprintf(out->records[0].source,sizeof(out->records[0].source),"interface:learn");
+   snprintf(out->records[0].text,sizeof(out->records[0].text),"stoopid means foolish");
+   *used=sizeof(*out);return STNLABZ_MODULE_OK;
+  }
   if(learned_definition_fixture){
    digit_corpus_search_result_t *out=response;
    if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
@@ -202,6 +212,21 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   }
   root_relationship_fixture=0;
  }
+ /* Learned social feedback is not a definition request or factual claim. */
+ {
+  digit_response_observed_result_t observed={0};size_t observation_used=0;
+  feedback_fixture=1;
+  memset(&request,0,sizeof(request));
+  snprintf(request.question,sizeof(request.question),
+   "INTENT: CONVERSATION\nTARGET: SOCIAL\nSUBJECT: stoopid\nREQUEST: You are stoopid");
+  check(observed_response_handler(&request,sizeof(request),&observed,
+   sizeof(observed),&observation_used,NULL)==STNLABZ_MODULE_OK&&
+   observation_used==sizeof(observed)&&observed.answered&&
+   observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE&&
+   strstr(observed.answer,"What would you like me to improve?")!=NULL,
+   "learned feedback receives general conversational acknowledgment");
+  feedback_fixture=0;
+ }
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
  {
   static const struct {const char *question,*expected;} cases[]={
@@ -312,7 +337,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 9 && descriptor->version_patch == 11, "internal version is 1.9.11");
+    check(descriptor != NULL && descriptor->version_major == 1 && descriptor->version_minor == 9 && descriptor->version_patch == 12, "internal version is 1.9.12");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
