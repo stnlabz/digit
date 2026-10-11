@@ -24,6 +24,13 @@ jobs:
         shell: bash
         run: |
           python3 -m unittest discover -s digit/tools/digit_test_bridge -p 'test_policy.py' -v
+      - name: Qualify ISO C ChatGPT integration module
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C digit/modules/chatgpt clean
+          make -C digit/modules/chatgpt all
+          make -C digit/modules/chatgpt test
       - name: Compile and qualify language pipeline
         shell: bash
         run: |
