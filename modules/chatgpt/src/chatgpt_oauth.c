@@ -48,7 +48,8 @@ int digit_chatgpt_oauth_route(const digit_chatgpt_oauth_request_t *request,
 {
     if (!request || !response ||
         !memchr(request->method, 0, sizeof(request->method)) ||
-        !memchr(request->path, 0, sizeof(request->path)))
+        !memchr(request->path, 0, sizeof(request->path)) ||
+        !memchr(request->parameters, 0, sizeof(request->parameters)))
         return 0;
     memset(response, 0, sizeof(*response));
     if (strcmp(request->path, DIGIT_CHATGPT_OAUTH_AUTHORIZE) == 0) {
