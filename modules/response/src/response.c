@@ -204,7 +204,7 @@ static int learned_glossary_acknowledgment(const char *question,
  * The reply neither repeats an insult nor claims an unverified fact. */
 static int learned_feedback_acknowledgment(const char *question,
  const corpus_record_t *record,char *answer,size_t capacity){
- char q[CORPUS_TEXT_MAX],term[CORPUS_TEXT_MAX],words[TERM_COUNT][TERM_MAX]={{0}};
+ char q[CORPUS_TEXT_MAX],term[CORPUS_TEXT_MAX],canonical_term[CORPUS_TEXT_MAX],words[TERM_COUNT][TERM_MAX]={{0}};
  const char *source,*relation;size_t len,n;
  if(!question||!record||!answer||!capacity||
     strcmp(record->category,"OPERATOR_LEARNED")||
@@ -217,9 +217,9 @@ static int learned_feedback_acknowledgment(const char *question,
  len=(size_t)(relation-source);
  if(!len||len>=sizeof(term))return 0;
  memcpy(term,source,len);term[len]=0;
- canonical_text(term,term,sizeof(term));
+ canonical_text(term,canonical_term,sizeof(canonical_term));
  n=terms(q,words);
- if(!n||!has_term(words,n,term))return 0;
+ if(!n||!has_term(words,n,canonical_term))return 0;
  return snprintf(answer,capacity,
    "I hear your feedback. What would you like me to improve?")>0;
 }
