@@ -4,6 +4,7 @@
 #include <strings.h> /* [AI:GPT-6 | 2026-10-09] POSIX strncasecmp declaration. */
 
 #include "response.h"
+#include "../../../include/root_facts_contract.h"
 #include "arithmetic.h"
 #include "reasoning.h"
 #include "../../interpretation/includes/interpretation.h"
@@ -575,7 +576,49 @@ static int validate_inbound(const char *raw,char *normalized,size_t normalized_s
 static void validator_evidence(ranked_record_t selected[SELECTED_MAX],size_t selected_count,char *buffer,size_t buffer_size){size_t i,offset=0;if(buffer==NULL||buffer_size==0)return;buffer[0]='\0';for(i=0;i<selected_count&&offset+1<buffer_size;++i){int written=snprintf(buffer+offset,buffer_size-offset,"%s%s",i?"\n":"",selected[i].record.text);if(written<=0||(size_t)written>=buffer_size-offset)break;offset+=(size_t)written;}}
 static int validate_outbound_evidence(const char *raw,const char *normalized,const char *candidate,const char *evidence,unsigned int attempt,validator_outbound_result_t *validation){validator_outbound_request_t request;stnlabz_module_result_t status;size_t used=0;if(raw==NULL||normalized==NULL||candidate==NULL||validation==NULL||response_host==NULL||response_host->invoke_service==NULL)return 0;memset(&request,0,sizeof(request));memset(validation,0,sizeof(*validation));snprintf(request.raw,sizeof(request.raw),"%s",raw);snprintf(request.normalized,sizeof(request.normalized),"%s",normalized);snprintf(request.candidate,sizeof(request.candidate),"%s",candidate);if(evidence!=NULL)snprintf(request.evidence,sizeof(request.evidence),"%s",evidence);request.attempt=attempt;status=response_host->invoke_service(VALIDATOR_OUTBOUND_SERVICE,&request,sizeof(request),validation,sizeof(*validation),&used);return status==STNLABZ_MODULE_OK&&used==sizeof(*validation);}
 static int validate_outbound(const char *raw,const char *normalized,const char *candidate,ranked_record_t selected[SELECTED_MAX],size_t selected_count,unsigned int attempt,validator_outbound_result_t *validation){char evidence[VALIDATOR_TEXT_MAX];memset(evidence,0,sizeof(evidence));validator_evidence(selected,selected_count,evidence,sizeof(evidence));return validate_outbound_evidence(raw,normalized,candidate,evidence,attempt,validation);}
-static stnlabz_module_result_t answer_service_observed(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_observed_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_INPUT_REJECTED;output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_introduction(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_personal_context(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* Bounded refusal rather than a wrong numeric answer from lexical evidence. */
+/* Convert structured Root relationship evidence to a bounded reply. */
+static int root_sibling_reply(const char *question,char *answer,size_t cap,char *evidence,size_t ecap){
+ digit_root_facts_result_t records={0};size_t used=0,i;
+ char words[TERM_COUNT][TERM_MAX]={{0}};size_t n=terms(question,words);
+ int younger=has_term(words,n,"younger"),older=has_term(words,n,"older");
+ if(!has_term(words,n,"sister")||
+    !(has_term(words,n,"you")||has_term(words,n,"your"))||
+    !response_host||!response_host->invoke_service)return 0;
+ if(response_host->invoke_service(DIGIT_ROOT_FACTS_SERVICE,NULL,0,&records,
+     sizeof(records),&used)!=STNLABZ_MODULE_OK||
+    used!=sizeof(records)||records.count>DIGIT_ROOT_FACTS_MAX)return 0;
+ for(i=0;i<records.count;i++){
+  const digit_root_fact_t *f=&records.facts[i];
+  int is_older=!strcmp(f->predicate,"older_sister_of");
+  int is_younger=!strcmp(f->predicate,"younger_sister_of");
+  if(!is_older&&!is_younger)continue;
+  if(younger&&is_younger)continue;
+  if(older&&is_older)continue;
+  if(snprintf(answer,cap,"%s is my %s sister.",f->object,
+       is_older?"younger":"older")<0)return 0;
+  if(snprintf(evidence,ecap,"%s %s %s",f->subject,f->predicate,f->object)<0)return 0;
+  return 1;
+ }
+ return 0;
+}
+static stnlabz_module_result_t answer_service_observed(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context){const digit_response_request_t *input=request;digit_response_observed_result_t output;corpus_result_t evidence;ranked_record_t selected[SELECTED_MAX];validator_outbound_result_t validation;response_intent_t intent;char normalized[VALIDATOR_TEXT_MAX];char rendered_evidence[VALIDATOR_TEXT_MAX];char phrase[DIGIT_RESPONSE_QUESTION_MAX];const char *query;size_t selected_count;(void)handler_context;if(request==NULL||request_size!=sizeof(*input)||response==NULL||response_used==NULL||response_size<sizeof(output))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(memchr(input->question,'\0',sizeof(input->question))==NULL||input->question[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;if(response_host==NULL||response_host->invoke_service==NULL)return STNLABZ_MODULE_ERR_START_FAILED;memset(&output,0,sizeof(output));memset(&intent,0,sizeof(intent));memset(normalized,0,sizeof(normalized));memset(rendered_evidence,0,sizeof(rendered_evidence));parse_intent_envelope(input->question,&intent);if(!validate_inbound(intent.request,normalized,sizeof(normalized))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_INPUT_REJECTED;output.answered=1;snprintf(output.answer,sizeof(output.answer),"I couldn't validate that request well enough to answer it safely.");memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}/* [AI:GPT-6 | 2026-10-08] Dispatcher wraps greetings in a structured CONVERSATION envelope; recognize the normalized request before corpus and evidence validation. */if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&conversational_greeting(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_introduction(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}if((!intent.structured||strcmp(intent.intent,"CONVERSATION")==0)&&acknowledge_personal_context(normalized,output.answer,sizeof(output.answer))){output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;output.answered=1;memcpy(response,&output,sizeof(output));*response_used=sizeof(output);return STNLABZ_MODULE_OK;}{
+  char root_evidence[512]={0};
+  if(root_sibling_reply(normalized,output.answer,sizeof(output.answer),
+                        root_evidence,sizeof(root_evidence))){
+   output.answered=1;output.retrieved_count=1;output.selected_count=1;output.evidence_count=1;
+   if(!validate_outbound_evidence(input->question,normalized,output.answer,
+       root_evidence,1U,&validation)){
+    output.diagnostic_phase=DIGIT_RESPONSE_PHASE_VALIDATOR_UNAVAILABLE;
+    snprintf(output.answer,sizeof(output.answer),"I couldn't validate the response.");
+   }else if(validation.status!=VALIDATOR_PASS){
+    output.diagnostic_phase=DIGIT_RESPONSE_PHASE_VALIDATOR_REJECTED;
+    snprintf(output.answer,sizeof(output.answer),"I couldn't produce a grounded answer that passed validation.");
+   }else output.diagnostic_phase=DIGIT_RESPONSE_PHASE_APPROVED;
+   memcpy(response,&output,sizeof(output));*response_used=sizeof(output);
+   return STNLABZ_MODULE_OK;
+  }
+ }
+ /* Bounded refusal rather than a wrong numeric answer from lexical evidence. */
  /* [AI:GPT-6 | 2026-10-09] Arithmetic is a shared capability.
   * Response formats the service result, never calculates independently. */
  if(arithmetic_question(normalized)||strchr(normalized,'=')!=NULL||strchr(normalized,'(')!=NULL){
@@ -883,5 +926,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
