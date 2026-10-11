@@ -167,6 +167,6 @@ static stnlabz_module_result_t stop(void){
     digit_chatgpt_tokens_init(&oauth_tokens);
     active_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,10,
+static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,11,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
