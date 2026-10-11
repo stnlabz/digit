@@ -871,9 +871,23 @@ if(strncmp(request,"POST /session/logout ",21)==0){
     }
     /* AI platform accounts cannot use human administrative and mutation routes.
      * Their initial qualified exposure is private /ask only. */
-    if(strncmp(identity,"ai.",3)==0&&strncmp(request,"POST /ask ",10)!=0){
+    if(strncmp(identity,"ai.",3)==0&&strncmp(request,"POST /ask ",10)!=0&&
+       strncmp(request,"GET /ai/session HTTP/1.1",24)!=0){
         interface_reply(client,403,"{\"error\":\"AI platform operation not authorized\"}\n");return;
     }
+}
+/* AI session introspection is authenticated and read-only; no secrets. */
+if(strncmp(request,"GET /ai/session HTTP/1.1",24)==0){
+ digit_ai_platform_permissions_t p={0};char json[400],escaped[128];
+ if(strncmp(identity,"ai.",3)!=0||
+    !digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&p)||
+    !p.dm){interface_reply(client,403,"{\"error\":\"AI session unavailable\"}\n");return;}
+ interface_json_escape(identity,escaped,sizeof(escaped));
+ snprintf(json,sizeof(json),
+ "{\"authenticated\":true,\"identity\":\"%s\",\"dm\":true,\"diagnostics\":%s,\"memory_write\":%s,\"learning\":%s,\"developer\":%s}\n",
+ escaped,p.diagnostics?"true":"false",p.memory_write?"true":"false",
+ p.learning?"true":"false",p.developer?"true":"false");
+ interface_reply(client,200,json);return;
 }
 /* [AI:GPT-6 | 2026-10-08] Interface 1.5.4: protected SA admission.
  * Core decides authority against the current operator-controlled roster.
