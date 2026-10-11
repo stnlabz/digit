@@ -218,7 +218,7 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   feedback_fixture=1;
   memset(&request,0,sizeof(request));
   snprintf(request.question,sizeof(request.question),
-   "INTENT: CONVERSATION\nTARGET: SOCIAL\nSUBJECT: stoopid\nREQUEST: You are stoopid");
+   "INTENT: CONVERSATION\nTARGET: SOCIAL\nSUBJECT: stoopid\nREQUEST: Digit, you are stoopid");
   check(observed_response_handler(&request,sizeof(request),&observed,
    sizeof(observed),&observation_used,NULL)==STNLABZ_MODULE_OK&&
    observation_used==sizeof(observed)&&observed.answered&&
@@ -337,7 +337,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 2 && descriptor->version_minor == 0 && descriptor->version_patch == 1, "internal version is 2.0.1");
+    check(descriptor != NULL && descriptor->version_major == 2 && descriptor->version_minor == 0 && descriptor->version_patch == 2, "internal version is 2.0.2");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
