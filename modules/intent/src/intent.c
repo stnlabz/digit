@@ -345,6 +345,21 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
         set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
                    "Established learned social expression.");return;
     }
+    /* Non-interrogative second-person predication is social feedback.
+     * Vocative stripping is limited to the established leading address form.
+     * No learned word or named expression is hardcoded here. */
+    if(!action&&!status&&!explain&&!define&&!compare&&!why&&!how&&!fact){
+        const char *utterance=social_utterance_after_address(text);
+        while(isspace((unsigned char)*utterance))++utterance;
+        if((strncasecmp(utterance,"you are ",8)==0||
+            strncasecmp(utterance,"you're ",7)==0||
+            strncasecmp(utterance,"you were ",9)==0) &&
+           strchr(utterance,'?')==NULL){
+            set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
+                       "Second-person declarative social assessment.");
+            return;
+        }
+    }
     if(fact){set_result(result,DIGIT_INTENT_FACT,DIGIT_INTENT_TARGET_KNOWLEDGE,1U,"Request asks for factual knowledge.");return;}
     if(social){set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,"Request is conversational rather than an operational or knowledge task.");return;}
     /* [AI:GPT-6 | 2026-10-09] First-person identity/work descriptions are\n     * conversational data, never proof of account identity or authority.\n     * Do not override recognized operational intent above this point. */
@@ -508,7 +523,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 3, 2,
+    "intent", "Digit Intent", 1, 3, 3,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
