@@ -7,12 +7,15 @@ TARGET := bin/chatgpt.so
 all: check-abi $(TARGET)
 check-abi:
 	@test -f "$(ABI_DIR)/includes/module.h" || { echo "External ABI missing"; exit 1; }
-$(TARGET): src/chatgpt.c includes/chatgpt.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared src/chatgpt.c -o $@
+$(TARGET): src/chatgpt.c src/chatgpt_auth.c includes/chatgpt.h includes/chatgpt_auth.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared src/chatgpt.c src/chatgpt_auth.c -o $@ -lcrypto
 bin/test_chatgpt: tests/test_chatgpt.c src/chatgpt.c includes/chatgpt.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_chatgpt.c src/chatgpt.c -o $@
-test: check-abi bin/test_chatgpt
+bin/test_chatgpt_auth: tests/test_chatgpt_auth.c src/chatgpt_auth.c includes/chatgpt_auth.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_chatgpt_auth.c src/chatgpt_auth.c -o $@ -lcrypto
+test: check-abi bin/test_chatgpt bin/test_chatgpt_auth
 	./bin/test_chatgpt
+	./bin/test_chatgpt_auth
 bin:
 	mkdir -p bin
 clean:
