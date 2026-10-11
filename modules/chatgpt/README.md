@@ -1,4 +1,4 @@
-# Digit ChatGPT Integration — 1.0.9 source candidate
+# Digit ChatGPT Integration — 1.0.10 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
 ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
@@ -96,3 +96,14 @@ Codex must verify negative authorization tests and a real ChatGPT-to-Digit
 initialize, tools/list, and two-turn digit_ask round trip. Learning,
 Memory/Corpus mutation, Developer and SA authority are never conferred by
 authentication alone.
+
+## Interface transport binding (1.0.10)
+
+Interface now forwards public GET /oauth/authorize and POST /oauth/token to the
+ChatGPT module's existing fail-closed OAuth service. Interface also queries the
+ChatGPT token-introspection service when its existing MCP API-key lookup fails.
+An OAuth token must additionally map to an active MCP account with DM permission
+before the existing private-session MCP handler runs. Unauthenticated grants
+are **not** enabled: OAuth endpoints still return 503 until operator-approved
+authorization and consent are implemented. The in-memory token store has no
+external issuance path. No live ChatGPT connection is claimed.
