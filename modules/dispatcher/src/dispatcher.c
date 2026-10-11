@@ -80,7 +80,35 @@ static void dispatch_intent_response(const char *request,const digit_intent_resu
     sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),&ro,sizeof(ro),&used);
     if(sr!=STNLABZ_MODULE_OK||used!=sizeof(ro)){observed_stage(out,"response",DIGIT_DSD_FAILED,"RESPONSE_SERVICE_FAILURE");out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because one of my internal services is unavailable.");return;}
     out->answered=1;snprintf(out->answer,sizeof(out->answer),"%s",ro.answer[0]?ro.answer:"I couldn't produce an answer for that request.");
-    observed_stage(out,"response",DIGIT_DSD_OK,"RETURNED_ANSWER");
+    out->diagnostic.retrieved=ro.retrieved_count;
+    out->diagnostic.selected=ro.selected_count;
+    /* Only explicit Response observations count as evidence. */
+    switch(ro.diagnostic_phase){
+      case DIGIT_RESPONSE_PHASE_INPUT_REJECTED:
+        observed_stage(out,"response",DIGIT_DSD_FAILED,"INPUT_REJECTED");break;
+      case DIGIT_RESPONSE_PHASE_EVIDENCE_UNAVAILABLE:
+        observed_stage(out,"corpus",DIGIT_DSD_FAILED,"EVIDENCE_UNAVAILABLE");break;
+      case DIGIT_RESPONSE_PHASE_NO_RECORDS:
+        observed_stage(out,"response",DIGIT_DSD_FAILED,"NO_RECORDS_RETRIEVED");break;
+      case DIGIT_RESPONSE_PHASE_NO_SELECTION:
+        observed_stage(out,"response",DIGIT_DSD_FAILED,"NO_EVIDENCE_SELECTED");break;
+      case DIGIT_RESPONSE_PHASE_NO_COMPOSITION:
+        observed_stage(out,"response",DIGIT_DSD_FAILED,"NO_CONVERSATIONAL_COMPOSITION");break;
+      case DIGIT_RESPONSE_PHASE_VALIDATOR_UNAVAILABLE:
+        out->diagnostic.candidate_constructed=1;
+        observed_stage(out,"validator",DIGIT_DSD_FAILED,"VALIDATOR_UNAVAILABLE");break;
+      case DIGIT_RESPONSE_PHASE_VALIDATOR_REJECTED:
+        out->diagnostic.candidate_constructed=1;
+        observed_stage(out,"validator",DIGIT_DSD_FAILED,"VALIDATOR_REJECTED");break;
+      case DIGIT_RESPONSE_PHASE_APPROVED:
+        out->diagnostic.candidate_constructed=1;
+        out->diagnostic.outbound_approved=1;
+        observed_stage(out,"response",DIGIT_DSD_OK,"ANSWER_VALIDATED");break;
+      case DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE:
+        observed_stage(out,"response",DIGIT_DSD_OK,"DIRECT_RESPONSE");break;
+      default:
+        observed_stage(out,"response",DIGIT_DSD_UNOBSERVED,"NO_RESPONSE_TELEMETRY");break;
+    }
 }
 
 /* [AI:GPT-6 | 2026-10-09] No generator/executor is registered in the
