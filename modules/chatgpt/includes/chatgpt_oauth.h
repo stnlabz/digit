@@ -43,6 +43,9 @@ typedef struct {
     char principal[64];
     unsigned int authenticated;
 } digit_chatgpt_oauth_validate_response_t;
+int digit_chatgpt_oauth_route_with_stores(const digit_chatgpt_oauth_request_t *request,
+    digit_chatgpt_oauth_response_t *response,digit_chatgpt_code_store_t *codes,
+    digit_chatgpt_token_store_t *tokens);
 int digit_chatgpt_oauth_route(const digit_chatgpt_oauth_request_t *request,
                              digit_chatgpt_oauth_response_t *response);
 #endif
