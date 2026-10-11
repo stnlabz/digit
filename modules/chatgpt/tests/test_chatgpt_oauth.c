@@ -35,6 +35,23 @@ int main(void)
           principal) && strcmp(principal,"ai.chatgpt")==0;
         ok &= !digit_chatgpt_oauth_exchange(&codes,&tokens,code,"client",
           "https://client.example/callback",v,"digit-mcp",1002,token);
+        {
+            char header[80];
+            snprintf(header,sizeof(header),"Bearer %s",token);
+            /* The second exchange attempt erased token, so mint again
+             * before exercising the header-authentication boundary. */
+            ok &= digit_chatgpt_code_issue(&codes,"ai.chatgpt","client",
+                "https://client.example/callback",c,1000,code);
+            ok &= digit_chatgpt_oauth_exchange(&codes,&tokens,code,"client",
+                "https://client.example/callback",v,"digit-mcp",1001,token);
+            snprintf(header,sizeof(header),"Bearer %s",token);
+            ok &= digit_chatgpt_oauth_validate_mcp(&tokens,header,1002,
+                 principal) && strcmp(principal,"ai.chatgpt")==0;
+            ok &= !digit_chatgpt_oauth_validate_mcp(&tokens,header,5000,
+                 principal);
+            ok &= !digit_chatgpt_oauth_validate_mcp(&tokens,"Bearer invalid",
+                 1002,principal);
+        }
     }
     printf("ChatGPT OAuth route tests: %s\n",ok?"PASS":"FAIL");
     return ok?0:1;
