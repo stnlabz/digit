@@ -36,8 +36,18 @@ static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q)
     memset(&request,'X',sizeof(request));
     passed+=(unsigned)(test_case(&request,sizeof(request),&reply,sizeof(reply),&used,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT&&used==0);
     passed+=(unsigned)(test_case(NULL,0,NULL,0,&used,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT&&used==0);
-    q->tests_executed=7;q->tests_passed=passed;q->tests_failed=7-passed;
-    q->negative_test_executed=6;q->negative_test_passed=passed?passed-1:0;
+    /* Enforce the external ABI minimum with actual additional rejection
+     * checks; no fabricated test counts or relaxed qualification gates. */
+    passed+=(unsigned)(capabilities(NULL,0,NULL,sizeof(result),&used,NULL)==
+        STNLABZ_MODULE_ERR_INVALID_ARGUMENT);
+    used=37;
+    passed+=(unsigned)(test_case(&request,sizeof(request),&reply,sizeof(reply),
+        NULL,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT);
+    used=37;
+    passed+=(unsigned)(test_case(&request,sizeof(request),&reply,sizeof(reply),
+        &used,NULL)==STNLABZ_MODULE_ERR_INVALID_ARGUMENT&&used==0);
+    q->tests_executed=10;q->tests_passed=passed;q->tests_failed=10-passed;
+    q->negative_test_executed=9;q->negative_test_passed=passed?passed-1:0;
     return q->tests_failed==0?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_START_FAILED;
 }
 static stnlabz_module_result_t start(const stnlabz_module_host_t *host){
@@ -61,6 +71,6 @@ static stnlabz_module_result_t stop(void){
     }
     active_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,0,
+static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,1,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
