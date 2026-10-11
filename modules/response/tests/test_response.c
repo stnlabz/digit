@@ -20,6 +20,7 @@ static void check(int condition, const char *name)
 /* [AI:GPT-6 | 2026-10-09] Exercise the real response service using
  * deterministic mock Validator input; prevent fabricated math evidence. */
 static stnlabz_module_service_handler_fn response_handler;
+static stnlabz_module_service_handler_fn observed_response_handler;
 static unsigned int unexpected_services;
 static unsigned int corpus_queries;
 static unsigned int outbound_validations;
@@ -32,7 +33,7 @@ typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
- if(!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE))return 1;
+ if(!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE)){observed_response_handler=fn;return 1;}
  if(strcmp(name,DIGIT_RESPONSE_SERVICE))return 0;
  response_handler=fn;return 1;
 }
@@ -136,6 +137,18 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        answer.answered&&strcmp(answer.answer,"2 + 2 = 4.")==0,
        "arithmetic question computes an exact answer");
  check(unexpected_services==0&&arithmetic_calls==1,"arithmetic uses shared service without Corpus or Reasoning");
+ /* Additive observed result must not change legacy service payload sizes. */
+ {
+  digit_response_observed_result_t observed={0};
+  size_t observed_used=0;
+  check(observed_response_handler!=NULL &&
+    observed_response_handler(&request,sizeof(request),&observed,
+      sizeof(observed),&observed_used,NULL)==STNLABZ_MODULE_OK &&
+    observed_used==sizeof(observed) &&
+    observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE,
+    "observed Response service classifies direct arithmetic path");
+ }
+
  /* [AI:GPT-6 | 2026-10-09] Name and first-person context must be handled
   * as dialogue, without making corpus calls or persistent writes. */
  {
@@ -223,6 +236,18 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
        "missing evidence reports uncertainty");
  check(corpus_queries==1&&outbound_validations==0,
        "missing evidence does not enter outbound factual validation");
+ {
+  digit_response_observed_result_t observed={0};
+  size_t observed_used=0;
+  check(observed_response_handler &&
+    observed_response_handler(&request,sizeof(request),&observed,
+       sizeof(observed),&observed_used,NULL)==STNLABZ_MODULE_OK &&
+    observed_used==sizeof(observed) &&
+    observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_NO_RECORDS &&
+    observed.retrieved_count==0 && observed.selected_count==0,
+    "observed Response reports no retrieved evidence");
+ }
+
  /* [AI:GPT-6 | 2026-10-10] Exercise Response -> Interpretation
   * definition lookup and bounded Corpus fixture end to end. */
  {
