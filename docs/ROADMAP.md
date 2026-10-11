@@ -9,6 +9,22 @@
 
 > This roadmap is an approved development plan. Approval does not independently authorize architectural changes, supersede controlled documentation, or establish module qualification.
 
+## Current verified milestone and personality-expression priority — 2026-10-11 UTC
+
+**Disposition: MODULES ACTIVE; PERSONALITY ACCEPTANCE OPEN.** Operator audit logs confirmed Intent **1.3.4** `QUALIFICATION_GREEN` / `HOTLOAD_ACTIVE` at **04:34:34 UTC**, and Response **2.0.5** `QUALIFICATION_GREEN` / `HOTLOAD_ACTIVE` at **04:47:34 UTC**. One private-GUI request, `Digit, you are stoopid`, received `I hear your feedback. What would you like me to improve?`; this is an **observed single-case behavioral PASS**, not certification of conversational personality or the entire pipeline.
+
+**Diagnosis and evidence boundary:** Previous DSD results reported `NO_CONVERSATIONAL_COMPOSITION` with 16 Corpus records retrieved and two selected. Operator-provided Response trace identified selected records as irrelevant identity-response instructions. The Response 2.0.5 retrieval correction excludes an optional vocative from the social query without changing the original request; the succeeding GUI output supports that one path. The retrieved lesson content and generalized variation across other phrasings are not established by this single observation.
+
+**Critical architectural defect:** The acknowledged answer is a **literal hardcoded response** inside `learned_feedback_acknowledgment()`. The user does **not** accept hardcoded conversational sentences, slang, or scenario-specific language branches as personality. Prior source changes met the narrow test but did not satisfy this architectural requirement. Fixed ABI/protocol constants and Core policy rules are distinct from canned conversation.
+
+**Next implementation gate (not yet implemented or authorized for deployment by documentation):**
+1. Design reusable conversational composition from interpreted social/dialogue intent, permitted context, authorized Corpus knowledge and existing immutable Root traits; retain human authority and independent validation.
+2. Remove canned conversational-output templates from the relevant path rather than replacing one stock answer with another; preserve deterministic evidence selection, source provenance, unknown outcomes, and fail-closed behavior.
+3. Qualify positive and negative variations, irrelevant-evidence and unsupported-meaning cases, ordinary factual/technical responses, session-scoped context, Validator constraints and complete historical regressions; verify live GUI behavior and operator acceptance separately.
+4. Keep Core, Root, three General Orders, mission boundaries and external ABI unchanged absent specific operator approval. No autonomous personality or policy rewriting.
+
+**Gate accounting:** SOURCE-COMMITTED/QUALIFIED/ACTIVE applies only to the existing versions above; **general personality composition: OPEN, not implemented, not qualified, not accepted**. Entries below preserve their prior evidence cutoff and do not override this newer disposition.
+
 ## Current status and priorities — 2026-10-10
 
 **Conversational release gate: OPEN.** Digit's implied MVC roles are Interface (View), Dispatcher (Controller), and Intent → Interpretation → Corpus (Model); actual runtime interpretation precedes intent classification. Response and Validator provide candidate generation and independent verification. Existing Core → Modules → Mission authority remains unchanged.
