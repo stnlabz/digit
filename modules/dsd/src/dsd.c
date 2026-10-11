@@ -46,8 +46,8 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_result_t *out){
     }
     if(out->finding==DIGIT_DSD_OBSERVED){
         snprintf(out->report,sizeof(out->report),
-                 "Observed failure at module %s: %s. Check the module's original audit and qualification evidence. No repair or deployment is authorized.",
-                 out->affected_module,out->reason);
+                 "Observed processing boundary at %s: %s. Retrieved %u record(s), selected %u. This identifies the reported boundary, not a verified underlying root cause. No repair or deployment is authorized.",
+                 out->affected_module,out->reason,in->retrieved,in->selected);
     }else if(in->retrieved>0&&in->selected==0){
         out->finding=DIGIT_DSD_INFERRED;
         snprintf(out->affected_module,sizeof(out->affected_module),"response");
@@ -77,7 +77,8 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_result_t *out){
         out->finding=DIGIT_DSD_UNKNOWN;
         snprintf(out->reason,sizeof(out->reason),"INSUFFICIENT_EVIDENCE");
         snprintf(out->report,sizeof(out->report),
-                 "Insufficient verified stage evidence to isolate the failure. Obtain correlated module events; do not infer a root cause.");
+                 "Available telemetry: %u stage(s), %u reporting success, retrieved %u record(s), selected %u. No failed boundary was established. Additional stage telemetry is required to determine the underlying cause.",
+                 in->stage_count,ok,in->retrieved,in->selected);
     }
     return 1;
 }
@@ -154,7 +155,7 @@ static stnlabz_module_result_t dsd_stop(void){
     return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 static const stnlabz_module_descriptor_t descriptor={
-    "dsd","Digit Self-Diagnostics",1,0,0,
+    "dsd","Digit Self-Diagnostics",1,1,0,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
     dsd_qualify,dsd_start,dsd_stop
 };
