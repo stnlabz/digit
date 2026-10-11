@@ -32,6 +32,7 @@ static int arithmetic_available=1;
 static int learned_definition_fixture=0;
 static int root_relationship_fixture=0;
 static int feedback_fixture=0;
+static unsigned int feedback_subject_queries=0;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -91,6 +92,10 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
  if(!strcmp(name,"corpus.search")){
   corpus_queries++;
   if(feedback_fixture){
+   const digit_corpus_search_request_t *in=request;
+   if(request_size==sizeof(*in) &&
+      strstr(in->query,"stoopid")!=NULL&&strstr(in->query,"Digit")==NULL)
+     ++feedback_subject_queries;
    digit_corpus_search_result_t *out=response;
    if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
    memset(out,0,sizeof(*out));out->count=1;
@@ -235,6 +240,8 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE&&
    strstr(observed.answer,"What would you like me to improve?")!=NULL,
    "unpunctuated learned feedback receives conversational acknowledgment");
+  check(feedback_subject_queries>=2,
+   "social feedback searches learned subject without leading addressee");
   feedback_fixture=0;
  }
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
@@ -347,7 +354,7 @@ int main(void)
     memset(&result, 0, sizeof(result));
     check(descriptor != NULL, "descriptor is exported");
     check(descriptor != NULL && strcmp(descriptor->id, "response") == 0, "module identity is response");
-    check(descriptor != NULL && descriptor->version_major == 2 && descriptor->version_minor == 0 && descriptor->version_patch == 4, "internal version is 2.0.4");
+    check(descriptor != NULL && descriptor->version_major == 2 && descriptor->version_minor == 0 && descriptor->version_patch == 5, "internal version is 2.0.5");
     check(descriptor != NULL && descriptor->qualify != NULL, "qualification callback exists");
     check(descriptor != NULL && descriptor->qualify(&qualification) == STNLABZ_MODULE_OK, "qualification executes");
     check(qualification.tests_executed >= STNLABZ_MODULE_MIN_TESTS, "required test count is reported");
