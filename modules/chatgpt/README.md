@@ -107,3 +107,26 @@ before the existing private-session MCP handler runs. Unauthenticated grants
 are **not** enabled: OAuth endpoints still return 503 until operator-approved
 authorization and consent are implemented. The in-memory token store has no
 external issuance path. No live ChatGPT connection is claimed.
+
+
+## OAuth operator-key approval (1.0.12, Interface 1.9.3)
+
+The HTTPS Interface now serves OAuth authorization metadata and a browser
+authorization form at `/oauth/authorize`. The operator enters the **existing**
+64-hex MCP key in the form submitted directly to `/oauth/approve` via TLS.
+Interface verifies that key against the unchanged operator-owned MCP registry
+and credentials. Only the verified `ai.*` account identity enters the
+ChatGPT module. No new permanent key or key rotation is introduced.
+
+ChatGPT OAuth completes a standard single-use S256 PKCE authorization-code
+exchange at `/oauth/token` and returns a short-lived access token.
+The token is validated against current MCP permissions on every call.
+Approved callback URLs are HTTPS paths on `chatgpt.com` or
+`chat.openai.com`. The browser form must never submit the key to ChatGPT.
+Authorization-code and access-token values are protocol artifacts, not
+operator keys.
+
+Expected OAuth issuer: `https://digit.stn-labz.com:8081`.
+Protected resource: `https://digit.stn-labz.com:8081/mcp`.
+Both modules must be built and hotloaded together. Live OAuth connection
+and end-to-end MCP tool tests must still be verified after qualification.
