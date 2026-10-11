@@ -503,6 +503,25 @@ static void interface_channel_get(int client,const char *id)
  * The Core Alert record is authoritative: no duplicate messages, no
  * replay on refresh. This route is restricted to the STN-Labz Operations
  * Alerts binding AND a currently authorized organization SA. */
+/* [AI:GPT-6 | 2026-10-11] Project only explicit, bounded lifecycle
+ * evidence from the Core alert detail. Never infer a module from an
+ * unrelated Core alert or treat the aggregate error as its root cause. */
+static int interface_alert_evidence(const char *detail,const char *key,
+                                    char *out,size_t cap)
+{
+ const char *p=detail;size_t n,k;
+ if(!detail||!key||!out||cap<2)return 0;
+ k=strlen(key);out[0]=0;
+ while((p=strstr(p,key))!=NULL){
+  const char *v=p+k;
+  if((p==detail||p[-1]==' ')&&*v=='='){
+   ++v;n=strcspn(v," \t\r\n");
+   if(n&&n<cap){memcpy(out,v,n);out[n]=0;return 1;}
+  }
+  p+=k;
+ }
+ return 0;
+}
 static int interface_alert_channel_messages(int client,const char *channel,
  const char *identity){
     char bound[DIGIT_CHANNEL_ID_MAX];
@@ -531,7 +550,7 @@ static int interface_alert_channel_messages(int client,const char *channel,
     if(n<0||(size_t)n>=sizeof(json))goto invalid;
     off=(size_t)n;
     for(i=0;i<result.count;++i){
-        char id[160],content[4096],escaped[8200],module[64]="UNKNOWN";
+        char id[160],content[4096],escaped[8200],module[64]="UNKNOWN",version[40]="UNKNOWN",cause[128]="UNKNOWN",stage[80]="UNKNOWN";
         const digit_alert_t *a=&result.alerts[i];
         const char *source=a->source;
         const char *prefix="module:";
@@ -551,17 +570,25 @@ static int interface_alert_channel_messages(int client,const char *channel,
                      candidate[k]=='_'||candidate[k]=='-'))valid=0;
             if(valid)snprintf(module,sizeof(module),"%s",candidate);
         }
-        /* Core stores source, detail and state, but has no separate module
-         * version, verified cause or action fields. Preserve that distinction. */
+        /* New MODULE alerts preserve verified module/version/stage/reason
+         * as explicit tokens. Historic CORE alerts lacking these fields
+         * cannot be reconstructed without separately correlated evidence. */
+        if(strcmp(source,"MODULE")==0){
+            (void)interface_alert_evidence(a->detail,"module",module,sizeof(module));
+            (void)interface_alert_evidence(a->detail,"version",version,sizeof(version));
+            (void)interface_alert_evidence(a->detail,"reason",cause,sizeof(cause));
+            (void)interface_alert_evidence(a->detail,"stage",stage,sizeof(stage));
+        }
         n=snprintf(content,sizeof(content),
           "severity: %s\\nsummary: %s\\nmodule: %s\\nsubsystem: %s\\n"
-          "version: UNKNOWN\\nevent_id: %s\\ntimestamp: %llu\\n"
-          "cause: UNKNOWN\\naction: UNKNOWN\\n"
+          "version: %s\\nstage: %s\\nevent_id: %s\\ntimestamp: %llu\\n"
+          "cause: %s\\naction: UNKNOWN\\n"
           "operational_state: %s\\nacknowledged: %s\\n"
           "detail: %s",
           interface_alert_severity_string(a->severity),a->summary,
-          module,a->source,a->id,a->created_at,a->operational_state,
-          a->acknowledged?"yes":"no",a->detail[0]?a->detail:"UNKNOWN");
+          module,a->source,version,stage,a->id,a->created_at,cause,
+          a->operational_state,a->acknowledged?"yes":"no",
+          a->detail[0]?a->detail:"UNKNOWN");
         if(n<0||(size_t)n>=sizeof(content))goto invalid;
         interface_json_escape(a->id,id,sizeof(id));
         interface_json_escape(content,escaped,sizeof(escaped));
@@ -1472,5 +1499,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
