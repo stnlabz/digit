@@ -1,9 +1,9 @@
-# Digit Self-Diagnostics (DSD) 1.1.0
+# Digit Self-Diagnostics (DSD) 1.2.0
 
 **Status: committed source candidate; local Linux build, qualification and live acceptance pending.**
 
-DSD remains a deterministic, read-only module exposing `dsd.diagnose`.
-Its input consists of a bounded list of verified stage observations, plus
+DSD remains a deterministic, read-only module exposing the byte-compatible legacy `dsd.diagnose` and additive `dsd.diagnose_engineering`.
+The engineering result adds affected module, observed symptom, source investigation path, and location evidence status. Only known module source files are mapped: these are **investigation targets**, never verified root causes or exact function/line claims. Unsupported or unobserved cases are explicitly unresolved. The legacy service keeps its original response size and includes a brief handoff in the report text, so already active Dispatcher binaries remain compatible. Its input consists of a bounded list of verified stage observations, plus
 retrieved/selected evidence counts and candidate/validation flags. Its output
 distinguishes reported processing boundaries from unverified root causes.
 
@@ -18,7 +18,7 @@ distinguishes reported processing boundaries from unverified root causes.
    It records Interpretation and Intent status, invokes observed Response,
    and builds a bounded DSD request. Existing Dispatcher services retain their
    original request and response schemas.
-3. Interface 1.8.1 carries only the immediately prior turn's bounded
+3. Interface carries only the immediately prior turn's bounded
    observations in the authenticated private session. Session revocation or
    expiry discards them; no cross-account or channel history is consulted.
 4. A private `Digit, diagnose my last request.` routes the prior observations
