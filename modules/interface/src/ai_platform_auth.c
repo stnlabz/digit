@@ -55,7 +55,18 @@ int digit_ai_platform_permissions(const char *path,const char *identity,
  if(fstat(fd,&after)!=0||after.st_dev!=before.st_dev||
  after.st_ino!=before.st_ino||after.st_size!=before.st_size||
  after.st_mtim.tv_sec!=before.st_mtim.tv_sec||
- after.st_mtim.tv_nsec!=before.st_mtim.tv_nsec)valid=0;
+ after.st_mtim.tv_nsec!=before.st_mtim.tv_nsec||
+ after.st_ctim.tv_sec!=before.st_ctim.tv_sec||
+ after.st_ctim.tv_nsec!=before.st_ctim.tv_nsec)valid=0;
+ {struct stat named;
+  if(lstat(path,&named)!=0||!S_ISREG(named.st_mode)||named.st_nlink!=1||
+     named.st_dev!=before.st_dev||named.st_ino!=before.st_ino||
+     named.st_size!=before.st_size||
+     named.st_mtim.tv_sec!=before.st_mtim.tv_sec||
+     named.st_mtim.tv_nsec!=before.st_mtim.tv_nsec||
+     named.st_ctim.tv_sec!=before.st_ctim.tv_sec||
+     named.st_ctim.tv_nsec!=before.st_ctim.tv_nsec)valid=0;
+ }
 done:
  if(fclose(file)!=0)valid=0;
  if(valid&&matches==1&&found.active){*out=found;return 1;}
