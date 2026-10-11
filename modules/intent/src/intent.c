@@ -176,6 +176,21 @@ static int contextual_reference(const char *text,char *subject,size_t capacity)
 /* [AI:GPT-6 | 2026-10-10] A retained operator lesson can establish
  * non-operational social context. No slang is defined inside Intent.
  * This is deliberately not a capability or authorization path. */
+/* A leading single-word vocative is optional for learned social
+ * matching only. Commands and authority checks still see original text. */
+static const char *social_utterance_after_address(const char *text){
+ const char *p=text,*start;
+ if(!p)return text;
+ while(isspace((unsigned char)*p))++p;
+ start=p;
+ while(isalpha((unsigned char)*p))++p;
+ if(p==start||p-start>63||*p!=',')return text;
+ ++p;
+ if(!isspace((unsigned char)*p))return text;
+ while(isspace((unsigned char)*p))++p;
+ return *p?p:text;
+}
+
 static int learned_social_context(const char *text)
 {
  digit_corpus_search_request_t query={0};
@@ -324,7 +339,8 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
     /* Retained conversation is considered only after all recognized
      * operational, definition, comparison, and context requests. */
     if(!action&&!status&&!explain&&!define&&!compare&&!why&&!how&&
-       learned_social_context(text)){
+       (learned_social_context(text)||
+        learned_social_context(social_utterance_after_address(text)))){
         set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
                    "Established learned social expression.");return;
     }
