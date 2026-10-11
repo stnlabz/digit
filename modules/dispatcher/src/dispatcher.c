@@ -29,7 +29,7 @@ static int verify_followup(const char *request){
         strcmp(request,"verify the solution")==0||
         strcmp(request,"verify")==0;
 }
-static void verify_unscoped(digit_dispatcher_result_t *out){
+static void verify_unscoped(digit_dispatcher_observed_result_t *out){
  out->answered=1;
  snprintf(out->answer,sizeof(out->answer),
           "I cannot verify a previous answer without authenticated, account-bound conversation context. Please provide the equation again.");
@@ -53,7 +53,7 @@ static int lesson_name(const char *request,char *name,size_t name_size)
     name[n]='\0';while(p[i]&&isspace((unsigned char)p[i]))++i;return p[i]=='\0'&&n>0;
 }
 
-static int lesson_action(const char *request,digit_dispatcher_result_t *out)
+static int lesson_action(const char *request,digit_dispatcher_observed_result_t *out)
 {
     digit_lesson_ingest_request_t in;digit_lesson_ingest_result_t result;char name[DIGIT_LESSON_NAME_MAX];size_t used=0;stnlabz_module_result_t sr;
     memset(name,0,sizeof(name));if(!lesson_name(request,name,sizeof(name)))return 0;
@@ -66,24 +66,35 @@ static int lesson_action(const char *request,digit_dispatcher_result_t *out)
 
 static int resolve_project(const char *request,char *project,size_t project_size){digit_source_projects_result_t projects;size_t used=0,i;stnlabz_module_result_t sr;memset(&projects,0,sizeof(projects));sr=dispatcher_host->invoke_service(DIGIT_SOURCE_PROJECTS_SERVICE,NULL,0,&projects,sizeof(projects),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(projects))return 0;for(i=0;i<projects.count&&i<DIGIT_SOURCE_PROJECTS_MAX;++i)if(contains_ci(request,projects.projects[i].name)){snprintf(project,project_size,"%s",projects.projects[i].name);return 1;}return 0;}
 
-static void source_scan(const char *request,digit_dispatcher_result_t *out){char project[DIGIT_SOURCE_PROJECT_MAX];digit_source_status_request_t status_request;digit_source_status_result_t status;digit_source_search_request_t search_request;digit_source_search_result_t found;size_t used=0,i,offset=0;stnlabz_module_result_t sr;memset(project,0,sizeof(project));if(!resolve_project(request,project,sizeof(project))){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I can't identify that source project. Ask me for the available source projects and I can tell you what I can inspect.");return;}memset(&status_request,0,sizeof(status_request));memset(&status,0,sizeof(status));snprintf(status_request.project,sizeof(status_request.project),"%s",project);sr=dispatcher_host->invoke_service(DIGIT_SOURCE_STATUS_SERVICE,&status_request,sizeof(status_request),&status,sizeof(status),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(status)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I found source project %s, but I couldn't inspect its status.",project);return;}offset=(size_t)snprintf(out->answer,sizeof(out->answer),"I scanned source project %s. Git repository: %s",project,status.git_repository?"yes":"no");if(status.git_repository&&status.head[0]!='\0'&&offset<sizeof(out->answer))offset+=(size_t)snprintf(out->answer+offset,sizeof(out->answer)-offset,". HEAD: %s",status.head);memset(&search_request,0,sizeof(search_request));memset(&found,0,sizeof(found));used=0;snprintf(search_request.project,sizeof(search_request.project),"%s",project);snprintf(search_request.query,sizeof(search_request.query),"module");sr=dispatcher_host->invoke_service(DIGIT_SOURCE_SEARCH_SERVICE,&search_request,sizeof(search_request),&found,sizeof(found),&used);if(sr==STNLABZ_MODULE_OK&&used==sizeof(found)&&offset<sizeof(out->answer)){int w=snprintf(out->answer+offset,sizeof(out->answer)-offset,". I found %zu bounded source matches",found.count);if(w>0&&(size_t)w<sizeof(out->answer)-offset)offset+=(size_t)w;for(i=0;i<found.count&&i<3&&offset<sizeof(out->answer);++i){w=snprintf(out->answer+offset,sizeof(out->answer)-offset,"; %s:%zu",found.matches[i].path,found.matches[i].line);if(w<=0||(size_t)w>=sizeof(out->answer)-offset)break;offset+=(size_t)w;}}if(offset<sizeof(out->answer)-1)snprintf(out->answer+offset,sizeof(out->answer)-offset,".");out->answered=1;}
+static void source_scan(const char *request,digit_dispatcher_observed_result_t *out){char project[DIGIT_SOURCE_PROJECT_MAX];digit_source_status_request_t status_request;digit_source_status_result_t status;digit_source_search_request_t search_request;digit_source_search_result_t found;size_t used=0,i,offset=0;stnlabz_module_result_t sr;memset(project,0,sizeof(project));if(!resolve_project(request,project,sizeof(project))){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I can't identify that source project. Ask me for the available source projects and I can tell you what I can inspect.");return;}memset(&status_request,0,sizeof(status_request));memset(&status,0,sizeof(status));snprintf(status_request.project,sizeof(status_request.project),"%s",project);sr=dispatcher_host->invoke_service(DIGIT_SOURCE_STATUS_SERVICE,&status_request,sizeof(status_request),&status,sizeof(status),&used);if(sr!=STNLABZ_MODULE_OK||used!=sizeof(status)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I found source project %s, but I couldn't inspect its status.",project);return;}offset=(size_t)snprintf(out->answer,sizeof(out->answer),"I scanned source project %s. Git repository: %s",project,status.git_repository?"yes":"no");if(status.git_repository&&status.head[0]!='\0'&&offset<sizeof(out->answer))offset+=(size_t)snprintf(out->answer+offset,sizeof(out->answer)-offset,". HEAD: %s",status.head);memset(&search_request,0,sizeof(search_request));memset(&found,0,sizeof(found));used=0;snprintf(search_request.project,sizeof(search_request.project),"%s",project);snprintf(search_request.query,sizeof(search_request.query),"module");sr=dispatcher_host->invoke_service(DIGIT_SOURCE_SEARCH_SERVICE,&search_request,sizeof(search_request),&found,sizeof(found),&used);if(sr==STNLABZ_MODULE_OK&&used==sizeof(found)&&offset<sizeof(out->answer)){int w=snprintf(out->answer+offset,sizeof(out->answer)-offset,". I found %zu bounded source matches",found.count);if(w>0&&(size_t)w<sizeof(out->answer)-offset)offset+=(size_t)w;for(i=0;i<found.count&&i<3&&offset<sizeof(out->answer);++i){w=snprintf(out->answer+offset,sizeof(out->answer)-offset,"; %s:%zu",found.matches[i].path,found.matches[i].line);if(w<=0||(size_t)w>=sizeof(out->answer)-offset)break;offset+=(size_t)w;}}if(offset<sizeof(out->answer)-1)snprintf(out->answer+offset,sizeof(out->answer)-offset,".");out->answered=1;}
 
-static void observed_stage(digit_dispatcher_result_t *out,const char *name,
+static void observed_stage(digit_dispatcher_observed_result_t *out,const char *name,
                             digit_dsd_stage_state_t state,const char *reason);
-static void dispatch_intent_response(const char *request,const digit_intent_result_t *intent,digit_dispatcher_result_t *out)
+static void dispatch_intent_response(const char *request,const digit_intent_result_t *intent,digit_dispatcher_observed_result_t *out)
 {
-    digit_response_request_t rr;digit_response_result_t ro;size_t used=0;stnlabz_module_result_t sr;const char *intent_name;const char *target_name;
+    digit_response_request_t rr;digit_response_result_t ro;digit_response_observed_result_t observed={0};size_t used=0;stnlabz_module_result_t sr;const char *intent_name;const char *target_name;
     if(intent==NULL){out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't interpret that request.");return;}
     intent_name=intent_class_name(intent->intent);target_name=intent_target_name(intent->target);
     memset(&rr,0,sizeof(rr));memset(&ro,0,sizeof(ro));
     if(snprintf(rr.question,sizeof(rr.question),"INTENT: %s\nTARGET: %s\nSUBJECT: %s\nREQUEST: %s",intent_name,target_name,intent->subject,request)>=(int)sizeof(rr.question)){out->answered=1;snprintf(out->answer,sizeof(out->answer),"The interpreted request is too large to dispatch safely.");return;}
-    sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),&ro,sizeof(ro),&used);
+    sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_OBSERVED_SERVICE,&rr,sizeof(rr),
+                                       &observed,sizeof(observed),&used);
+    if(sr==STNLABZ_MODULE_ERR_NOT_FOUND){
+       used=0;
+       sr=dispatcher_host->invoke_service(DIGIT_RESPONSE_SERVICE,&rr,sizeof(rr),
+                                          &ro,sizeof(ro),&used);
+       if(sr==STNLABZ_MODULE_OK&&used==sizeof(ro))
+          observed.diagnostic_phase=DIGIT_RESPONSE_PHASE_UNOBSERVED;
+    }else if(sr==STNLABZ_MODULE_OK&&used==sizeof(observed)){
+       memcpy(&ro,&observed,sizeof(ro));
+       used=sizeof(ro);
+    }
     if(sr!=STNLABZ_MODULE_OK||used!=sizeof(ro)){observed_stage(out,"response",DIGIT_DSD_FAILED,"RESPONSE_SERVICE_FAILURE");out->answered=1;snprintf(out->answer,sizeof(out->answer),"I couldn't complete that request because one of my internal services is unavailable.");return;}
     out->answered=1;snprintf(out->answer,sizeof(out->answer),"%s",ro.answer[0]?ro.answer:"I couldn't produce an answer for that request.");
-    out->diagnostic.retrieved=ro.retrieved_count;
-    out->diagnostic.selected=ro.selected_count;
+    out->diagnostic.retrieved=observed.retrieved_count;
+    out->diagnostic.selected=observed.selected_count;
     /* Only explicit Response observations count as evidence. */
-    switch(ro.diagnostic_phase){
+    switch(observed.diagnostic_phase){
       case DIGIT_RESPONSE_PHASE_INPUT_REJECTED:
         observed_stage(out,"response",DIGIT_DSD_FAILED,"INPUT_REJECTED");break;
       case DIGIT_RESPONSE_PHASE_EVIDENCE_UNAVAILABLE:
@@ -113,7 +124,7 @@ static void dispatch_intent_response(const char *request,const digit_intent_resu
 
 /* [AI:GPT-6 | 2026-10-09] No generator/executor is registered in the
  * Dispatcher action path. Never repackage an action as evidence retrieval. */
-static void unsupported_action(digit_dispatcher_result_t *out){
+static void unsupported_action(digit_dispatcher_observed_result_t *out){
  out->answered=1;
  snprintf(out->answer,sizeof(out->answer),
   "I cannot execute or generate that requested action with my currently registered Dispatcher capabilities.");
@@ -135,19 +146,19 @@ static int diagnostic_request(const char *text){
  while(isspace((unsigned char)*p))++p;
  return *p==0||(*p=='.'&&p[1]==0)||(*p=='?'&&p[1]==0);
 }
-static void scoped_diagnostic(const digit_dispatcher_scoped_context_request_t *context,
-                               digit_dispatcher_result_t *out){
+static void scoped_diagnostic(const digit_dispatcher_observed_context_request_t *context,
+                               digit_dispatcher_observed_result_t *out){
  digit_dsd_request_t request={0};
  digit_dsd_result_t result={0};
  size_t used=0;
  stnlabz_module_result_t status;
  out->answered=1;
- if(!context||context->scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE){
+ if(!context||context->context.scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE){
   snprintf(out->answer,sizeof(out->answer),
            "Diagnostics of a previous request require authenticated private conversation context.");
   return;
  }
- if(!context->previous_user_message[0]||!context->previous_answer[0]){
+ if(!context->context.previous_user_message[0]||!context->context.previous_answer[0]){
   snprintf(out->answer,sizeof(out->answer),
            "I have no complete previous request and reply in this private session. No diagnosis is available.");
   return;
@@ -167,7 +178,7 @@ static void scoped_diagnostic(const digit_dispatcher_scoped_context_request_t *c
           result.report);
 }
 
-static void observed_stage(digit_dispatcher_result_t *out,const char *name,
+static void observed_stage(digit_dispatcher_observed_result_t *out,const char *name,
                             digit_dsd_stage_state_t state,const char *reason){
  digit_dsd_stage_t *st;
  if(out->diagnostic.stage_count>=DIGIT_DSD_STAGE_COUNT)return;
@@ -177,10 +188,10 @@ static void observed_stage(digit_dispatcher_result_t *out,const char *name,
  snprintf(st->reason,sizeof(st->reason),"%s",reason);
  out->diagnostic_valid=1;
 }
-static stnlabz_module_result_t dispatcher_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
+static stnlabz_module_result_t dispatcher_handle_observed(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
 {
     const digit_dispatcher_request_t *in=request;
-    digit_dispatcher_result_t out;
+    digit_dispatcher_observed_result_t out;
     digit_interpretation_request_t interpretation_request;
     digit_interpretation_result_t interpretation_result;
     digit_intent_request_t intent_request;
@@ -188,14 +199,14 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     const char *interpreted_request;
     size_t interpretation_used=0,intent_used=0;
     stnlabz_module_result_t interpretation_sr,intent_sr;
-    const digit_dispatcher_scoped_context_request_t *context=handler_context;
-    const char *previous_answer=context?context->previous_answer:NULL;
-    const char *previous_user_message=context?context->previous_user_message:NULL;
+    const digit_dispatcher_observed_context_request_t *context=handler_context;
+    const char *previous_answer=context?context->context.previous_answer:NULL;
+    const char *previous_user_message=context?context->context.previous_user_message:NULL;
     if(request==NULL||request_size!=sizeof(*in)||response==NULL||response_used==NULL||response_size<sizeof(out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if(memchr(in->request,'\0',sizeof(in->request))==NULL||in->request[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&out,0,sizeof(out));
     if(diagnostic_request(in->request)){
-        scoped_diagnostic((const digit_dispatcher_scoped_context_request_t *)handler_context,&out);
+        scoped_diagnostic((const digit_dispatcher_observed_context_request_t *)handler_context,&out);
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);
         return STNLABZ_MODULE_OK;
     }
@@ -313,6 +324,22 @@ static int dispatcher_scoped_valid(const digit_dispatcher_scoped_request_t *in)
          memchr(in->channel,0,sizeof(in->channel));
  return 0;
 }
+/* Preserve existing dispatcher.handle and scoped result schemas. */
+static stnlabz_module_result_t dispatcher_service(const void *request,size_t request_size,
+ void *response,size_t capacity,size_t *used,void *context){
+ digit_dispatcher_observed_result_t observed={0};
+ size_t produced=0;
+ stnlabz_module_result_t status;
+ if(!response||!used||capacity<sizeof(digit_dispatcher_result_t))
+  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ status=dispatcher_handle_observed(request,request_size,&observed,sizeof(observed),
+                                  &produced,context);
+ if(status!=STNLABZ_MODULE_OK||produced!=sizeof(observed))return
+   status==STNLABZ_MODULE_OK?STNLABZ_MODULE_ERR_INVALID_ARGUMENT:status;
+ memcpy(response,&observed,sizeof(digit_dispatcher_result_t));
+ *used=sizeof(digit_dispatcher_result_t);
+ return STNLABZ_MODULE_OK;
+}
 static stnlabz_module_result_t dispatcher_scoped_service(
  const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx)
 {
@@ -331,13 +358,13 @@ static stnlabz_module_result_t dispatcher_scoped_context_service(
 {
  const digit_dispatcher_scoped_context_request_t *in=request;
  digit_dispatcher_request_t legacy;
+ digit_dispatcher_observed_context_request_t observed_context={0};
  (void)ctx;
  if(!in||size!=sizeof(*in)||!response||!used||
     capacity<sizeof(digit_dispatcher_result_t)||
     !dispatcher_scoped_valid(&in->scoped)||
     !memchr(in->previous_answer,0,sizeof(in->previous_answer))||
-    !memchr(in->previous_user_message,0,sizeof(in->previous_user_message))||
-    in->previous_diagnostic_valid>1U)
+    !memchr(in->previous_user_message,0,sizeof(in->previous_user_message)))
   return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  /* Channel context is not sourced from a verified channel-history
   * provider yet. Never use a caller-provided prior turn in that scope. */
@@ -345,14 +372,39 @@ static stnlabz_module_result_t dispatcher_scoped_context_service(
     (in->previous_answer[0]||in->previous_user_message[0]))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  memset(&legacy,0,sizeof(legacy));
  memcpy(legacy.request,in->scoped.request,strlen(in->scoped.request)+1);
+ observed_context.context=*in;
  return dispatcher_service(&legacy,sizeof(legacy),response,capacity,used,
-                           (void *)in);
+                           &observed_context);
+}
+
+/* Additive authenticated, session-local observed Dispatcher service. */
+static stnlabz_module_result_t dispatcher_scoped_observed_service(
+ const void *request,size_t size,void *response,size_t capacity,size_t *used,void *ctx)
+{
+ const digit_dispatcher_observed_context_request_t *in=request;
+ digit_dispatcher_request_t legacy={0};
+ const digit_dispatcher_scoped_context_request_t *base;
+ (void)ctx;
+ if(!in||size!=sizeof(*in)||!response||!used||
+    capacity<sizeof(digit_dispatcher_observed_result_t)||
+    in->previous_diagnostic_valid>1U)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ base=&in->context;
+ if(!dispatcher_scoped_valid(&base->scoped)||
+    !memchr(base->previous_answer,0,sizeof(base->previous_answer))||
+    !memchr(base->previous_user_message,0,sizeof(base->previous_user_message)))
+    return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ if(base->scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE&&
+    (base->previous_answer[0]||base->previous_user_message[0]||
+     in->previous_diagnostic_valid))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ memcpy(legacy.request,base->scoped.request,strlen(base->scoped.request)+1);
+ return dispatcher_handle_observed(&legacy,sizeof(legacy),response,capacity,used,
+                                   (void *)in);
 }
 
 /* [AI:GPT-6 | 2026-10-09] Executed, deterministic local qualification;
  * service integration and runtime acceptance remain separate gates. */
 static stnlabz_module_result_t dispatcher_qualify(stnlabz_module_qualification_result_t *result){
- char name[DIGIT_LESSON_NAME_MAX];digit_dispatcher_result_t out;
+ char name[DIGIT_LESSON_NAME_MAX];digit_dispatcher_observed_result_t out;
  size_t passed=0,negative_passed=0;
  if(result==NULL)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
  memset(result,0,sizeof(*result));
@@ -389,6 +441,13 @@ static stnlabz_module_result_t dispatcher_start(const stnlabz_module_host_t *hos
   (void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
   return STNLABZ_MODULE_ERR_START_FAILED;
  }
+ if(!host->register_service(DIGIT_DISPATCHER_OBSERVED_CONTEXT_SERVICE,
+                            dispatcher_scoped_observed_service,NULL)){
+  (void)host->unregister_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,NULL);
+  (void)host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL);
+  (void)host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
+  return STNLABZ_MODULE_ERR_START_FAILED;
+ }
  dispatcher_host=host;
  if(host->send_message)
   (void)host->send_message("[DISPATCHER] active: controlled scoped routing registered");
@@ -398,6 +457,7 @@ static stnlabz_module_result_t dispatcher_stop(void)
 {
  int ok=1;
  if(dispatcher_host&&dispatcher_host->unregister_service){
+  ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_OBSERVED_CONTEXT_SERVICE,NULL);
   ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE,NULL);
   ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SCOPED_SERVICE,NULL);
   ok &= dispatcher_host->unregister_service(DIGIT_DISPATCHER_SERVICE,NULL);
