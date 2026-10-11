@@ -20,8 +20,7 @@ int digit_chatgpt_oauth_route(const digit_chatgpt_oauth_request_t *request,
             response->status = 503;
             strcpy(response->body, "{\"error\":\"temporarily_unavailable\",\"error_description\":\"SA-approved authorization flow not yet bound\"}");
         }
-    } else if (strcmp(request->path, DIGIT_CHATGPT_OAUTH_TOKEN) == 0 ||
-               strcmp(request->path, DIGIT_CHATGPT_OAUTH_REGISTER) == 0) {
+    } else if (strcmp(request->path, DIGIT_CHATGPT_OAUTH_TOKEN) == 0) {
         if (strcmp(request->method, "POST") != 0) {
             response->status = 405;
             strcpy(response->body, "{\"error\":\"method_not_allowed\"}");
