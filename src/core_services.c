@@ -1,6 +1,8 @@
 #include <string.h>
+#include <stdio.h>
 
 #include "core_services.h"
+#include "agent_root.h"
 #include "core_sa.h"
 #include "module.h"
 #include "service_registry.h"
@@ -31,9 +33,42 @@ static stnlabz_module_result_t digit_admin_sa_service(const void *request,size_t
     return STNLABZ_MODULE_OK;
 }
 
+static void root_fact_add(digit_root_facts_result_t *out,
+ const char *subject,const char *predicate,const char *object){
+ digit_root_fact_t *f;
+ if(!out||out->count>=DIGIT_ROOT_FACTS_MAX||!subject||!predicate||!object)return;
+ f=&out->facts[out->count++];
+ snprintf(f->subject,sizeof(f->subject),"%s",subject);
+ snprintf(f->predicate,sizeof(f->predicate),"%s",predicate);
+ snprintf(f->object,sizeof(f->object),"%s",object);
+}
+static stnlabz_module_result_t root_facts_service(
+ const void *request,size_t request_size,void *response,size_t response_size,
+ size_t *response_used,void *context){
+ const stnlabz_agent_root_t *r=stnlabz_agent_root_identity();
+ digit_root_facts_result_t *out=response;
+ size_t i;
+ (void)request;(void)context;
+ if(request_size!=0||!out||response_size<sizeof(*out)||!response_used)
+  return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+ if(!stnlabz_agent_root_validate(r))return STNLABZ_MODULE_ERR_START_FAILED;
+ memset(out,0,sizeof(*out));
+ root_fact_add(out,r->agent_id,"name",r->agent_name);
+ root_fact_add(out,r->agent_id,"organization",r->organization_id);
+ root_fact_add(out,r->agent_id,"lineage",r->lineage);
+ if(r->relation==STNLABZ_ROOT_RELATION_OLDER_SISTER)
+  root_fact_add(out,r->agent_id,"older_sister_of",r->related_agent_id);
+ else if(r->relation==STNLABZ_ROOT_RELATION_YOUNGER_SISTER)
+  root_fact_add(out,r->agent_id,"younger_sister_of",r->related_agent_id);
+ for(i=0;i<STNLABZ_ROOT_TRAIT_COUNT;++i)
+  root_fact_add(out,r->agent_id,"character_trait",r->traits[i]);
+ *response_used=sizeof(*out);
+ return STNLABZ_MODULE_OK;
+}
 int digit_core_services_register(void)
 {
-    if(!digit_service_register(DIGIT_CHANNEL_SERVICE_CREATE,channel_create_service,NULL))return 0;
+    if(!digit_service_register(DIGIT_ROOT_FACTS_SERVICE,root_facts_service,NULL))return 0;
+    if(!digit_service_register(DIGIT_CHANNEL_SERVICE_CREATE,channel_create_service,NULL))goto fail;
     if(!digit_service_register(DIGIT_CHANNEL_SERVICE_LIST,channel_list_service,NULL))goto fail;
     if(!digit_service_register(DIGIT_CHANNEL_SERVICE_GET,channel_get_service,NULL))goto fail;
     if(!digit_service_register(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,channel_message_append_service,NULL))goto fail;
@@ -50,5 +85,5 @@ fail:
 
 void digit_core_services_unregister(void)
 {
-    (void)digit_service_unregister(DIGIT_ADMIN_SA_SERVICE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_RAISE,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_CREATE,NULL);
+    (void)digit_service_unregister(DIGIT_ROOT_FACTS_SERVICE,NULL);(void)digit_service_unregister(DIGIT_ADMIN_SA_SERVICE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_ACKNOWLEDGE,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_ALERT_SERVICE_RAISE,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_GET,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_LIST,NULL);(void)digit_service_unregister(DIGIT_CHANNEL_SERVICE_CREATE,NULL);
 }
