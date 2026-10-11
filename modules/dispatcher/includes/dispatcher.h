@@ -7,6 +7,7 @@
 #define DIGIT_DISPATCHER_SERVICE "dispatcher.handle"
 #define DIGIT_DISPATCHER_SCOPED_SERVICE "dispatcher.handle_scoped"
 #define DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE "dispatcher.handle_scoped_context"
+#define DIGIT_DISPATCHER_OBSERVED_CONTEXT_SERVICE "dispatcher.handle_scoped_context_observed"
 #define DIGIT_DISPATCHER_ACTOR_MAX 64
 #define DIGIT_DISPATCHER_SCOPE_MAX 64
 #define DIGIT_DISPATCHER_SCOPE_PRIVATE 1U
@@ -23,9 +24,16 @@ typedef struct
 {
     int answered;
     char answer[DIGIT_DISPATCHER_ANSWER_MAX];
+} digit_dispatcher_result_t;
+
+/* Additive reply schema; initial fields exactly preserve legacy result. */
+typedef struct
+{
+    int answered;
+    char answer[DIGIT_DISPATCHER_ANSWER_MAX];
     unsigned int diagnostic_valid;
     digit_dsd_request_t diagnostic;
-} digit_dispatcher_result_t;
+} digit_dispatcher_observed_result_t;
 
 /* [AI:GPT-6 | 2026-10-09] Additive, request-local context contract.
  * Identity and scope must originate in an authenticated Interface.
@@ -49,9 +57,15 @@ typedef struct
     digit_dispatcher_scoped_request_t scoped;
     char previous_answer[DIGIT_DISPATCHER_ANSWER_MAX];
     char previous_user_message[DIGIT_DISPATCHER_REQUEST_MAX];
+} digit_dispatcher_scoped_context_request_t;
+
+/* Only the authenticated Interface may carry an earlier turn's telemetry. */
+typedef struct
+{
+    digit_dispatcher_scoped_context_request_t context;
     unsigned int previous_diagnostic_valid;
     digit_dsd_request_t previous_diagnostic;
-} digit_dispatcher_scoped_context_request_t;
+} digit_dispatcher_observed_context_request_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
 
