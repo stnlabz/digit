@@ -1,7 +1,7 @@
-# Digit ChatGPT Integration — 1.0.3 source candidate
+# Digit ChatGPT Integration — 1.0.4 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
-ChatGPT OAuth connector.** No live OAuth endpoint or MCP client connection is
+ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
 claimed by this source candidate.
 
 ## ChatGPT-local authentication primitives
@@ -18,6 +18,18 @@ claimed by this source candidate.
   conversations are disabled. `chatgpt.test_case` still denies execution.
   The existing `chatgpt.mcp` service only supports limited protocol probes.
 
+## /oauth route namespace (ChatGPT module only)
+
+The in-process `chatgpt.oauth` service now dispatches exact paths:
+
+- `GET /oauth/authorize` — currently 503, until SA-approved authorization and consent exist.
+- `POST /oauth/token` — currently 503, until authenticated authorization-code exchange exists.
+- `POST /oauth/register` — currently 503, until approved client registration exists.
+- Unsupported methods return 405; unknown paths return 404.
+- These paths are **not public HTTP URLs** until a qualified transport binds
+  requests to the `chatgpt.oauth` service. No Interface/Core changes were made.
+  Denial is intentional; the module does not mint unauthenticated tokens.
+
 ## Remaining integration boundary
 
 For an actual ChatGPT MCP OAuth connection, a qualified transport must expose
@@ -26,7 +38,7 @@ consent/authorization-code endpoint, PKCE-protected code redemption and
 appropriate access-token validation, while retaining the existing identity
 and capability controls and private-session DSD continuity.
 
-**These endpoints do not exist in this module yet.** Simply validating a PKCE
+**These routes are service-level placeholders, not operational OAuth endpoints.** Simply validating a PKCE
 challenge or bearer string does not authenticate a ChatGPT user. In particular,
 the existing `POST /mcp` HTTP transport currently belongs to Interface and
 does not invoke these helpers. No Core or Interface files were modified in
