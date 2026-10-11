@@ -136,6 +136,29 @@ int main(void){
       used!=sizeof(out)||dsd_calls!=1||!strstr(out.answer,"correlated stage telemetry")){
     fprintf(stderr,"Authenticated DSD routing FAILED\\n");return 1;
    }
+   /* Explicit diagnostics never read unauthenticated or channel context. */
+   {
+    digit_dispatcher_request_t legacy={0};
+    digit_dispatcher_result_t blocked={0};
+    size_t n=0;
+    snprintf(legacy.request,sizeof(legacy.request),"Digit, diagnose my last request.");
+    dsd_calls=0;
+    if(dispatcher_handler(&legacy,sizeof(legacy),&blocked,sizeof(blocked),&n,NULL)!=STNLABZ_MODULE_OK||
+       dsd_calls!=0||!strstr(blocked.answer,"authenticated private")){
+     fprintf(stderr,"DSD unscoped isolation FAILED\\n");return 1;
+    }
+   }
+   req.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_CHANNEL;
+   snprintf(req.scoped.organization,sizeof(req.scoped.organization),"org");
+   snprintf(req.scoped.project,sizeof(req.scoped.project),"project");
+   snprintf(req.scoped.channel,sizeof(req.scoped.channel),"channel");
+   dsd_calls=0;
+   if(scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_ERR_INVALID_ARGUMENT||
+      dsd_calls!=0){
+    fprintf(stderr,"DSD channel isolation FAILED\\n");return 1;
+   }
+   req.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   req.scoped.organization[0]=0;req.scoped.project[0]=0;req.scoped.channel[0]=0;
    req.previous_user_message[0]=0;
    dsd_calls=0;used=0;
    if(scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
