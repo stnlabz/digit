@@ -22,6 +22,7 @@
 #include "http_write.h"
 #include "interface_audit.h"
 #include "account_auth.h"
+#include "ai_platform_auth.h"
 #include "channel_acl.h"
 #include "project_channel_bridge.h"
 #include "message_origin.h"
@@ -649,7 +650,17 @@ invalid:
 }
 static int interface_message_append(const char *id,const char *origin,const char *body,digit_channel_message_t *message){digit_channel_message_append_request_t in;digit_channel_message_append_response_t out;size_t used=0;if(!digit_controlled_message_valid(id,origin,body))return 0;memset(&in,0,sizeof(in));memset(&out,0,sizeof(out));snprintf(in.channel_id,sizeof(in.channel_id),"%s",id);snprintf(in.origin,sizeof(in.origin),"%s",origin);snprintf(in.body,sizeof(in.body),"%s",body);if(!interface_invoke(DIGIT_CHANNEL_SERVICE_MESSAGE_APPEND,&in,sizeof(in),&out,sizeof(out),&used)||used!=sizeof(out)||!out.appended)return 0;if(message)*message=out.message;return 1;}
 static void interface_message_post(int client,const char *id,const char *body,const char *identity){digit_channel_message_t message;char origin[DIGIT_CHANNEL_ORIGIN_MAX],item[9000],json[9300];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!interface_message_append(id,origin,body,&message)){interface_reply(client,400,"{\"error\":\"message not appended\"}\n");return;}interface_message_json(&message,item,sizeof(item));{char receipt[256];if(!digit_controlled_receipt(&message,id,origin,receipt,sizeof(receipt))){interface_reply(client,503,"{\"error\":\"Core acknowledgement inconsistent\"}\n");return;}snprintf(json,sizeof(json),"{\"appended\":true,\"receipt\":%s,\"message\":%s}\n",receipt,item);}interface_reply(client,200,json);}
-static void interface_channel_ask(int client,const char *id,const char *body,const char *identity){interface_dispatcher_result_t out;interface_builder_result_t learned;digit_channel_message_t operator_message,digit_message;char answer[768],escaped[8192],er[512],eid[160],json[11000];const char *learn;char origin[DIGIT_CHANNEL_ORIGIN_MAX];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}if(!interface_message_append(id,origin,body,&operator_message)){interface_reply(client,404,"{\"error\":\"channel unavailable\"}\n");return;}learn=interface_learn_text(body);if(learn){int result=interface_process_learn(learn,&learned,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}if(!interface_message_append(id,"digit",answer,&digit_message)){interface_reply(client,503,"{\"error\":\"learning completed but channel persistence failed\"}\n");return;}interface_json_escape(answer,escaped,sizeof(escaped));interface_json_escape(learned.reason,er,sizeof(er));interface_json_escape(learned.record_id,eid,sizeof(eid));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",id,escaped,learned.stored?"true":"false",eid,learned.category,learned.confidence,er);interface_reply(client,200,json);return;}interface_dispatch(body,&out);if(out.answer[0]&&!interface_message_append(id,"digit",out.answer,&digit_message)){snprintf(out.answer,sizeof(out.answer),"I completed the request, but I couldn't persist my response to this channel.");}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",id,out.answered?"true":"false",escaped);interface_reply(client,200,json);}
+static void interface_channel_ask(int client,const char *id,const char *body,const char *identity){interface_dispatcher_result_t out;interface_builder_result_t learned;digit_channel_message_t operator_message,digit_message;char answer[768],escaped[8192],er[512],eid[160],json[11000];const char *learn;char origin[DIGIT_CHANNEL_ORIGIN_MAX];if(!digit_message_origin_from_identity(identity,origin,sizeof(origin))){interface_reply(client,403,"{\"error\":\"identity cannot be represented by channel protocol\"}\n");return;}if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}if(!interface_message_append(id,origin,body,&operator_message)){interface_reply(client,404,"{\"error\":\"channel unavailable\"}\n");return;}if(strncmp(identity,"ai.",3)==0){
+ digit_ai_platform_permissions_t perm={0};
+ if(!digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
+  interface_reply(client,403,"{\"error\":\"AI platform DM access denied\"}\n");return;
+ }
+ if(!perm.memory_write &&
+    (!strncasecmp(body,"remember ",9)||!strncasecmp(body,"i am ",5))){
+  interface_reply(client,403,"{\"error\":\"AI platform memory write denied\"}\n");return;
+ }
+}
+learn=interface_learn_text(body);if(learn){int result=interface_process_learn(learn,&learned,answer,sizeof(answer));if(result<=0){interface_reply(client,result==0?400:503,result==0?"{\"error\":\"valid learning input required\"}\n":"{\"error\":\"corpus builder unavailable\"}\n");return;}if(!interface_message_append(id,"digit",answer,&digit_message)){interface_reply(client,503,"{\"error\":\"learning completed but channel persistence failed\"}\n");return;}interface_json_escape(answer,escaped,sizeof(escaped));interface_json_escape(learned.reason,er,sizeof(er));interface_json_escape(learned.record_id,eid,sizeof(eid));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":true,\"evidence_count\":0,\"answer\":\"%s\",\"learning\":true,\"stored\":%s,\"record_id\":\"%s\",\"category\":\"%s\",\"confidence\":%u,\"reason\":\"%s\"}\n",id,escaped,learned.stored?"true":"false",eid,learned.category,learned.confidence,er);interface_reply(client,200,json);return;}interface_dispatch(body,&out);if(out.answer[0]&&!interface_message_append(id,"digit",out.answer,&digit_message)){snprintf(out.answer,sizeof(out.answer),"I completed the request, but I couldn't persist my response to this channel.");}interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"channel_id\":\"%s\",\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",id,out.answered?"true":"false",escaped);interface_reply(client,200,json);}
 /* [AI:GPT-6 | 2026-10-08] 1.4.8: fail closed on Core
  * alert-list count, identity, provenance, and serialization errors. */
 static void interface_alerts_list(int client,int unacknowledged)
@@ -765,6 +776,39 @@ if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\
  * Login has no self-registration or caller-supplied privilege flags.
  * Transport remains loopback-bound; deploy HTTPS gateway before external use.
  */
+/* AI Platform principals use a separate credential file and explicit grants.
+ * The resulting token uses the same session store as authenticated private DMs. */
+if(strncmp(request,"POST /ai/session/login HTTP/1.1",31)==0){
+    char user[DIGIT_ACCOUNT_ID_MAX],password[DIGIT_ACCOUNT_PASSWORD_MAX];
+    char token[DIGIT_SESSION_TOKEN_SIZE],json[256];
+    digit_ai_platform_permissions_t permission;
+    const char *sep;
+    size_t un,pn;
+    if(!body||!(sep=strchr(body,'\t'))||strchr(sep+1,'\t')||
+       strchr(body,'\n')||strchr(body,'\r')){
+        interface_reply(client,400,"{\"error\":\"invalid credentials format\"}\n");return;
+    }
+    un=(size_t)(sep-body);pn=strlen(sep+1);
+    if(un<4||un>=sizeof(user)||pn==0||pn>=sizeof(password)){
+        interface_reply(client,401,"{\"error\":\"authentication failed\"}\n");return;
+    }
+    memcpy(user,body,un);user[un]=0;
+    memcpy(password,sep+1,pn+1U);
+    if(strncmp(user,"ai.",3)!=0||
+       !digit_account_verify_file(DIGIT_AI_PLATFORM_CREDENTIALS,user,password)||
+       !digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,user,&permission)||
+       !permission.dm){
+        memset(password,0,sizeof(password));
+        interface_reply(client,401,"{\"error\":\"authentication failed\"}\n");return;
+    }
+    memset(password,0,sizeof(password));
+    if(!digit_session_issue(&interface_sessions,user,1,time(NULL),token)){
+        interface_reply(client,503,"{\"error\":\"session unavailable\"}\n");return;
+    }
+    snprintf(json,sizeof(json),"{\"authenticated\":true,\"token\":\"%s\",\"expires_in\":%d}\n",
+             token,DIGIT_SESSION_LIFETIME);
+    memset(token,0,sizeof(token));interface_reply(client,200,json);return;
+}
 if(strncmp(request,"POST /session/login HTTP/1.1",28)==0){
     char user[DIGIT_ACCOUNT_ID_MAX],password[DIGIT_ACCOUNT_PASSWORD_MAX];
     char token[DIGIT_SESSION_TOKEN_SIZE],json[256];
@@ -780,7 +824,8 @@ if(strncmp(request,"POST /session/login HTTP/1.1",28)==0){
     }
     memcpy(user,body,un);user[un]='\0';
     memcpy(password,sep+1,pn+1U);
-    if(!digit_account_verify_file(DIGIT_ACCOUNT_AUTH_PATH,user,password)){
+    if(strncmp(user,"ai.",3)==0||
+       !digit_account_verify_file(DIGIT_ACCOUNT_AUTH_PATH,user,password)){
         memset(password,0,sizeof(password));
         interface_reply(client,401,"{\"error\":\"authentication failed\"}\n");return;
     }
@@ -795,9 +840,13 @@ if(strncmp(request,"POST /session/login HTTP/1.1",28)==0){
 }
 if(strncmp(request,"GET /session ",13)==0){
     char identity[DIGIT_SESSION_ID_SIZE],escaped[2*DIGIT_SESSION_ID_SIZE],json[256];
+    digit_ai_platform_permissions_t ai_permissions={0};
     /* [AI:GPT-6 | 2026-10-08] Only server-issued sessions identify an operator. */
     if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
-       !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
+       !(strncmp(identity,"ai.",3)==0 ?
+         (digit_account_active_file(DIGIT_AI_PLATFORM_CREDENTIALS,identity)&&
+          digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&ai_permissions)&&ai_permissions.dm) :
+         digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity))){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
     }
     interface_json_escape(identity,escaped,sizeof(escaped));
@@ -822,9 +871,18 @@ if(strncmp(request,"POST /session/logout ",21)==0){
  * checks apply to all channel HTTP paths; other resource classes remain separate.
  */
 {
+    digit_ai_platform_permissions_t ai_permissions={0};
     if(!digit_http_resolve_identity(&interface_sessions,request,time(NULL),identity,sizeof(identity)) ||
-       !digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity)){
+       !(strncmp(identity,"ai.",3)==0 ?
+         (digit_account_active_file(DIGIT_AI_PLATFORM_CREDENTIALS,identity)&&
+          digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&ai_permissions)&&ai_permissions.dm) :
+         digit_account_active_file(DIGIT_ACCOUNT_AUTH_PATH,identity))){
         interface_reply(client,401,"{\"error\":\"authentication required\"}\n");return;
+    }
+    /* AI platform accounts cannot use human administrative and mutation routes.
+     * Their initial qualified exposure is private /ask only. */
+    if(strncmp(identity,"ai.",3)==0&&strncmp(request,"POST /ask ",10)!=0){
+        interface_reply(client,403,"{\"error\":\"AI platform operation not authorized\"}\n");return;
     }
 }
 /* [AI:GPT-6 | 2026-10-08] Interface 1.5.4: protected SA admission.
