@@ -167,6 +167,7 @@ static int render_lesson_definition(const char *subject, ranked_record_t selecte
     }
     return 0;
 }
+static const char *presentation_text(const corpus_record_t *record);
 static int learned_glossary_acknowledgment(const char *question,
  const corpus_record_t *record,char *answer,size_t capacity){
  char q[TERM_COUNT][TERM_MAX]={{0}},lhs[CORPUS_TEXT_MAX],normalized[CORPUS_TEXT_MAX];
