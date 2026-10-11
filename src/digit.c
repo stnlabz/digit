@@ -138,8 +138,12 @@ int digit_initialize(void)
         degraded = 1;
         snprintf(detail, sizeof(detail), "result=%s core_continuing=true", stnlabz_module_result_string(result));
         fprintf(stderr, "[CORE] DEGRADED: module initialization reported %s; Digit Core is continuing.\n", stnlabz_module_result_string(result));
+        /* [AI:GPT-6 | 2026-10-11] The module manager already emits
+         * per-module incidents with observed stage, version and result.
+         * Do not create a second generic alert which loses that evidence
+         * and misleadingly appears as a separate unidentified failure.
+         * Preserve the aggregate Core degraded audit for system state. */
         (void)digit_audit_event("CORE", "DEGRADED", detail);
-        digit_raise_core_alert(DIGIT_ALERT_ERROR, "Module activation degraded Digit capability", detail, "DEGRADED");
     }
 
     digit_runtime_init(&digit_runtime, &digit_modules);
