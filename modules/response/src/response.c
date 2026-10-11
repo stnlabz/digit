@@ -597,7 +597,7 @@ static stnlabz_module_result_t answer_service_observed(const void *request,size_
         *response_used=sizeof(output);
         return STNLABZ_MODULE_OK;
     }
-    output.evidence_count=(unsigned int)selected_count;render_intent_answer(&intent,query,selected,selected_count,&output,rendered_evidence,sizeof(rendered_evidence));
+    output.evidence_count=(unsigned int)selected_count;render_intent_answer(&intent,query,selected,selected_count,(digit_response_result_t *)&output,rendered_evidence,sizeof(rendered_evidence));
     /* [AI:GPT-6 | 2026-10-10] An explicit conversational abstention is
      * not a factual assertion supported by retrieved vocabulary.
      * Return it as an unknown result, as the zero-evidence path does,
