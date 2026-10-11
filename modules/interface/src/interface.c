@@ -922,7 +922,12 @@ if((strncmp(request,"GET /oauth/authorize",20)==0 &&
     const int authorize=request[0]=='G';
     strcpy(in.method,authorize?"GET":"POST");
     strcpy(in.path,authorize?DIGIT_CHATGPT_OAUTH_AUTHORIZE:DIGIT_CHATGPT_OAUTH_TOKEN);
-    if(!authorize && body && strlen(body)<sizeof(in.parameters))
+    if(authorize){
+        const char *q=strchr(request,'?');
+        const char *end=q?strchr(q,' '):NULL;
+        if(q&&end&&(size_t)(end-q-1)<sizeof(in.parameters))
+            memcpy(in.parameters,q+1,(size_t)(end-q-1));
+    }else if(body&&strlen(body)<sizeof(in.parameters))
         strcpy(in.parameters,body);
     if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
                          &out,sizeof(out),&used)||used!=sizeof(out)||
