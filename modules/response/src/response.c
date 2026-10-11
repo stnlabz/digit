@@ -209,7 +209,15 @@ static int learned_feedback_acknowledgment(const char *question,
  if(!question||!record||!answer||!capacity||
     strcmp(record->category,"OPERATOR_LEARNED")||
     strcmp(record->source,"interface:learn"))return 0;
- canonical_text(question,q,sizeof(q));
+ {
+  const char *utterance=question,*comma=strchr(question,',');
+  if(comma&&comma-question>0&&comma-question<64){
+   const char *p=question;int address=1;
+   while(p<comma){if(!isalpha((unsigned char)*p)&&!isspace((unsigned char)*p)){address=0;break;}++p;}
+   if(address){utterance=comma+1;while(isspace((unsigned char)*utterance))++utterance;}
+  }
+  canonical_text(utterance,q,sizeof(q));
+ }
  if(strncmp(q,"you are ",8)!=0&&strncmp(q,"you re ",7)!=0)return 0;
  source=presentation_text(record);
  relation=strstr(source," means ");
@@ -1018,5 +1026,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
