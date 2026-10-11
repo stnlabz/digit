@@ -5,20 +5,7 @@
 
 #include "alert.h"
 #include "channel.h"
-
-/* Core-authoritative, read-only Root facts. No authority is granted. */
-#define DIGIT_ROOT_FACTS_SERVICE "root.facts.list"
-#define DIGIT_ROOT_FACTS_MAX 16U
-#define DIGIT_ROOT_FACT_TEXT_MAX 128U
-typedef struct {
-    char subject[DIGIT_ROOT_FACT_TEXT_MAX];
-    char predicate[DIGIT_ROOT_FACT_TEXT_MAX];
-    char object[DIGIT_ROOT_FACT_TEXT_MAX];
-} digit_root_fact_t;
-typedef struct {
-    unsigned int count;
-    digit_root_fact_t facts[DIGIT_ROOT_FACTS_MAX];
-} digit_root_facts_result_t;
+#include "root_facts_contract.h"
 
 #define DIGIT_CHANNEL_SERVICE_CREATE "channel.create"
 #define DIGIT_CHANNEL_SERVICE_LIST "channel.list"
