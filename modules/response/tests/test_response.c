@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "response.h"
+#include "../../../include/root_facts_contract.h"
 #include "arithmetic.h"
 #include "../../corpus/includes/corpus.h"
 #include "../../interpretation/includes/interpretation.h"
@@ -29,6 +30,7 @@ static const char *arithmetic_expected_request;
 static const char *arithmetic_expected_answer;
 static int arithmetic_available=1;
 static int learned_definition_fixture=0;
+static int root_relationship_fixture=0;
 typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
@@ -75,6 +77,16 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
   *used=sizeof(*out);
   return STNLABZ_MODULE_OK;
  }
+ if(!strcmp(name,DIGIT_ROOT_FACTS_SERVICE)){
+  digit_root_facts_result_t *out=response;
+  if(!root_relationship_fixture||request_size!=0||response_size<sizeof(*out))
+   return STNLABZ_MODULE_ERR_NOT_FOUND;
+  memset(out,0,sizeof(*out));out->count=1;
+  snprintf(out->facts[0].subject,sizeof(out->facts[0].subject),"digit");
+  snprintf(out->facts[0].predicate,sizeof(out->facts[0].predicate),"older_sister_of");
+  snprintf(out->facts[0].object,sizeof(out->facts[0].object),"ezra");
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
+ }
  if(!strcmp(name,"corpus.search")){
   corpus_queries++;
   if(learned_definition_fixture){
@@ -101,7 +113,7 @@ static stnlabz_module_result_t test_invoke(const char *name,const void *request,
  }
  if(!strcmp(name,"validator.outbound")){
   outbound_validations++;
-  if(learned_definition_fixture){
+  if(learned_definition_fixture||root_relationship_fixture){
    digit_validator_outbound_result_t *out=response;
    if(response_size<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
    memset(out,0,sizeof(*out));out->status=DIGIT_VALIDATOR_PASS;
@@ -170,6 +182,25 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
   }
  }
 
+ /* Root relationship verification must not fall back to Corpus. */
+ {
+  static const struct {const char *question,*expected;} cases[]={
+   {"Who is your younger sister?","ezra is my younger sister."},
+   {"Are you Ezra's older sister?","Yes, ezra is my younger sister."}
+  };
+  size_t k;root_relationship_fixture=1;
+  for(k=0;k<sizeof(cases)/sizeof(cases[0]);++k){
+   unsigned int before=corpus_queries;
+   memset(&request,0,sizeof(request));memset(&answer,0,sizeof(answer));used=0;
+   snprintf(request.question,sizeof(request.question),
+    "INTENT: FACT\\nTARGET: KNOWLEDGE\\nSUBJECT: \\nREQUEST: %s",cases[k].question);
+   check(response_handler(&request,sizeof(request),&answer,sizeof(answer),
+       &used,NULL)==STNLABZ_MODULE_OK&&used==sizeof(answer)&&
+       answer.answered&&!strcmp(answer.answer,cases[k].expected)&&
+       before==corpus_queries,"Root sibling relationship query");
+  }
+  root_relationship_fixture=0;
+ }
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
  {
   static const struct {const char *question,*expected;} cases[]={
