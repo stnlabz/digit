@@ -133,9 +133,9 @@ static void digit_alert_speak(const digit_alert_t *alert)
         (void)digit_alert_detail_token(alert->detail,"stage",stage,sizeof(stage));
         (void)digit_alert_detail_token(alert->detail,"reason",reason,sizeof(reason));
         written=snprintf(body,sizeof(body),
-            "severity: %s\nsummary: %s\nmodule: %s\nsubsystem: module_lifecycle"
-            "\nversion: %s\ncause: %s\nstage: %s\nevent_id: %s"
-            "\ntimestamp: %llu\noperational_state: %s\ndetail: %s",
+            "severity: %s\\nsummary: %s\\nmodule: %s\\nsubsystem: module_lifecycle"
+            "\\nversion: %s\\ncause: %s\\nstage: %s\\nevent_id: %s"
+            "\\ntimestamp: %llu\\noperational_state: %s\\ndetail: %s",
             digit_alert_severity_string(alert->severity),alert->summary,
             module[0]?module:"UNREPORTED",version[0]?version:"UNREPORTED",
             reason[0]?reason:"UNREPORTED",stage[0]?stage:"UNREPORTED",
