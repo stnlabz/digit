@@ -73,10 +73,10 @@ $(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_access_policy.c -o $@
 
 $(SESSION_TEST_TARGET): tests/test_session_store.c src/session_store.c includes/session_store.h | bin
-	$(CC) -Iincludes $(CFLAGS) tests/test_session_store.c src/session_store.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_session_store.c src/session_store.c -o $@
 
 $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_store.c includes/http_auth.h includes/session_store.h | bin
-	$(CC) -Iincludes $(CFLAGS) tests/test_http_auth.c src/http_auth.c src/session_store.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_http_auth.c src/http_auth.c src/session_store.c -o $@
 
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
