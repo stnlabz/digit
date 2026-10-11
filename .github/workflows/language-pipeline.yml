@@ -20,6 +20,10 @@ jobs:
         with:
           repository: stnlabz/ABI
           path: ABI
+      - name: Verify fail-closed Digit bridge admission policy
+        shell: bash
+        run: |
+          python3 -m unittest discover -s digit/tools/digit_test_bridge -p 'test_policy.py' -v
       - name: Compile and qualify language pipeline
         shell: bash
         run: |
