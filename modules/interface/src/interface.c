@@ -105,8 +105,8 @@ static void interface_oauth_browser_reply(int client,const digit_chatgpt_oauth_r
  const char *reason=out->status==302?"Found":"OK";
  const char *ctype=out->html?"text/html; charset=utf-8":"application/json; charset=utf-8";
  if(out->status==302){
-  if(strncmp(out->location,"https://chatgpt.com/",20)!=0 &&
-     strncmp(out->location,"https://chat.openai.com/",24)!=0)return;
+  if(strncmp(out->location,"https://chatgpt.com/connector/oauth/50yEgv2B3ONp?",
+             strlen("https://chatgpt.com/connector/oauth/50yEgv2B3ONp?"))!=0)return;
   n=snprintf(header,sizeof(header),
    "HTTP/1.1 302 %s\r\nLocation: %s\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
    reason,out->location);
