@@ -925,7 +925,9 @@ if((strncmp(request,"GET /oauth/authorize",20)==0 &&
     if(authorize){
         const char *q=strchr(request,'?');
         const char *end=q?strchr(q,' '):NULL;
-        if(q&&end&&(size_t)(end-q-1)<sizeof(in.parameters))
+        const char *line=strstr(request," HTTP/1.1");
+        if(q&&end&&line&&q<line&&end==line&&
+           (size_t)(end-q-1)<sizeof(in.parameters))
             memcpy(in.parameters,q+1,(size_t)(end-q-1));
     }else if(body&&strlen(body)<sizeof(in.parameters))
         strcpy(in.parameters,body);
