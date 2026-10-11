@@ -1,4 +1,4 @@
-# Digit ChatGPT Integration — 1.0.6 source candidate
+# Digit ChatGPT Integration — 1.0.7 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
 ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
@@ -41,11 +41,11 @@ have not yet been bound to `/oauth/token` or the public `/mcp` route.
 
 ## /oauth route namespace (ChatGPT module only)
 
-The in-process `chatgpt.oauth` service now dispatches exact paths:
+The single in-process `chatgpt.oauth` service owns the OAuth authorization-code flow. Its two protocol operations use these exact paths:
 
 - `GET /oauth/authorize` — currently 503, until SA-approved authorization and consent are bound.
 - `POST /oauth/token` — currently 503, until authenticated authorization-code exchange exists.
-- `POST /oauth/register` — currently 503, until approved client registration exists.
+- No `/oauth/register` endpoint: client registration must be SA-controlled, not offered as an unauthenticated public route.
 - Unsupported methods return 405; unknown paths return 404.
 - These paths are **not public HTTP URLs** until a qualified transport binds
   requests to the `chatgpt.oauth` service. No Interface/Core changes were made.
