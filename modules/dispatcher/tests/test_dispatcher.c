@@ -41,9 +41,14 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   digit_dsd_result_t *out=output;
   if(isize!=sizeof(*req)||osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
   dsd_calls++;
-  if(req->stage_count!=0)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-  memset(out,0,sizeof(*out));out->finding=DIGIT_DSD_UNKNOWN;
-  snprintf(out->report,sizeof(out->report),"Insufficient verified stage evidence.");
+  memset(out,0,sizeof(*out));
+  if(req->stage_count){
+   out->finding=DIGIT_DSD_OBSERVED;
+   snprintf(out->report,sizeof(out->report),"Observed processing boundary at response: NO_CONVERSATIONAL_COMPOSITION.");
+  }else{
+   out->finding=DIGIT_DSD_UNKNOWN;
+   snprintf(out->report,sizeof(out->report),"Insufficient verified stage evidence.");
+  }
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  if(!strcmp(name,DIGIT_INTERPRETATION_SERVICE)){
@@ -84,6 +89,11 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   response_calls++;memset(out,0,sizeof(*out));out->answered=1;
   snprintf(out->answer,sizeof(out->answer),"%s",
    strstr(((const digit_response_request_t *)input)->question,"solve 3*x - 6 = 0")?"x = 2.":"Bounded response");
+  if(strstr(((const digit_response_request_t *)input)->question,"You are Stoopid")){
+   snprintf(out->answer,sizeof(out->answer),"I don\'t have enough grounded information to answer that.");
+   out->retrieved_count=2;out->selected_count=1;
+   out->diagnostic_phase=DIGIT_RESPONSE_PHASE_NO_COMPOSITION;
+  }else out->diagnostic_phase=DIGIT_RESPONSE_PHASE_APPROVED;
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  return STNLABZ_MODULE_ERR_NOT_FOUND;
@@ -133,8 +143,38 @@ int main(void){
    snprintf(req.previous_answer,sizeof(req.previous_answer),"I don't have enough grounded information to answer that.");
    dsd_calls=0;
    if(!scoped_context_handler||scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
-      used!=sizeof(out)||dsd_calls!=1||!strstr(out.answer,"correlated stage telemetry")){
+      used!=sizeof(out)||dsd_calls!=1||!strstr(out.answer,"Insufficient verified stage evidence.")){
     fprintf(stderr,"Authenticated DSD routing FAILED\\n");return 1;
+   }
+   /* Exercise a real request through the mocked stage services and
+    * carry only that authenticated turn's observations forward. */
+   {
+    digit_dispatcher_scoped_context_request_t turn={0};
+    digit_dispatcher_result_t first={0};
+    size_t first_used=0;
+    snprintf(turn.scoped.request,sizeof(turn.scoped.request),"You are Stoopid");
+    snprintf(turn.scoped.actor,sizeof(turn.scoped.actor),"authenticated-user");
+    turn.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+    chosen_intent=DIGIT_INTENT_CONVERSATION;chosen_established=1;
+    if(scoped_context_handler(&turn,sizeof(turn),&first,sizeof(first),&first_used,NULL)!=STNLABZ_MODULE_OK||
+       first_used!=sizeof(first)||first.diagnostic_valid!=1||
+       first.diagnostic.stage_count!=3||
+       strcmp(first.diagnostic.stages[0].module,"interpretation")||
+       strcmp(first.diagnostic.stages[1].module,"intent")||
+       strcmp(first.diagnostic.stages[2].reason,"NO_CONVERSATIONAL_COMPOSITION")||
+       first.diagnostic.retrieved!=2||first.diagnostic.selected!=1){
+     fprintf(stderr,"DSD observed-stage capture FAILED\\n");return 1;
+    }
+    req.previous_diagnostic_valid=1;
+    req.previous_diagnostic=first.diagnostic;
+    dsd_calls=0;used=0;
+    if(scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+       used!=sizeof(out)||dsd_calls!=1||
+       !strstr(out.answer,"NO_CONVERSATIONAL_COMPOSITION")){
+     fprintf(stderr,"DSD prior-turn correlation FAILED\\n");return 1;
+    }
+    req.previous_diagnostic_valid=0;
+    memset(&req.previous_diagnostic,0,sizeof(req.previous_diagnostic));
    }
    /* Explicit diagnostics never read unauthenticated or channel context. */
    {
