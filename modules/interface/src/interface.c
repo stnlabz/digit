@@ -44,6 +44,7 @@
 #include "security_sa.h"
 #include "sa_management.h"
 #include "core_services.h"
+#include "../../chatgpt/includes/chatgpt_oauth.h"
 #include "../../memory/includes/memory.h"
 #include "../../memory/includes/memory_response.h"
 
@@ -910,6 +911,24 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
 }
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
+/* Delegated OAuth HTTP namespace: the ChatGPT module is the sole owner.
+ * The module currently returns 503 rather than issuing unapproved grants. */
+if(strncmp(request,"GET /oauth/authorize HTTP/1.1",29)==0||
+   strncmp(request,"POST /oauth/token HTTP/1.1",26)==0){
+    digit_chatgpt_oauth_request_t in={{0}};
+    digit_chatgpt_oauth_response_t out={0};
+    size_t used=0;
+    const int authorize=request[0]=='G';
+    strcpy(in.method,authorize?"GET":"POST");
+    strcpy(in.path,authorize?DIGIT_CHATGPT_OAUTH_AUTHORIZE:DIGIT_CHATGPT_OAUTH_TOKEN);
+    if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
+                         &out,sizeof(out),&used)||used!=sizeof(out)||
+       out.status<400||out.status>599||
+       !memchr(out.body,0,sizeof(out.body))){
+        interface_reply(client,503,"{\"error\":\"oauth_unavailable\"}\n");return;
+    }
+    interface_reply(client,(int)out.status,out.body);return;
+}
 /* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
  * Login has no self-registration or caller-supplied privilege flags.
  * Transport remains loopback-bound; deploy HTTPS gateway before external use.
@@ -1013,9 +1032,28 @@ if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
   const char *stage=NULL;
   if(!digit_http_bearer_token(request,key))stage="HEADER_REJECTED";
   else if(!digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,
-                                       DIGIT_MCP_CREDENTIALS,key,actor))
-   stage="ACCOUNT_OR_PERMISSION_REJECTED";
-  else if(!(session=interface_mcp_key_session(key,actor)))
+                                       DIGIT_MCP_CREDENTIALS,key,actor)){
+   /* OAuth-issued bearer is introspected by the ChatGPT module; neither
+    * the public Interface nor the caller may assert their own identity. */
+   digit_chatgpt_oauth_validate_request_t in={{0}};
+   digit_chatgpt_oauth_validate_response_t out={0};
+   digit_ai_platform_permissions_t permissions={0};
+   size_t used=0;
+   snprintf(in.authorization,sizeof(in.authorization),"Bearer %s",key);
+   if(!interface_invoke(DIGIT_CHATGPT_OAUTH_VALIDATE_SERVICE,&in,sizeof(in),
+                        &out,sizeof(out),&used)||
+      used!=sizeof(out)||!out.authenticated||
+      !memchr(out.principal,0,sizeof(out.principal))||
+      strncmp(out.principal,"ai.",3)!=0||
+      !digit_account_active_file(DIGIT_MCP_CREDENTIALS,out.principal)||
+      !digit_ai_platform_permissions(DIGIT_MCP_REGISTRY,
+                                      out.principal,&permissions)||
+      !permissions.dm)
+       stage="ACCOUNT_OR_PERMISSION_REJECTED";
+   else
+       strcpy(actor,out.principal);
+  }
+  if(!stage && !(session=interface_mcp_key_session(key,actor)))
    stage="PRIVATE_SESSION_UNAVAILABLE";
   if(stage){
    if(interface_host && interface_host->send_message){
