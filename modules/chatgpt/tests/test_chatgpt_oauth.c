@@ -14,7 +14,7 @@ int main(void)
     strcpy(req.method,"POST");
     ok &= digit_chatgpt_oauth_route(&req,&out) && out.status==503;
     strcpy(req.path,"/oauth/register");
-    ok &= digit_chatgpt_oauth_route(&req,&out) && out.status==503;
+    ok &= digit_chatgpt_oauth_route(&req,&out) && out.status==404;
     strcpy(req.path,"/oauth/unknown");
     ok &= digit_chatgpt_oauth_route(&req,&out) && out.status==404;
     memset(&req,'X',sizeof(req));
