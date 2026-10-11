@@ -82,8 +82,8 @@ $(HTTP_AUTH_TEST_TARGET): tests/test_http_auth.c src/http_auth.c src/session_sto
 $(ACCOUNT_AUTH_TEST_TARGET): tests/test_account_auth.c src/account_auth.c includes/account_auth.h | bin
 	$(CC) -Iincludes $(CFLAGS) tests/test_account_auth.c src/account_auth.c -o $@ -lcrypt
 
-$(AI_PLATFORM_TEST_TARGET): tests/test_ai_platform_auth.c src/ai_platform_auth.c includes/ai_platform_auth.h | bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_ai_platform_auth.c src/ai_platform_auth.c -o $@
+$(AI_PLATFORM_TEST_TARGET): tests/test_ai_platform_auth.c src/ai_platform_auth.c src/account_auth.c includes/ai_platform_auth.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_ai_platform_auth.c src/ai_platform_auth.c src/account_auth.c -o $@ -lcrypt
 
 $(CHANNEL_ACL_TEST_TARGET): tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c includes/channel_acl.h includes/access_policy.h includes/project_channel_bridge.h includes/project_provision.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_channel_acl.c src/channel_acl.c src/security_sa.c src/project_channel_bridge.c src/project_provision.c src/account_auth.c -o $@ -lcrypt
