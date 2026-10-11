@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     {
         const stnlabz_module_descriptor_t *descriptor=stnlabz_module_get_descriptor();
         if(!descriptor||descriptor->version_major!=1||
-           descriptor->version_minor!=3||descriptor->version_patch!=3){
+           descriptor->version_minor!=3||descriptor->version_patch!=4){
             fprintf(stderr,"FAIL Intent 1.3.3 version contract\n");
             ++failures;
         }
