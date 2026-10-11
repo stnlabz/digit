@@ -137,6 +137,6 @@ static stnlabz_module_result_t stop(void){
     }
     active_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,5,
+static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,6,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
