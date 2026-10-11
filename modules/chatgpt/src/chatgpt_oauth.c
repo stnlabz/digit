@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdio.h>
 #include "chatgpt_oauth.h"
 #include "chatgpt_auth.h"
 #include <openssl/crypto.h>
