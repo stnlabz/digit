@@ -15,10 +15,13 @@ typedef struct {
     char method[8];
     char path[96];
     char parameters[2048];
+    char approved_principal[64];
 } digit_chatgpt_oauth_request_t;
 typedef struct {
     unsigned int status;
-    char body[1024];
+    char body[4096];
+    char location[1024];
+    unsigned int html;
 } digit_chatgpt_oauth_response_t;
 /* Internal code-to-token exchange. The authorization code MUST have been
  * created following SA approval, registered-client checks and consent.
