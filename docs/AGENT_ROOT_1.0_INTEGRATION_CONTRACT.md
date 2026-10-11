@@ -65,3 +65,33 @@ Explicit operator approval is required for the precise Core files, API exposure 
 Until that approval: no Core source edits, no ABI change, no install, no hotload.
 
 Engineering principle: Determinism != Probably.
+
+## 6. Proposed Core implementation scope — pending separate source authorization
+
+Repository inspection (2026-10-10) identified these existing integration points:
+- src/digit.c: digit_initialize() opens audit, registers services, then discovers modules. Root validation should run immediately after audit opens and before module discovery or service registration.
+- include/digit.h: current entry contract (DIGIT_NAME, digit_initialize) is retained for backward compatibility.
+- Makefile: DIGIT_SOURCES and test targets explicitly enumerate source files; Root sources and a dedicated test target must be added here.
+
+Proposed newly added files:
+- include/agent_root.h — Core-private bounded immutable identity descriptor and validation/query API (not the external ABI).
+- src/agent_root.c — common Root schema and invariants validator.
+- src/identity_digit.c — Digit-specific compiled identity, seven approved characteristics, lineage and governing requirements.
+- tests/test_agent_root.c — executable positive/negative contract tests.
+
+Proposed modifications to existing files (no others):
+- src/digit.c — invoke Root validation before any module discovery, reject startup on invalid Root; log structured root status without leaking sensitive state.
+- Makefile — compile new files and add the Root test to the normal qualification target.
+- include/digit.h only if needed for compatibility-preserving access to the descriptor; otherwise leave unchanged.
+
+Initial API visibility: Core-private read-only query, with no service-registry exposure. Any future module-visible Root identity service is a separate, explicitly approved interface change. This keeps external ABI unaffected and prevents premature authorization implications.
+
+Failure semantics: Root-invalid must stop initialization before module discovery; fail-closed and record an audit event where audit is available. A root validation failure is not degraded operation. Handle missing audit separately using existing fatal behavior.
+
+Integrity model: const-qualified compile-time descriptor and validation of its schema/constants provide runtime immutability at the API boundary, not cryptographic build provenance. A cryptographic integrity trust anchor, signed-binary verification, or secure boot must not be claimed without separately engineered verifiers and trusted keys. Production deployment remains a later gate.
+
+Portability: Use only common C11 logic in the descriptor and validator. Platform-specific binary attestation, storage, and interface binding stay outside common Root semantics.
+
+Qualification gates: descriptor identity and version, exact General Orders, mandatory traits, bounded strings, duplicate/conflicting identifiers, malformed relationships, agent-swap test (with independent fixture), no root-to-authority elevation, rejection before discovery, and existing Core regression tests. A module-visible query must be separately tested if it is eventually approved.
+
+This section scopes a proposed Core change only. The PM design approval at the top does not itself authorize editing src/digit.c, Makefile, or other executable Core files. No deployment authorization is implied.
