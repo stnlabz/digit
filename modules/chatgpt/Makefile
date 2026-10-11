@@ -1,0 +1,25 @@
+CC ?= cc
+CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2
+ABI_DIR ?= ../../../ABI
+CPPFLAGS ?= -Iincludes -I$(ABI_DIR)/includes
+TARGET := bin/chatgpt.so
+.PHONY: all test clean check-abi install
+all: check-abi $(TARGET)
+check-abi:
+	@test -f "$(ABI_DIR)/includes/module.h" || { echo "External ABI missing"; exit 1; }
+$(TARGET): src/chatgpt.c includes/chatgpt.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared src/chatgpt.c -o $@
+bin/test_chatgpt: tests/test_chatgpt.c src/chatgpt.c includes/chatgpt.h | bin
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_chatgpt.c src/chatgpt.c -o $@
+test: check-abi bin/test_chatgpt
+	./bin/test_chatgpt
+bin:
+	mkdir -p bin
+clean:
+	rm -rf bin
+install: all
+	@test "$$(id -u)" -eq 0 || { echo "install requires root"; exit 1; }
+	install -d -o digit -g digit /opt/digit/modules/chatgpt/bin
+	install -m 0755 $(TARGET) /opt/digit/modules/chatgpt/bin/chatgpt.so
+	install -m 0644 module.conf /opt/digit/modules/chatgpt/module.conf
+	chown -R digit:digit /opt/digit/modules/chatgpt
