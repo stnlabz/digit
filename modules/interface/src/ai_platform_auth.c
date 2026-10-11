@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "ai_platform_auth.h"
+#include "account_auth.h"
 static int valid_id(const char *s){
  size_t i,n;if(!s)return 0;n=strnlen(s,64);
  if(!n||n>=64)return 0;
@@ -71,4 +72,37 @@ done:
  if(fclose(file)!=0)valid=0;
  if(valid&&matches==1&&found.active){*out=found;return 1;}
  return 0;
+}
+
+/* High-entropy 64-hex key, stored only as a crypt hash in the credentials
+ * registry. Enumerate policy identities; never trust client-supplied identity. */
+int digit_ai_platform_verify_key(const char *registry,const char *credentials,
+                                 const char *key,char identity[64]){
+ FILE *file;char line[512],found[64]={0};
+ struct stat st;size_t i;int matches=0,valid=1;
+ if(identity)identity[0]=0;
+ if(!registry||!credentials||!key||!identity||strlen(key)!=64)return 0;
+ for(i=0;i<64;i++)if(!((key[i]>='0'&&key[i]<='9')||
+                             (key[i]>='a'&&key[i]<='f')))return 0;
+ file=fopen(registry,"r");if(!file)return 0;
+ if(fstat(fileno(file),&st)!=0||!S_ISREG(st.st_mode)||st.st_nlink!=1||
+    (st.st_mode&077)!=0||(st.st_uid!=0&&st.st_uid!=geteuid())){
+  fclose(file);return 0;
+ }
+ while(fgets(line,sizeof(line),file)){
+  char *end=strchr(line,'\t');digit_ai_platform_permissions_t perm={0};
+  if(!end){valid=0;break;}
+  *end=0;
+  if(strncmp(line,"ai.",3)!=0||!valid_id(line)){valid=0;break;}
+  if(digit_ai_platform_permissions(registry,line,&perm)&&perm.dm&&
+     digit_account_verify_file(credentials,line,key)){
+   if(++matches!=1){valid=0;break;}
+   memcpy(found,line,strlen(line)+1);
+  }
+ }
+ if(ferror(file))valid=0;
+ fclose(file);
+ if(!valid||matches!=1)return 0;
+ memcpy(identity,found,strlen(found)+1);
+ return 1;
 }
