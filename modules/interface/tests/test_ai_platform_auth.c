@@ -53,18 +53,18 @@ int main(void){
    hash=crypt(key,"$6$ai-platform-test$");
    check(hash!=NULL,"credential crypt hash produced");
    if(hash){
-    snprintf(row,sizeof(row),"ai.chatgpt\\t1\\t%s\\n",hash);
+    snprintf(row,sizeof(row),"ai.chatgpt\t1\t%s\n",hash);
     check(write_data(credentials,row),"credential fixture written");
-    check(write_data(registry,"ai.chatgpt\\t1\\t1\\t1\\t0\\t0\\t0\\n"),"AI policy written");
+    check(write_data(registry,"ai.chatgpt\t1\t1\t1\t0\t0\t0\n"),"AI policy written");
     check(digit_ai_platform_verify_key(registry,credentials,key,actor)&&
           strcmp(actor,"ai.chatgpt")==0,"API bearer authenticates unique AI identity");
     check(!digit_ai_platform_verify_key(registry,credentials,
           "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",actor),
           "incorrect bearer denied");
-    check(write_data(registry,"ai.chatgpt\\t0\\t1\\t1\\t0\\t0\\t0\\n")&&
+    check(write_data(registry,"ai.chatgpt\t0\t1\t1\t0\t0\t0\n")&&
           !digit_ai_platform_verify_key(registry,credentials,key,actor),
           "revoked AI policy denies bearer");
-    check(write_data(registry,"human\\t1\\t1\\t1\\t0\\t0\\t0\\n")&&
+    check(write_data(registry,"human\t1\t1\t1\t0\t0\t0\n")&&
           !digit_ai_platform_verify_key(registry,credentials,key,actor),
           "non-AI principal rejected");
    }
