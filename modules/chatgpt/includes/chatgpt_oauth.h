@@ -5,7 +5,6 @@
 #define DIGIT_CHATGPT_OAUTH_PATH "/oauth"
 #define DIGIT_CHATGPT_OAUTH_AUTHORIZE "/oauth/authorize"
 #define DIGIT_CHATGPT_OAUTH_TOKEN "/oauth/token"
-#define DIGIT_CHATGPT_OAUTH_REGISTER "/oauth/register"
 /* ChatGPT OAuth route adapter contract: does not own the public HTTP listener.
  * Transport must supply a validated method and exact path; no raw credentials. */
 typedef struct {
