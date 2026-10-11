@@ -11,8 +11,8 @@ int main(void){
     const stnlabz_module_descriptor_t *module=stnlabz_module_get_descriptor();
     check(module!=NULL,"DSD descriptor");
     check(module&&strcmp(module->id,"dsd")==0,"DSD module identity");
-    check(module&&module->version_major==1&&module->version_minor==0&&
-          module->version_patch==0,"DSD 1.0.0 version");
+    check(module&&module->version_major==1&&module->version_minor==1&&
+          module->version_patch==0,"DSD 1.1.0 version");
     check(module&&module->qualify&&module->qualify(&result)==STNLABZ_MODULE_OK,
           "executable qualification");
     check(result.tests_executed==10&&result.tests_passed==10&&
