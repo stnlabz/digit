@@ -1,6 +1,9 @@
 #ifndef DIGIT_CHATGPT_OAUTH_H
 #define DIGIT_CHATGPT_OAUTH_H
 #include <stddef.h>
+#include <time.h>
+#include "chatgpt_oauth_codes.h"
+#include "chatgpt_oauth_tokens.h"
 #define DIGIT_CHATGPT_OAUTH_SERVICE "chatgpt.oauth"
 #define DIGIT_CHATGPT_OAUTH_PATH "/oauth"
 #define DIGIT_CHATGPT_OAUTH_AUTHORIZE "/oauth/authorize"
@@ -15,6 +18,14 @@ typedef struct {
     unsigned int status;
     char body[1024];
 } digit_chatgpt_oauth_response_t;
+/* Internal code-to-token exchange. The authorization code MUST have been
+ * created following SA approval, registered-client checks and consent.
+ * Never expose this function as an unauthenticated endpoint. */
+int digit_chatgpt_oauth_exchange(digit_chatgpt_code_store_t *codes,
+    digit_chatgpt_token_store_t *tokens, const char *code,
+    const char *client_id,const char *redirect_uri,
+    const char *verifier,const char *audience,time_t now,
+    char token[DIGIT_CHATGPT_TOKEN_LENGTH]);
 int digit_chatgpt_oauth_route(const digit_chatgpt_oauth_request_t *request,
                              digit_chatgpt_oauth_response_t *response);
 #endif
