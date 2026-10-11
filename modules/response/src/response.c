@@ -872,5 +872,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",1,9,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
