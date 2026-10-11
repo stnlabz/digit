@@ -100,6 +100,29 @@ static const char *interface_relevance_string(interface_relevance_t v){switch(v)
 static const char *interface_category_string(interface_context_category_t v){switch(v){case DIGIT_CONTEXT_CONVERSATION:return "CONVERSATION";case DIGIT_CONTEXT_ENGINEERING:return "ENGINEERING";case DIGIT_CONTEXT_RULE:return "RULE";case DIGIT_CONTEXT_DECISION:return "DECISION";case DIGIT_CONTEXT_OBSERVATION:return "OBSERVATION";case DIGIT_CONTEXT_HYPOTHESIS:return "HYPOTHESIS";default:return "UNKNOWN";}}
 static const char *interface_alert_severity_string(digit_alert_severity_t v){switch(v){case DIGIT_ALERT_INFO:return "INFO";case DIGIT_ALERT_WARNING:return "WARNING";case DIGIT_ALERT_ERROR:return "ERROR";case DIGIT_ALERT_CRITICAL:return "CRITICAL";default:return "UNKNOWN";}}
 static void interface_json_escape(const char *in,char *out,size_t n){size_t i=0,o=0;if(!out||!n)return;if(!in){out[0]=0;return;}while(in[i]&&o+2<n){unsigned char c=(unsigned char)in[i++];if(c=='"'||c=='\\'){out[o++]='\\';out[o++]=(char)c;}else if(c=='\n'||c=='\r'||c=='\t')out[o++]=' ';else if(c>=0x20)out[o++]=(char)c;}out[o]=0;}
+static void interface_oauth_browser_reply(int client,const digit_chatgpt_oauth_response_t *out){
+ char header[1536];int n;size_t pos;
+ const char *reason=out->status==302?"Found":"OK";
+ const char *ctype=out->html?"text/html; charset=utf-8":"application/json; charset=utf-8";
+ if(out->status==302){
+  if(strncmp(out->location,"https://chatgpt.com/",20)!=0 &&
+     strncmp(out->location,"https://chat.openai.com/",22)!=0)return;
+  n=snprintf(header,sizeof(header),
+   "HTTP/1.1 302 %s\r\nLocation: %s\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+   reason,out->location);
+ }else n=snprintf(header,sizeof(header),
+   "HTTP/1.1 %u %s\r\nContent-Type: %s\r\nCache-Control: no-store\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
+   out->status,reason,ctype,strlen(out->body));
+ if(n<=0||(size_t)n>=sizeof(header))return;
+ if(interface_tls_client){
+  for(pos=0;pos<(size_t)n;){int k=SSL_write(interface_tls_client,header+pos,(int)((size_t)n-pos));if(k<=0)return;pos+=(size_t)k;}
+  for(pos=0;pos<strlen(out->body);){int k=SSL_write(interface_tls_client,out->body+pos,(int)(strlen(out->body)-pos));if(k<=0)return;pos+=(size_t)k;}
+ }else{
+  for(pos=0;pos<(size_t)n;){ssize_t k=send(client,header+pos,(size_t)n-pos,0);if(k<=0)return;pos+=(size_t)k;}
+  for(pos=0;pos<strlen(out->body);){ssize_t k=send(client,out->body+pos,strlen(out->body)-pos,0);if(k<=0)return;pos+=(size_t)k;}
+ }
+}
+
 static void interface_reply(int c,int status,const char *body){
     /* [AI:GPT-6 | 2026-10-09] Suppress routine HTTP success audit noise.\n     * Keep rejected requests and server errors visible to operations. */
     char audit[160];
@@ -911,33 +934,66 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
 }
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
-/* Delegated OAuth HTTP namespace: the ChatGPT module is the sole owner.
- * The module currently returns 503 rather than issuing unapproved grants. */
-if((strncmp(request,"GET /oauth/authorize",20)==0 &&
-    (request[20]=='?' || request[20]==' ')) ||
+/* Fixed operator key is checked against the existing MCP credentials/registry.
+ * Only verified ai.* principal is passed to the ChatGPT OAuth service. */
+if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",57)==0||
+   strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",56)==0){
+ if(strstr(request,"oauth-protected-resource HTTP/1.1"))
+  interface_reply(client,200,"{\"resource\":\"https://digit.stn-labz.com:8081/mcp\",\"authorization_servers\":[\"https://digit.stn-labz.com:8081\"]}");
+ else
+  interface_reply(client,200,"{\"issuer\":\"https://digit.stn-labz.com:8081\",\"authorization_endpoint\":\"https://digit.stn-labz.com:8081/oauth/authorize\",\"token_endpoint\":\"https://digit.stn-labz.com:8081/oauth/token\",\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"]}");
+ return;
+}
+if((strncmp(request,"GET /oauth/authorize",20)==0 && (request[20]=='?'||request[20]==' '))||
+   (strncmp(request,"POST /oauth/approve",19)==0 && request[19]=='?')||
    strncmp(request,"POST /oauth/token HTTP/1.1",26)==0){
-    digit_chatgpt_oauth_request_t in={{0}};
-    digit_chatgpt_oauth_response_t out={0};
-    size_t used=0;
-    const int authorize=request[0]=='G';
-    strcpy(in.method,authorize?"GET":"POST");
-    strcpy(in.path,authorize?DIGIT_CHATGPT_OAUTH_AUTHORIZE:DIGIT_CHATGPT_OAUTH_TOKEN);
-    if(authorize){
-        const char *q=strchr(request,'?');
-        const char *end=q?strchr(q,' '):NULL;
-        const char *line=strstr(request," HTTP/1.1");
-        if(q&&end&&line&&q<line&&end==line&&
-           (size_t)(end-q-1)<sizeof(in.parameters))
-            memcpy(in.parameters,q+1,(size_t)(end-q-1));
-    }else if(body&&strlen(body)<sizeof(in.parameters))
-        strcpy(in.parameters,body);
-    if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
-                         &out,sizeof(out),&used)||used!=sizeof(out)||
-       out.status<200||out.status>599||
-       !memchr(out.body,0,sizeof(out.body))){
-        interface_reply(client,503,"{\"error\":\"oauth_unavailable\"}\n");return;
-    }
-    interface_reply(client,(int)out.status,out.body);return;
+ digit_chatgpt_oauth_request_t in={0};
+ digit_chatgpt_oauth_response_t out={0};
+ size_t used=0;
+ int approve=strncmp(request,"POST /oauth/approve",19)==0;
+ int authorize=request[0]=='G';
+ strcpy(in.method,authorize?"GET":"POST");
+ strcpy(in.path,authorize?DIGIT_CHATGPT_OAUTH_AUTHORIZE:
+                   approve?"/oauth/approve":DIGIT_CHATGPT_OAUTH_TOKEN);
+ if(authorize||approve){
+  const char *start=strchr(request,' '),*line=strstr(request," HTTP/1.1");
+  const char *q=start?strchr(start+1,'?'):NULL;
+  size_t n;
+  if(!q||!line||q>=line||!(n=(size_t)(line-q-1))||n>=sizeof(in.parameters)){
+   interface_reply(client,400,"{\"error\":\"invalid_oauth_query\"}");return;
+  }
+  memcpy(in.parameters,q+1,n);in.parameters[n]=0;
+ }else{
+  if(!body||strlen(body)>=sizeof(in.parameters)){
+   interface_reply(client,400,"{\"error\":\"invalid_oauth_form\"}");return;
+  }
+  strcpy(in.parameters,body);
+ }
+ if(approve){
+  char key[DIGIT_SESSION_TOKEN_SIZE]={0},actor[64]={0};
+  const char *v=body&&strncmp(body,"key=",4)==0?body+4:NULL;
+  if(!v||strlen(v)!=64||strchr(v,'&')||strchr(v,'%')){
+   interface_reply(client,401,"{\"error\":\"invalid_operator_key\"}");return;
+  }
+  memcpy(key,v,64);
+  if(!digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,DIGIT_MCP_CREDENTIALS,key,actor)||
+     strncmp(actor,"ai.",3)!=0){
+   memset(key,0,sizeof(key));
+   interface_reply(client,401,"{\"error\":\"invalid_operator_key\"}");return;
+  }
+  memset(key,0,sizeof(key));
+  strcpy(in.approved_principal,actor);
+ }
+ if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
+                      &out,sizeof(out),&used)||used!=sizeof(out)||
+    out.status<200||out.status>599||
+    !memchr(out.body,0,sizeof(out.body))||
+    !memchr(out.location,0,sizeof(out.location))){
+   interface_reply(client,503,"{\"error\":\"oauth_unavailable\"}");return;
+ }
+ if(out.status==302||out.html)interface_oauth_browser_reply(client,&out);
+ else interface_reply(client,(int)out.status,out.body);
+ return;
 }
 /* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
  * Login has no self-registration or caller-supplied privilege flags.
