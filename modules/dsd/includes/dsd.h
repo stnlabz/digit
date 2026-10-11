@@ -10,6 +10,8 @@
 #define DIGIT_DSD_NAME_MAX 48
 #define DIGIT_DSD_CODE_MAX 64
 #define DIGIT_DSD_REPORT_MAX 768
+#define DIGIT_DSD_SYMPTOM_MAX 192
+#define DIGIT_DSD_LOCATION_MAX 160
 #define DIGIT_DSD_STAGE_COUNT 6
 
 typedef enum {
@@ -41,10 +43,19 @@ typedef struct {
     unsigned int outbound_approved;
 } digit_dsd_request_t;
 
+typedef enum {
+    DIGIT_DSD_LOCATION_UNRESOLVED = 0,
+    DIGIT_DSD_LOCATION_INVESTIGATE = 1,
+    DIGIT_DSD_LOCATION_CONFIRMED = 2
+} digit_dsd_location_status_t;
+
 typedef struct {
     digit_dsd_finding_t finding;
     char affected_module[DIGIT_DSD_NAME_MAX];
     char reason[DIGIT_DSD_CODE_MAX];
+    char symptom[DIGIT_DSD_SYMPTOM_MAX];
+    char source_location[DIGIT_DSD_LOCATION_MAX];
+    digit_dsd_location_status_t location_status;
     char report[DIGIT_DSD_REPORT_MAX];
 } digit_dsd_result_t;
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
