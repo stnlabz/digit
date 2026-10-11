@@ -1,4 +1,4 @@
-# Digit ChatGPT Integration — 1.0.8 source candidate
+# Digit ChatGPT Integration — 1.0.9 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
 ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
@@ -60,6 +60,15 @@ registered-client verification, current SA grants, network routing and token
 validation on `/mcp` remain mandatory before enabling the HTTP flow.
 `/oauth/authorize` and `/oauth/token` still return 503 over the unbound
 route adapter. Do not claim live connectivity from this source update.
+
+## OAuth bearer validation for MCP
+
+`digit_chatgpt_oauth_validate_mcp` validates the single OAuth-issued
+`Authorization: Bearer` token against the module's in-memory token store
+with the exact `digit-mcp` audience, identity binding, and expiration.
+Negative tests cover malformed headers and expired tokens. This is an
+internal helper only: public `/mcp` is not yet wired to it, and authenticated
+identity must still pass current SA-controlled permission checks.
 
 ## Remaining integration boundary
 
