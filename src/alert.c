@@ -100,6 +100,23 @@ static int digit_alert_find_channel(digit_channel_t *channel)
     return 0;
 }
 
+/* Extract bounded key=value tokens from Core-generated diagnostic detail. */
+static int digit_alert_detail_token(const char *detail,const char *key,
+                                    char *out,size_t capacity)
+{
+    const char *p=detail;size_t k=strlen(key),n;
+    if(!out||!capacity||!detail)return 0;
+    out[0]=0;
+    while((p=strstr(p,key))!=NULL){
+        if((p==detail||p[-1]==' ')&&p[k]=='='){
+            const char *v=p+k+1;
+            n=strcspn(v," \t\r\n");
+            if(n>0&&n<capacity){memcpy(out,v,n);out[n]=0;return 1;}
+        }
+        p+=k;
+    }
+    return 0;
+}
 static void digit_alert_speak(const digit_alert_t *alert)
 {
     digit_channel_t channel;
@@ -109,6 +126,21 @@ static void digit_alert_speak(const digit_alert_t *alert)
 
     if (alert == NULL || !digit_alert_find_channel(&channel)) return;
 
+    if(strcmp(alert->source,"MODULE")==0){
+        char module[96]="",version[40]="",stage[80]="",reason[128]="";
+        (void)digit_alert_detail_token(alert->detail,"module",module,sizeof(module));
+        (void)digit_alert_detail_token(alert->detail,"version",version,sizeof(version));
+        (void)digit_alert_detail_token(alert->detail,"stage",stage,sizeof(stage));
+        (void)digit_alert_detail_token(alert->detail,"reason",reason,sizeof(reason));
+        written=snprintf(body,sizeof(body),
+            "severity: %s\nsummary: %s\nmodule: %s\nsubsystem: module_lifecycle"
+            "\nversion: %s\ncause: %s\nstage: %s\nevent_id: %s"
+            "\ntimestamp: %llu\noperational_state: %s\ndetail: %s",
+            digit_alert_severity_string(alert->severity),alert->summary,
+            module[0]?module:"UNREPORTED",version[0]?version:"UNREPORTED",
+            reason[0]?reason:"UNREPORTED",stage[0]?stage:"UNREPORTED",
+            alert->id,alert->created_at,alert->operational_state,alert->detail);
+    }else
     written = snprintf(body, sizeof(body),
                        "%s alert from %s. %s. %s Operational state: %s. Alert ID: %s.",
                        digit_alert_severity_string(alert->severity), alert->source,
