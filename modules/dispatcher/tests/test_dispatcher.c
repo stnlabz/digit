@@ -9,11 +9,13 @@
 #include "response.h"
 #include "lesson.h"
 #include "arithmetic.h"
+#include "dsd.h"
 
 static stnlabz_module_service_handler_fn dispatcher_handler;
 static stnlabz_module_service_handler_fn scoped_handler;
 static stnlabz_module_service_handler_fn scoped_context_handler;
 static unsigned response_calls;
+static unsigned dsd_calls;
 static digit_intent_class_t chosen_intent;
 static unsigned int chosen_established=1;
 static const char *chosen_context_subject;
@@ -34,6 +36,16 @@ static int unregister_dispatcher(const char *name,void *ctx){
 }
 static stnlabz_module_result_t mock_invoke(const char *name,const void *input,size_t isize,
  void *output,size_t osize,size_t *used){
+ if(!strcmp(name,DIGIT_DSD_SERVICE)){
+  const digit_dsd_request_t *req=input;
+  digit_dsd_result_t *out=output;
+  if(isize!=sizeof(*req)||osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  dsd_calls++;
+  if(req->stage_count!=0)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  memset(out,0,sizeof(*out));out->finding=DIGIT_DSD_UNKNOWN;
+  snprintf(out->report,sizeof(out->report),"Insufficient verified stage evidence.");
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
+ }
  if(!strcmp(name,DIGIT_INTERPRETATION_SERVICE)){
   const digit_interpretation_request_t *in=input;
   digit_interpretation_result_t *out=output;
@@ -91,7 +103,7 @@ static int dispatch_case(const char *request,digit_intent_class_t intent,
 int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
- if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=7||!d->qualify){
+ if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=3||d->version_patch!=8||!d->qualify){
   fprintf(stderr,"Dispatcher descriptor invalid\\n");return 1;
  }
  memset(&q,0,sizeof(q));
@@ -109,6 +121,27 @@ int main(void){
   host.invoke_service=mock_invoke;
   if(!d->start||d->start(&host)!=STNLABZ_MODULE_OK||!dispatcher_handler){
    fprintf(stderr,"Dispatcher mock registration FAILED\\n");return 1;
+  }
+  {
+   digit_dispatcher_scoped_context_request_t req={0};
+   digit_dispatcher_result_t out={0};
+   size_t used=0;
+   snprintf(req.scoped.request,sizeof(req.scoped.request),"Digit, diagnose my last request.");
+   snprintf(req.scoped.actor,sizeof(req.scoped.actor),"authenticated-user");
+   req.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   snprintf(req.previous_user_message,sizeof(req.previous_user_message),"You are Stoopid");
+   snprintf(req.previous_answer,sizeof(req.previous_answer),"I don't have enough grounded information to answer that.");
+   dsd_calls=0;
+   if(!scoped_context_handler||scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+      used!=sizeof(out)||dsd_calls!=1||!strstr(out.answer,"correlated stage telemetry")){
+    fprintf(stderr,"Authenticated DSD routing FAILED\\n");return 1;
+   }
+   req.previous_user_message[0]=0;
+   dsd_calls=0;used=0;
+   if(scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+      dsd_calls!=0||!strstr(out.answer,"No diagnosis is available")){
+    fprintf(stderr,"DSD missing-context gate FAILED\\n");return 1;
+   }
   }
   if(!dispatch_case("Write a C function that adds two integers.",DIGIT_INTENT_ACTION,0,
                     "cannot execute or generate")||
