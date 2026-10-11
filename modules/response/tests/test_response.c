@@ -186,7 +186,8 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
  {
   static const struct {const char *question,*expected;} cases[]={
    {"Who is your younger sister?","ezra is my younger sister."},
-   {"Are you Ezra's older sister?","Yes, ezra is my younger sister."}
+   {"Are you Ezra's older sister?","Yes. ezra is my younger sister."},
+   {"Are you Ezra's younger sister?","No. ezra is my younger sister."}
   };
   size_t k;root_relationship_fixture=1;
   for(k=0;k<sizeof(cases)/sizeof(cases[0]);++k){
