@@ -225,6 +225,16 @@ static void check_arithmetic_service(const stnlabz_module_descriptor_t *descript
    observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE&&
    strstr(observed.answer,"What would you like me to improve?")!=NULL,
    "learned feedback receives general conversational acknowledgment");
+  memset(&request,0,sizeof(request));memset(&observed,0,sizeof(observed));
+  observation_used=0;
+  snprintf(request.question,sizeof(request.question),
+   "INTENT: CONVERSATION\nTARGET: SOCIAL\nSUBJECT: stoopid\nREQUEST: Digit you are stoopid");
+  check(observed_response_handler(&request,sizeof(request),&observed,
+   sizeof(observed),&observation_used,NULL)==STNLABZ_MODULE_OK&&
+   observation_used==sizeof(observed)&&observed.answered&&
+   observed.diagnostic_phase==DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE&&
+   strstr(observed.answer,"What would you like me to improve?")!=NULL,
+   "unpunctuated learned feedback receives conversational acknowledgment");
   feedback_fixture=0;
  }
  /* [AI:GPT-6 | 2026-10-09] Arithmetic execution contract and refusal boundaries. */
