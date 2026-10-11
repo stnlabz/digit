@@ -110,7 +110,7 @@ static void interface_reply(int c,int status,const char *body){
         char header[512];
         const char *reason=status==200?"OK":status==400?"Bad Request":
                            status==401?"Unauthorized":status==403?"Forbidden":
-                           status==404?"Not Found":status==503?"Service Unavailable":"Bad Request";
+                           status==404?"Not Found":status==202?"Accepted":status==405?"Method Not Allowed":status==503?"Service Unavailable":"Bad Request";
         int n=snprintf(header,sizeof(header),
           "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
           status,reason,strlen(body));
@@ -832,8 +832,14 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
  if(!session||!body||strlen(body)>=INTERFACE_BUFFER_MAX||
     !interface_mcp_field(body,"jsonrpc",escaped,sizeof(escaped))||
     strcmp(escaped,"2.0")||!interface_mcp_field(body,"method",method,sizeof(method))||
-    !interface_mcp_id(body,id,sizeof(id))){
+    (!interface_mcp_id(body,id,sizeof(id))&&strcmp(method,"notifications/initialized")!=0)){
   interface_reply(client,400,"{\"error\":\"invalid MCP request\"}\n");return;
+ }
+ if(!strcmp(method,"notifications/initialized")){
+  if(strstr(body,"\"id\"")){
+   interface_reply(client,400,"{\"error\":\"unexpected notification id\"}\n");return;
+  }
+  interface_reply(client,202,"");return;
  }
  if(!strcmp(method,"initialize")){
   snprintf(payload,sizeof(payload),
@@ -1698,5 +1704,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
