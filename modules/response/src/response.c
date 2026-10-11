@@ -217,6 +217,14 @@ static int learned_feedback_acknowledgment(const char *question,
    if(address){utterance=comma+1;while(isspace((unsigned char)*utterance))++utterance;}
   }
   canonical_text(utterance,q,sizeof(q));
+  /* A single leading address may appear without a comma. */
+  if(strncmp(q,"you are ",8)!=0&&strncmp(q,"you re ",7)!=0){
+   const char *space=strchr(q,' ');
+   if(space&&space-q>0&&space-q<64&&
+      (!strncmp(space+1,"you are ",8)||!strncmp(space+1,"you re ",7))){
+    memmove(q,space+1,strlen(space+1)+1);
+   }
+  }
  }
  if(strncmp(q,"you are ",8)!=0&&strncmp(q,"you re ",7)!=0)return 0;
  source=presentation_text(record);
@@ -443,6 +451,14 @@ static size_t select_evidence(const char *question,const corpus_result_t *eviden
  char social_reply[128];
  if(learned_social_reply(question,&evidence->records[i],social_reply,sizeof(social_reply))){
   ranked[i].score=1200;ranked[i].matches=1;continue;
+ }
+}
+/* Verified learned feedback is a higher-priority conversational record. */
+{
+ char feedback[160];
+ if(learned_feedback_acknowledgment(question,&evidence->records[i],
+                                  feedback,sizeof(feedback))){
+   ranked[i].score=1200;ranked[i].matches=1;continue;
  }
 }
 if(question_like_record(question,evidence->records[i].text)&&
@@ -1026,5 +1042,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
