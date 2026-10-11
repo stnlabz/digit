@@ -184,11 +184,16 @@ static const char *social_utterance_after_address(const char *text){
  while(isspace((unsigned char)*p))++p;
  start=p;
  while(isalpha((unsigned char)*p))++p;
- if(p==start||p-start>63||*p!=',')return text;
- ++p;
+ if(p==start||p-start>63)return text;
+ if(*p==',')++p;
+ else if(!isspace((unsigned char)*p))return text;
  if(!isspace((unsigned char)*p))return text;
  while(isspace((unsigned char)*p))++p;
- return *p?p:text;
+ /* Only strip an unpunctuated leading address when the remainder is
+  * syntactically an explicit second-person declaration. */
+ if(*p&&(!strncasecmp(p,"you are ",8)||!strncasecmp(p,"you're ",7)||
+         !strncasecmp(p,"you were ",9)))return p;
+ return text;
 }
 
 static int learned_social_context(const char *text)
@@ -523,7 +528,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 3, 3,
+    "intent", "Digit Intent", 1, 3, 4,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
