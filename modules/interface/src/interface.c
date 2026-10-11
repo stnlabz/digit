@@ -922,6 +922,8 @@ if((strncmp(request,"GET /oauth/authorize",20)==0 &&
     const int authorize=request[0]=='G';
     strcpy(in.method,authorize?"GET":"POST");
     strcpy(in.path,authorize?DIGIT_CHATGPT_OAUTH_AUTHORIZE:DIGIT_CHATGPT_OAUTH_TOKEN);
+    if(!authorize && body && strlen(body)<sizeof(in.parameters))
+        strcpy(in.parameters,body);
     if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
                          &out,sizeof(out),&used)||used!=sizeof(out)||
        out.status<400||out.status>599||
