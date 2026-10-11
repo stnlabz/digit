@@ -7,7 +7,7 @@
 - Separate, operator-maintained credential file `/opt/digit/state/auth/ai_platform_accounts.tsv`, using the existing crypt-hash verification format.
 - Independent capability registry `/opt/digit/state/auth/ai_platform_permissions.tsv` with exact lines `identity<TAB>active<TAB>dm<TAB>diagnostics<TAB>memory_write<TAB>learning<TAB>developer`. A sample identity is `ai.chatgpt`.
 - The dedicated `POST /ai/session/login` path issues a normal Interface session token after checking both registries. Human login rejects the `ai.` account namespace.
-- Authorized AI tokens use the existing `POST /ask` private-session state, preserving prior turns and DSD telemetry; all other protected administration and channel routes reject AI tokens.
+- Authorized AI tokens use the existing `POST /ask` private-session state, preserving prior turns and DSD telemetry. Authenticated `GET /ai/session` exposes identity and effective capability flags without credentials. Other protected administration and channel routes reject AI tokens.
 - The existing `/ask` prohibition on shared-Corpus learning writes remains in force. AI memory-write phrases are denied unless `memory_write=1`.
 - Permissions are evaluated on each protected request; a disabled account fails closed.
 
