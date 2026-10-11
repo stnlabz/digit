@@ -14,6 +14,7 @@
 static stnlabz_module_service_handler_fn dispatcher_handler;
 static stnlabz_module_service_handler_fn scoped_handler;
 static stnlabz_module_service_handler_fn scoped_context_handler;
+static stnlabz_module_service_handler_fn observed_handler;
 static unsigned response_calls;
 static unsigned dsd_calls;
 static digit_intent_class_t chosen_intent;
@@ -24,6 +25,7 @@ static unsigned int arithmetic_calls=0;
 
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
+ if(!strcmp(name,DIGIT_DISPATCHER_OBSERVED_CONTEXT_SERVICE)){observed_handler=fn;return 1;}
  if(!strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE)){scoped_handler=fn;return 1;}
  if(!strcmp(name,DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE)){scoped_context_handler=fn;return 1;}
  if(strcmp(name,DIGIT_DISPATCHER_SERVICE))return 0;
@@ -32,7 +34,8 @@ static int register_dispatcher(const char *name,stnlabz_module_service_handler_f
 static int unregister_dispatcher(const char *name,void *ctx){
  (void)ctx;return !strcmp(name,DIGIT_DISPATCHER_SERVICE)||
  !strcmp(name,DIGIT_DISPATCHER_SCOPED_SERVICE)||
- !strcmp(name,DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE);
+ !strcmp(name,DIGIT_DISPATCHER_SCOPED_CONTEXT_SERVICE)||
+ !strcmp(name,DIGIT_DISPATCHER_OBSERVED_CONTEXT_SERVICE);
 }
 static stnlabz_module_result_t mock_invoke(const char *name,const void *input,size_t isize,
  void *output,size_t osize,size_t *used){
@@ -81,6 +84,20 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   arithmetic_calls++;
   memset(out,0,sizeof(*out));out->status=DIGIT_ARITHMETIC_OK;
   snprintf(out->decimal_answer,sizeof(out->decimal_answer),"x = 2.");
+  *used=sizeof(*out);return STNLABZ_MODULE_OK;
+ }
+ if(!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE)){
+  digit_response_observed_result_t *out=output;
+  if(osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  response_calls++;memset(out,0,sizeof(*out));out->answered=1;
+  if(strstr(((const digit_response_request_t *)input)->question,"You are Stoopid")){
+   snprintf(out->answer,sizeof(out->answer),"I don\'t have enough grounded information to answer that.");
+   out->retrieved_count=2;out->selected_count=1;
+   out->diagnostic_phase=DIGIT_RESPONSE_PHASE_NO_COMPOSITION;
+  }else{
+   snprintf(out->answer,sizeof(out->answer),"Bounded response");
+   out->diagnostic_phase=DIGIT_RESPONSE_PHASE_APPROVED;
+  }
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  if(!strcmp(name,DIGIT_RESPONSE_SERVICE)){
@@ -149,14 +166,14 @@ int main(void){
    /* Exercise a real request through the mocked stage services and
     * carry only that authenticated turn's observations forward. */
    {
-    digit_dispatcher_scoped_context_request_t turn={0};
-    digit_dispatcher_result_t first={0};
+    digit_dispatcher_observed_context_request_t turn={0};
+    digit_dispatcher_observed_result_t first={0};
     size_t first_used=0;
-    snprintf(turn.scoped.request,sizeof(turn.scoped.request),"You are Stoopid");
-    snprintf(turn.scoped.actor,sizeof(turn.scoped.actor),"authenticated-user");
-    turn.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+    snprintf(turn.context.scoped.request,sizeof(turn.context.scoped.request),"You are Stoopid");
+    snprintf(turn.context.scoped.actor,sizeof(turn.context.scoped.actor),"authenticated-user");
+    turn.context.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
     chosen_intent=DIGIT_INTENT_CONVERSATION;chosen_established=1;
-    if(scoped_context_handler(&turn,sizeof(turn),&first,sizeof(first),&first_used,NULL)!=STNLABZ_MODULE_OK||
+    if(observed_handler(&turn,sizeof(turn),&first,sizeof(first),&first_used,NULL)!=STNLABZ_MODULE_OK||
        first_used!=sizeof(first)||first.diagnostic_valid!=1||
        first.diagnostic.stage_count!=3||
        strcmp(first.diagnostic.stages[0].module,"interpretation")||
@@ -165,16 +182,18 @@ int main(void){
        first.diagnostic.retrieved!=2||first.diagnostic.selected!=1){
      fprintf(stderr,"DSD observed-stage capture FAILED\\n");return 1;
     }
-    req.previous_diagnostic_valid=1;
-    req.previous_diagnostic=first.diagnostic;
+    digit_dispatcher_observed_context_request_t diagnosed={0};
+    digit_dispatcher_observed_result_t report={0};
+    diagnosed.context=req;
+    diagnosed.previous_diagnostic_valid=1;
+    diagnosed.previous_diagnostic=first.diagnostic;
     dsd_calls=0;used=0;
-    if(scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
-       used!=sizeof(out)||dsd_calls!=1||
-       !strstr(out.answer,"NO_CONVERSATIONAL_COMPOSITION")){
+    if(observed_handler(&diagnosed,sizeof(diagnosed),&report,sizeof(report),&used,NULL)!=STNLABZ_MODULE_OK||
+       used!=sizeof(report)||dsd_calls!=1||
+       !strstr(report.answer,"NO_CONVERSATIONAL_COMPOSITION")){
      fprintf(stderr,"DSD prior-turn correlation FAILED\\n");return 1;
     }
-    req.previous_diagnostic_valid=0;
-    memset(&req.previous_diagnostic,0,sizeof(req.previous_diagnostic));
+
    }
    /* Explicit diagnostics never read unauthenticated or channel context. */
    {
