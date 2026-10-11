@@ -28,6 +28,7 @@ TEST_SACRIFICIAL := build/test_sacrificial
 TEST_RUNTIME := build/test_runtime
 TEST_AUDIT := build/test_audit
 TEST_CORE_SA := build/test_core_sa
+TEST_AGENT_ROOT := build/test_agent_root
 
 PREFIX ?= /opt/digit
 BINDIR := $(PREFIX)/bin
@@ -37,6 +38,8 @@ LOGDIR := $(PREFIX)/logs
 SYSTEMD_UNIT := /etc/systemd/system/digit.service
 
 DIGIT_SOURCES := \
+	src/agent_root.c \
+	src/identity_digit.c \
 	src/main.c \
 	src/digit.c \
 	src/module_manager.c \
@@ -135,10 +138,13 @@ $(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c src/service_re
 $(TEST_CORE_SA): tests/test_core_sa.c src/core_sa.c include/core_sa.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_core_sa.c src/core_sa.c -o $@
 
+$(TEST_AGENT_ROOT): tests/test_agent_root.c src/agent_root.c src/identity_digit.c include/agent_root.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_agent_root.c src/agent_root.c src/identity_digit.c -o $@
+
 $(TEST_AUDIT): tests/test_audit.c src/audit.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_audit.c src/audit.c -o $@
 
-test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME) $(TEST_AUDIT) $(TEST_CORE_SA)
+test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) $(TEST_QUALIFICATION) $(TEST_QUALIFICATION_STORE) $(TEST_AUTHORITY) $(TEST_SACRIFICIAL) $(TEST_RUNTIME) $(TEST_AUDIT) $(TEST_CORE_SA) $(TEST_AGENT_ROOT)
 	./$(TEST_MODULE_MANAGER)
 	./$(TEST_HOTLOAD)
 	./$(TEST_SERVICE_REGISTRY)
@@ -149,6 +155,7 @@ test: check-abi $(TEST_MODULE_MANAGER) $(TEST_HOTLOAD) $(TEST_SERVICE_REGISTRY) 
 	./$(TEST_RUNTIME)
 	./$(TEST_AUDIT)
 	./$(TEST_CORE_SA)
+	./$(TEST_AGENT_ROOT)
 
 install: all
 	@test "$$(id -u)" -eq 0 || { echo "install requires root; run: sudo make install"; exit 1; }
