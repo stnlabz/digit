@@ -15,7 +15,7 @@ static int bounded(const char *s)
 {
     size_t n;
     if (!s) return 0;
-    n = strnlen(s, STNLABZ_ROOT_TEXT_MAX);
+    for (n=0;n<STNLABZ_ROOT_TEXT_MAX && s[n];++n) {}
     return n > 0 && n < STNLABZ_ROOT_TEXT_MAX;
 }
 static int identifier(const char *s)
