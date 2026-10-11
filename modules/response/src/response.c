@@ -750,7 +750,7 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   * without diluting the factual two-term evidence threshold. */
  {
   corpus_result_t source={0};
-  ranked_record_t selected[SELECTED_MAX]={{0}};
+  ranked_record_t selected[SELECTED_MAX]={0};
   snprintf(source.records[0].category,sizeof(source.records[0].category),"OPERATOR_LEARNED");
   snprintf(source.records[0].source,sizeof(source.records[0].source),"interface:learn");
   snprintf(source.records[0].text,sizeof(source.records[0].text),
