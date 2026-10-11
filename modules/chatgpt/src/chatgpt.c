@@ -1,4 +1,5 @@
 #include <string.h>
+#include <time.h>
 #include "chatgpt.h"
 #include "chatgpt_oauth.h"
 /* [AI:GPT-6 | 2026-10-11] In-process ISO C integration module.
@@ -6,6 +7,7 @@
  * This read-only module grants neither. Never forward text to operational
  * Dispatcher until a service-enforced non-mutating scope is qualified. */
 static const stnlabz_module_host_t *active_host;
+static digit_chatgpt_token_store_t oauth_tokens;
 static stnlabz_module_result_t capabilities(const void *request,size_t request_size,
     void *response,size_t response_size,size_t *used,void *ctx){
     const digit_chatgpt_capabilities_t result={1U,0U,0U,0U};
@@ -59,6 +61,24 @@ static stnlabz_module_result_t oauth_request(const void *request,size_t request_
     if(!digit_chatgpt_oauth_route(request,response))
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     *used=sizeof(digit_chatgpt_oauth_response_t);
+    return STNLABZ_MODULE_OK;
+}
+/* Fail-closed token introspection. No token can pass until an explicitly
+ * authorized OAuth grant populates the same module-owned token store. */
+static stnlabz_module_result_t oauth_validate(const void *request,size_t request_size,
+    void *response,size_t response_size,size_t *used,void *ctx){
+    const digit_chatgpt_oauth_validate_request_t *in=request;
+    digit_chatgpt_oauth_validate_response_t *out=response;
+    (void)ctx;
+    if(used)*used=0;
+    if(!in||request_size!=sizeof(*in)||!out||
+       response_size<sizeof(*out)||!used||
+       !memchr(in->authorization,0,sizeof(in->authorization)))
+       return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+    memset(out,0,sizeof(*out));
+    out->authenticated=(unsigned int)digit_chatgpt_oauth_validate_mcp(
+        &oauth_tokens,in->authorization,time(NULL),out->principal);
+    *used=sizeof(*out);
     return STNLABZ_MODULE_OK;
 }
 static stnlabz_module_result_t qualify(stnlabz_module_qualification_result_t *q){
@@ -123,6 +143,14 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *host){
         (void)host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL);
         return STNLABZ_MODULE_ERR_START_FAILED;
     }
+    if(!host->register_service(DIGIT_CHATGPT_OAUTH_VALIDATE_SERVICE,oauth_validate,NULL)){
+        (void)host->unregister_service(DIGIT_CHATGPT_OAUTH_SERVICE,NULL);
+        (void)host->unregister_service(DIGIT_CHATGPT_MCP_SERVICE,NULL);
+        (void)host->unregister_service(DIGIT_CHATGPT_TEST_SERVICE,NULL);
+        (void)host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL);
+        return STNLABZ_MODULE_ERR_START_FAILED;
+    }
+    digit_chatgpt_tokens_init(&oauth_tokens);
     active_host=host;
     if(host->send_message)(void)host->send_message("[CHATGPT] integration registered; execution denied until qualified authenticated test scope");
     return STNLABZ_MODULE_OK;
@@ -130,13 +158,15 @@ static stnlabz_module_result_t start(const stnlabz_module_host_t *host){
 static stnlabz_module_result_t stop(void){
     int ok=1;
     if(active_host&&active_host->unregister_service){
+        if(!active_host->unregister_service(DIGIT_CHATGPT_OAUTH_VALIDATE_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_OAUTH_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_MCP_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_TEST_SERVICE,NULL))ok=0;
         if(!active_host->unregister_service(DIGIT_CHATGPT_CAPABILITIES_SERVICE,NULL))ok=0;
     }
+    digit_chatgpt_tokens_init(&oauth_tokens);
     active_host=NULL;return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,9,
+static const stnlabz_module_descriptor_t descriptor={"chatgpt","Digit ChatGPT Integration",1,0,10,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,qualify,start,stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &descriptor;}
