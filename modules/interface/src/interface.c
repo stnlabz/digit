@@ -933,7 +933,7 @@ if((strncmp(request,"GET /oauth/authorize",20)==0 &&
         strcpy(in.parameters,body);
     if(!interface_invoke(DIGIT_CHATGPT_OAUTH_SERVICE,&in,sizeof(in),
                          &out,sizeof(out),&used)||used!=sizeof(out)||
-       out.status<400||out.status>599||
+       out.status<200||out.status>599||
        !memchr(out.body,0,sizeof(out.body))){
         interface_reply(client,503,"{\"error\":\"oauth_unavailable\"}\n");return;
     }
