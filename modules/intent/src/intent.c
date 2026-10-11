@@ -340,7 +340,8 @@ void digit_intent_interpret(const char *text, digit_intent_result_t *result)
      * operational, definition, comparison, and context requests. */
     if(!action&&!status&&!explain&&!define&&!compare&&!why&&!how&&
        (learned_social_context(text)||
-        learned_social_context(social_utterance_after_address(text)))){
+        (social_utterance_after_address(text)!=text&&
+         learned_social_context(social_utterance_after_address(text))))){
         set_result(result,DIGIT_INTENT_CONVERSATION,DIGIT_INTENT_TARGET_SOCIAL,1U,
                    "Established learned social expression.");return;
     }
@@ -507,7 +508,7 @@ static stnlabz_module_result_t intent_stop(void)
 
 static const stnlabz_module_descriptor_t intent_descriptor =
 {
-    "intent", "Digit Intent", 1, 3, 1,
+    "intent", "Digit Intent", 1, 3, 2,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     intent_qualify, intent_start, intent_stop
 };
