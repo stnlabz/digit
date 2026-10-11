@@ -181,12 +181,39 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
         strcmp(answer.reason,"STAGE_UNAVAILABLE")==0);
     q.stage_count=0;q.retrieved=1;q.selected=2;
     passed+=(unsigned)!inspect(&q,&answer);
-    result->tests_executed=10;
+    /* Independent regression cases for the new engineering handoff. */
+    memset(&q,0,sizeof(q));q.retrieved=2;
+    passed+=(unsigned)(inspect(&q,&answer)&&
+      strcmp(answer.affected_module,"response")==0&&
+      strcmp(answer.source_location,"modules/response/src/response.c")==0&&
+      answer.location_status==DIGIT_DSD_LOCATION_INVESTIGATE&&
+      strstr(answer.report,"Module: response.")!=NULL);
+    memset(&q,0,sizeof(q));q.stage_count=1;
+    snprintf(q.stages[0].module,sizeof(q.stages[0].module),"intent");
+    snprintf(q.stages[0].reason,sizeof(q.stages[0].reason),"SERVICE_TIMEOUT");
+    q.stages[0].state=DIGIT_DSD_FAILED;
+    passed+=(unsigned)(inspect(&q,&answer)&&
+      strcmp(answer.source_location,"modules/intent/src/intent.c")==0&&
+      strstr(answer.symptom,"SERVICE_TIMEOUT")!=NULL);
+    snprintf(q.stages[0].module,sizeof(q.stages[0].module),"unmapped");
+    passed+=(unsigned)(inspect(&q,&answer)&&
+      strcmp(answer.affected_module,"unmapped")==0&&
+      !answer.source_location[0]&&
+      answer.location_status==DIGIT_DSD_LOCATION_UNRESOLVED);
+    memset(&q,0,sizeof(q));
+    passed+=(unsigned)(inspect(&q,&answer)&&
+      !answer.affected_module[0]&&!answer.source_location[0]&&
+      answer.location_status==DIGIT_DSD_LOCATION_UNRESOLVED);
+    memset(&q,0,sizeof(q));q.selected=1;q.retrieved=1;
+    passed+=(unsigned)(inspect(&q,&answer)&&
+      strcmp(answer.source_location,"modules/response/src/response.c")==0&&
+      strstr(answer.report,"NOT_VERIFIED_ROOT_CAUSE")!=NULL);
+    result->tests_executed=15;
     result->tests_passed=passed;
-    result->tests_failed=10-passed;
-    result->negative_test_executed=1;
-    result->negative_test_passed=passed==10;
-    return passed==10?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
+    result->tests_failed=15-passed;
+    result->negative_test_executed=3;
+    result->negative_test_passed=passed==15?3:0;
+    return passed==15?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 static stnlabz_module_result_t dsd_start(const stnlabz_module_host_t *host){
     if(!host||!host->register_service||!host->unregister_service)
