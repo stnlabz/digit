@@ -9,6 +9,7 @@
 #include "intent.h"
 #include "interpretation.h"
 #include "arithmetic.h"
+#include "dsd.h"
 
 /* [AI:GPT-5.6 Sol | 2026-10-06T21:41:00Z] Removed Dispatcher LLM dependency. Project questions now pass through Response so source/corpus selection and Validator remain the bounded answer path. */
 /* [AI:GPT-5.6 Sol | 2026-10-06T23:28:00Z] Dispatcher now requires Intent interpretation before normal routing. Existing bounded lesson/source/action behavior is preserved while Intent becomes the authoritative request-purpose classification. */
@@ -86,6 +87,53 @@ static void unsupported_action(digit_dispatcher_result_t *out){
   "I cannot execute or generate that requested action with my currently registered Dispatcher capabilities.");
 }
 
+/* [AI:GPT-6 | 2026-10-11] Scoped, explicit diagnostic request.
+ * Never resolve the previous turn from global state or unverified channel
+ * history. Context belongs exclusively to the authenticated private route. */
+static int diagnostic_request(const char *text){
+ const char *p=text;
+ const char *command="diagnose my last request";
+ size_t n;
+ if(!p)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"digit,",6)==0){p+=6;while(isspace((unsigned char)*p))++p;}
+ n=strlen(command);
+ if(strncasecmp(p,command,n)!=0)return 0;
+ p+=n;
+ while(isspace((unsigned char)*p))++p;
+ return *p==0||(*p=='.'&&p[1]==0)||(*p=='?'&&p[1]==0);
+}
+static void scoped_diagnostic(const digit_dispatcher_scoped_context_request_t *context,
+                               digit_dispatcher_result_t *out){
+ digit_dsd_request_t request={0};
+ digit_dsd_result_t result={0};
+ size_t used=0;
+ stnlabz_module_result_t status;
+ out->answered=1;
+ if(!context||context->scoped.scope_kind!=DIGIT_DISPATCHER_SCOPE_PRIVATE){
+  snprintf(out->answer,sizeof(out->answer),
+           "Diagnostics of a previous request require authenticated private conversation context.");
+  return;
+ }
+ if(!context->previous_user_message[0]||!context->previous_answer[0]){
+  snprintf(out->answer,sizeof(out->answer),
+           "I have no complete previous request and reply in this private session. No diagnosis is available.");
+  return;
+ }
+ /* Prior text is not stage telemetry. Do not invent retrieval, Intent,
+  * Validator or Response results from a generic user-facing fallback. */
+ status=dispatcher_host->invoke_service(DIGIT_DSD_SERVICE,&request,sizeof(request),
+                                        &result,sizeof(result),&used);
+ if(status!=STNLABZ_MODULE_OK||used!=sizeof(result)){
+  snprintf(out->answer,sizeof(out->answer),
+           "My DSD service is unavailable or returned an invalid diagnostic result. The previous reply is available, but module-stage evidence is not.");
+  return;
+ }
+ snprintf(out->answer,sizeof(out->answer),
+          "Previous private request and reply are available. DSD: %.768s I cannot identify which module caused that reply without correlated stage telemetry.",
+          result.report);
+}
+
 static stnlabz_module_result_t dispatcher_service(const void *request,size_t request_size,void *response,size_t response_size,size_t *response_used,void *handler_context)
 {
     const digit_dispatcher_request_t *in=request;
@@ -103,6 +151,11 @@ static stnlabz_module_result_t dispatcher_service(const void *request,size_t req
     if(request==NULL||request_size!=sizeof(*in)||response==NULL||response_used==NULL||response_size<sizeof(out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     if(memchr(in->request,'\0',sizeof(in->request))==NULL||in->request[0]=='\0')return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&out,0,sizeof(out));
+    if(diagnostic_request(in->request)){
+        scoped_diagnostic((const digit_dispatcher_scoped_context_request_t *)handler_context,&out);
+        memcpy(response,&out,sizeof(out));*response_used=sizeof(out);
+        return STNLABZ_MODULE_OK;
+    }
     memset(&interpretation_request,0,sizeof(interpretation_request));
     memset(&interpretation_result,0,sizeof(interpretation_result));
     snprintf(interpretation_request.text,sizeof(interpretation_request.text),"%s",in->request);
@@ -295,5 +348,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
