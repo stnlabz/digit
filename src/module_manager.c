@@ -6,8 +6,29 @@
 #include "module_manager.h"
 #include "qualification_store.h"
 #include "audit.h"
+#include "alert.h"
 
 #define DIGIT_RUNTIME_MODULE_PATH "/opt/digit/modules"
+
+/* [AI:GPT-6 | 2026-10-11] Emit one actionable incident per rejected module.
+ * Stage and result are observations, not speculative root causes. */
+static void digit_module_rejection(const stnlabz_module_record_t *record,
+                                   const char *stage,const char *reason)
+{
+    digit_alert_t alert;
+    char detail[512],summary[256];
+    if(!record||!stage||!reason)return;
+    (void)snprintf(summary,sizeof(summary),"Module %s failed %s",
+                   record->descriptor.id,stage);
+    (void)snprintf(detail,sizeof(detail),
+                   "module=%s version=%u.%u.%u stage=%s reason=%s core_continuing=true",
+                   record->descriptor.id,record->descriptor.version_major,
+                   record->descriptor.version_minor,record->descriptor.version_patch,
+                   stage,reason);
+    (void)digit_audit_event("MODULE","REJECTED",detail);
+    (void)digit_alert_raise(DIGIT_ALERT_ERROR,"MODULE",summary,detail,"DEGRADED",&alert);
+}
+
 
 static int digit_module_manager_set_qualification_path(
     digit_module_manager_t *manager
@@ -111,6 +132,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                         stnlabz_module_result_string(result));
                 fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                         record->descriptor.id);
+            digit_module_rejection(record,"verify",stnlabz_module_result_string(result));
                 ++rejected;
             continue;
             }
@@ -124,6 +146,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                         stnlabz_module_result_string(result));
                 fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                         record->descriptor.id);
+            digit_module_rejection(record,"qualify",stnlabz_module_result_string(result));
                 ++rejected;
             continue;
             }
@@ -141,6 +164,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                         record->descriptor.id);
                 fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                         record->descriptor.id);
+            digit_module_rejection(record,"qualification_gate","QUALIFICATION_METRICS_REJECTED");
                 ++rejected;
             continue;
             }
@@ -154,6 +178,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                         record->descriptor.id);
                 fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                         record->descriptor.id);
+            digit_module_rejection(record,"qualification_persistence","QUALIFICATION_STATE_SAVE_FAILED");
                 ++rejected;
             continue;
             }
@@ -199,6 +224,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                         stnlabz_module_result_string(result));
                 fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                         record->descriptor.id);
+            digit_module_rejection(record,"qualification_restore",stnlabz_module_result_string(result));
                 ++rejected;
             continue;
             }
@@ -220,6 +246,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                     stnlabz_module_result_string(result));
             fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                     record->descriptor.id);
+            digit_module_rejection(record,"activation_authorization",stnlabz_module_result_string(result));
             ++rejected;
             continue;
         }
@@ -231,6 +258,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                     record->descriptor.id);
             fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                     record->descriptor.id);
+            digit_module_rejection(record,"authority","ACTIVATION_DENIED");
             ++rejected;
             continue;
         }
@@ -244,12 +272,13 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                     stnlabz_module_result_string(result));
             fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                     record->descriptor.id);
+            digit_module_rejection(record,"activate",stnlabz_module_result_string(result));
             ++rejected;
             continue;
         }
 
         if (record->descriptor.start != NULL &&
-            record->descriptor.start(&manager->host) != STNLABZ_MODULE_OK)
+            (result=record->descriptor.start(&manager->host)) != STNLABZ_MODULE_OK)
         {
             (void)stnlabz_module_registry_fail(&manager->registry,
                                                record->descriptor.id);
@@ -258,6 +287,7 @@ stnlabz_module_result_t digit_module_manager_qualify_and_activate(
                     record->descriptor.id);
             fprintf(stderr, "[MODULE] REJECTED: %s -- Core continuing\n",
                     record->descriptor.id);
+            digit_module_rejection(record,"start",stnlabz_module_result_string(result));
             ++rejected;
             continue;
         }
