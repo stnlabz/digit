@@ -48,9 +48,6 @@ int digit_chatgpt_code_issue(digit_chatgpt_code_store_t *store,
        !bounded(verified_redirect_uri,DIGIT_CHATGPT_REDIRECT_MAX)||
        !bounded(s256_challenge,DIGIT_CHATGPT_CHALLENGE_SIZE)||
        strlen(s256_challenge)!=43 ||
-       !digit_chatgpt_pkce_s256(
-          "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-          "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM") ||
        now>(time_t)(2147483647-DIGIT_CHATGPT_CODE_TTL)) return 0;
     for(i=0;i<43;i++) {
         unsigned char c=(unsigned char)s256_challenge[i];
