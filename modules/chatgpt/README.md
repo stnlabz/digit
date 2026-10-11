@@ -1,4 +1,4 @@
-# Digit ChatGPT Integration — 1.0.4 source candidate
+# Digit ChatGPT Integration — 1.0.5 source candidate
 
 ISO C module hosted in Digit's existing process. **Not yet an operational
 ChatGPT OAuth connector.** No public HTTP OAuth endpoint or MCP client connection is
@@ -18,11 +18,22 @@ claimed by this source candidate.
   conversations are disabled. `chatgpt.test_case` still denies execution.
   The existing `chatgpt.mcp` service only supports limited protocol probes.
 
+## PKCE authorization-code state (ChatGPT module only)
+
+The isolated `chatgpt_oauth_codes.c` component issues cryptographically random,
+short-lived (five-minute), single-use authorization codes and redeems them only
+with exact client ID, redirect URI, and RFC 7636 S256 verifier matches. A
+matching code is consumed even when redemption is rejected. It is in-memory,
+not persisted, and is not exposed as a remote service or public route. The
+caller must independently verify SA-approved principal authorization, client
+registration, redirect URI ownership, consent, and permissions **before**
+issuing a code. No bearer access tokens are minted by this component.
+
 ## /oauth route namespace (ChatGPT module only)
 
 The in-process `chatgpt.oauth` service now dispatches exact paths:
 
-- `GET /oauth/authorize` — currently 503, until SA-approved authorization and consent exist.
+- `GET /oauth/authorize` — currently 503, until SA-approved authorization and consent are bound.
 - `POST /oauth/token` — currently 503, until authenticated authorization-code exchange exists.
 - `POST /oauth/register` — currently 503, until approved client registration exists.
 - Unsupported methods return 405; unknown paths return 404.
