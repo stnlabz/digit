@@ -137,8 +137,12 @@ static void interface_reply(int c,int status,const char *body){
                            status==401?"Unauthorized":status==403?"Forbidden":
                            status==404?"Not Found":status==202?"Accepted":status==405?"Method Not Allowed":status==503?"Service Unavailable":"Bad Request";
         int n=snprintf(header,sizeof(header),
-          "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
-          status,reason,strlen(body));
+          "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\n%sContent-Length: %zu\r\nConnection: close\r\n\r\n",
+          status,reason,
+          status==401 && interface_audit_request &&
+          strncmp(interface_audit_request,"POST /mcp HTTP/1.1",18)==0?
+          "WWW-Authenticate: Bearer resource_metadata=\"https://digit.stn-labz.com:8081/.well-known/oauth-protected-resource\"\r\n":"",
+          strlen(body));
         size_t off;
         if(n<=0||(size_t)n>=sizeof(header))return;
         for(off=0;off<(size_t)n;){int written=SSL_write(interface_tls_client,header+off,(int)((size_t)n-off));if(written<=0)return;off+=(size_t)written;}
