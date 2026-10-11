@@ -229,8 +229,10 @@ static int learned_feedback_acknowledgment(const char *question,
  if(strncmp(q,"you are ",8)!=0&&strncmp(q,"you re ",7)!=0)return 0;
  source=presentation_text(record);
  relation=strstr(source," means ");
+ if(!relation)relation=strchr(source,'=');
  if(!relation)return 0;
  len=(size_t)(relation-source);
+ while(len&&isspace((unsigned char)source[len-1]))--len;
  if(!len||len>=sizeof(term))return 0;
  memcpy(term,source,len);term[len]=0;
  canonical_text(term,canonical_term,sizeof(canonical_term));
@@ -785,6 +787,24 @@ static stnlabz_module_result_t answer_service_observed(const void *request,size_
         output.selected_count=(unsigned int)selected_count;
         trace_evidence(query,&evidence,selected,selected_count);
     }
+    /* A bounded Corpus selection is intended for factual answers. For
+     * social feedback, consult every retrieved authorized lesson instead:
+     * unrelated high-ranked records must not crowd out an exact learned
+     * lexical trigger. Do not use records from untrusted sources. */
+    if(!intent.structured||!strcmp(intent.intent,"CONVERSATION")||
+       !strcmp(intent.intent,"FACT")){
+        size_t feedback_i;
+        for(feedback_i=0;feedback_i<evidence.count&&feedback_i<CORPUS_MAX;++feedback_i)
+            if(learned_feedback_acknowledgment(normalized,
+                &evidence.records[feedback_i],output.answer,sizeof(output.answer))){
+                output.answered=1;
+                output.evidence_count=1;
+                output.diagnostic_phase=DIGIT_RESPONSE_PHASE_DIRECT_RESPONSE;
+                memcpy(response,&output,sizeof(output));
+                *response_used=sizeof(output);
+                return STNLABZ_MODULE_OK;
+            }
+    }
     /* [AI:GPT-6 | 2026-10-09] An evidence-free factual request must
      * return an explicit uncertainty result, not a candidate submitted as
      * if supported by retained records. Comparisons likewise need evidence. */
@@ -1042,5 +1062,5 @@ static stnlabz_module_result_t response_stop(void){if(response_host!=NULL&&respo
  int b=response_host->unregister_service(DIGIT_RESPONSE_SERVICE,NULL);
  if(!a||!b)return STNLABZ_MODULE_ERR_STOP_FAILED;
 }response_host=NULL;return STNLABZ_MODULE_OK;}
-static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
+static const stnlabz_module_descriptor_t response_descriptor={"response","Digit Response",2,0,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,response_qualify,response_start,response_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &response_descriptor;}
