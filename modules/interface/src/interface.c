@@ -771,6 +771,111 @@ static void interface_alert_ack(int client,const char *id)
     interface_reply(client,200,json);
 }
 
+
+/* [AI:GPT-6 | 2026-10-11] Authenticated, narrowly scoped MCP bridge.
+ * The Interface retains ownership of the caller, session and dispatch.
+ * This candidate does not implement a general-purpose JSON-RPC parser. */
+static int interface_mcp_field(const char *json,const char *key,char *dest,size_t cap){
+ char pattern[72];const char *p;size_t n=0;int m;
+ if(!json||!key||!dest||cap<2)return 0;
+ m=snprintf(pattern,sizeof(pattern),"\"%s\"",key);
+ if(m<0||(size_t)m>=sizeof(pattern))return 0;
+ p=strstr(json,pattern);if(!p)return 0;
+ p+=strlen(pattern);while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n')p++;
+ if(*p++!=':')return 0;
+ while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n')p++;
+ if(*p++!='"')return 0;
+ while(*p&&*p!='"'){
+  unsigned char c=(unsigned char)*p++;
+  if(c=='\\'){
+   c=(unsigned char)*p++;
+   if(c=='n')c='\n';else if(c=='t')c='\t';
+   else if(c=='r')c='\r';
+   else if(c!='"'&&c!='\\'&&c!='/')return 0;
+  }else if(c<32)return 0;
+  if(n+1>=cap)return 0;
+  dest[n++]=(char)c;
+ }
+ if(*p!='"')return 0;
+ dest[n]=0;return 1;
+}
+static int interface_mcp_id(const char *json,char *out,size_t cap){
+ const char *p=strstr(json,"\"id\"");size_t n=0;
+ if(!p||cap<4)return 0;
+ p+=4;while(isspace((unsigned char)*p))p++;
+ if(*p++!=':')return 0;
+ while(isspace((unsigned char)*p))p++;
+ if(*p=='"'){
+  out[n++]=*p++;
+  while(*p&&*p!='"'&&n+2<cap){
+   if((unsigned char)*p<32||*p=='\\')return 0;
+   out[n++]=*p++;
+  }
+  if(*p!='"')return 0;out[n++]=*p++;
+ }else{
+  while(*p>='0'&&*p<='9'&&n+1<cap)out[n++]=*p++;
+  if(n==0||((*p>='0'&&*p<='9')||*p=='.'))return 0;
+ }
+ out[n]=0;return 1;
+}
+static void interface_mcp_handle(int client,const char *request,const char *identity,
+                                  const char *body){
+ char method[80],name[80],text[DISPATCHER_REQUEST_MAX],id[100];
+ char payload[11000],escaped[8192];digit_ai_platform_permissions_t perm={0};
+ digit_session_entry_t *session;interface_dispatcher_result_t out={0};
+ digit_dsd_request_t diagnostic={0};unsigned int diagnostic_valid=0;
+ if(strncmp(identity,"ai.",3)!=0||
+    !digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
+  interface_reply(client,403,"{\"error\":\"AI platform required\"}\n");return;
+ }
+ session=interface_private_session(request,identity);
+ if(!session||!body||strlen(body)>=INTERFACE_BUFFER_MAX||
+    !interface_mcp_field(body,"jsonrpc",escaped,sizeof(escaped))||
+    strcmp(escaped,"2.0")||!interface_mcp_field(body,"method",method,sizeof(method))||
+    !interface_mcp_id(body,id,sizeof(id))){
+  interface_reply(client,400,"{\"error\":\"invalid MCP request\"}\n");return;
+ }
+ if(!strcmp(method,"initialize")){
+  snprintf(payload,sizeof(payload),
+   "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"digit\",\"version\":\"1.8.6\"}}}\n",id);
+ }else if(!strcmp(method,"ping")){
+  snprintf(payload,sizeof(payload),"{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n",id);
+ }else if(!strcmp(method,"tools/list")){
+  snprintf(payload,sizeof(payload),
+  "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"tools\":[{\"name\":\"digit_ask\",\"description\":\"Send a private authenticated request to Digit; session retains previous-turn diagnostic evidence\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}}]}}\n",id);
+ }else if(!strcmp(method,"tools/call")){
+  if(!interface_mcp_field(body,"name",name,sizeof(name))||
+     strcmp(name,"digit_ask")||
+     !interface_mcp_field(body,"text",text,sizeof(text))||!text[0]){
+   interface_reply(client,400,"{\"error\":\"invalid MCP tool arguments\"}\n");return;
+  }
+  if((!perm.diagnostics&&interface_ai_dsd_command(text))||
+     (!perm.memory_write&&(!strncasecmp(text,"remember ",9)||
+                           !strncasecmp(text,"i am ",5)))||
+     interface_learn_text(text)){
+   interface_reply(client,403,"{\"error\":\"AI capability denied\"}\n");return;
+  }
+  if(interface_memory_private(text,identity,&out)){}
+  else if(interface_private_name(text,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}
+  else if(!interface_dispatch_private(text,identity,session->last_reply,
+            session->last_user_message,session->last_diagnostic_valid,
+            &session->last_diagnostic,&out,&diagnostic,&diagnostic_valid)){
+   interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;
+  }
+  session->last_diagnostic_valid=diagnostic_valid==1U;
+  if(session->last_diagnostic_valid)session->last_diagnostic=diagnostic;
+  else memset(&session->last_diagnostic,0,sizeof(session->last_diagnostic));
+  snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);
+  snprintf(session->last_user_message,sizeof(session->last_user_message),"%s",text);
+  interface_json_escape(out.answer,escaped,sizeof(escaped));
+  snprintf(payload,sizeof(payload),
+    "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"%s\"}]}}\n",id,escaped);
+ }else{
+  snprintf(payload,sizeof(payload),
+    "{\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n",id);
+ }
+ interface_reply(client,200,payload);
+}
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* [AI:GPT-6 | 2026-10-08] Credentials accepted only from exact tab-delimited body.
@@ -883,9 +988,13 @@ if(strncmp(request,"POST /session/logout ",21)==0){
     /* AI platform accounts cannot use human administrative and mutation routes.
      * Their initial qualified exposure is private /ask only. */
     if(strncmp(identity,"ai.",3)==0&&strncmp(request,"POST /ask ",10)!=0&&
-       strncmp(request,"GET /ai/session HTTP/1.1",24)!=0){
+       strncmp(request,"GET /ai/session HTTP/1.1",24)!=0&&
+       strncmp(request,"POST /mcp HTTP/1.1",18)!=0){
         interface_reply(client,403,"{\"error\":\"AI platform operation not authorized\"}\n");return;
     }
+}
+if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
+ interface_mcp_handle(client,request,identity,body);return;
 }
 /* AI session introspection is authenticated and read-only; no secrets. */
 if(strncmp(request,"GET /ai/session HTTP/1.1",24)==0){
@@ -1589,5 +1698,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,8,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
