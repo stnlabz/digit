@@ -32,11 +32,12 @@ typedef struct {char raw[4096];} inbound_request_t;
 typedef struct {int status;int confidence;char normalized[4096];char reason[256];} inbound_result_t;
 static int register_response(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
+ if(!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE))return 1;
  if(strcmp(name,DIGIT_RESPONSE_SERVICE))return 0;
  response_handler=fn;return 1;
 }
 static int unregister_response(const char *name,void *ctx){
- (void)ctx;return !strcmp(name,DIGIT_RESPONSE_SERVICE);
+ (void)ctx;return !strcmp(name,DIGIT_RESPONSE_SERVICE)||!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE);
 }
 static stnlabz_module_result_t test_invoke(const char *name,const void *request,size_t request_size,
  void *response,size_t response_size,size_t *used){
