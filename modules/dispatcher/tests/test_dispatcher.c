@@ -106,11 +106,6 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   response_calls++;memset(out,0,sizeof(*out));out->answered=1;
   snprintf(out->answer,sizeof(out->answer),"%s",
    strstr(((const digit_response_request_t *)input)->question,"solve 3*x - 6 = 0")?"x = 2.":"Bounded response");
-  if(strstr(((const digit_response_request_t *)input)->question,"You are Stoopid")){
-   snprintf(out->answer,sizeof(out->answer),"I don\'t have enough grounded information to answer that.");
-   out->retrieved_count=2;out->selected_count=1;
-   out->diagnostic_phase=DIGIT_RESPONSE_PHASE_NO_COMPOSITION;
-  }else out->diagnostic_phase=DIGIT_RESPONSE_PHASE_APPROVED;
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  return STNLABZ_MODULE_ERR_NOT_FOUND;
