@@ -125,12 +125,17 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
     q.stages[0].state=DIGIT_DSD_FAILED;
     snprintf(q.stages[0].reason,sizeof(q.stages[0].reason),"INVALID CODE");
     passed+=(unsigned)!inspect(&q,&answer);
-    result->tests_executed=8;
+    q.stages[0].reason[0]=0;
+    passed+=(unsigned)(inspect(&q,&answer)&&answer.finding==DIGIT_DSD_OBSERVED&&
+        strcmp(answer.reason,"STAGE_UNAVAILABLE")==0);
+    q.stage_count=0;q.retrieved=1;q.selected=2;
+    passed+=(unsigned)!inspect(&q,&answer);
+    result->tests_executed=10;
     result->tests_passed=passed;
-    result->tests_failed=8-passed;
+    result->tests_failed=10-passed;
     result->negative_test_executed=1;
-    result->negative_test_passed=passed==8;
-    return passed==8?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
+    result->negative_test_passed=passed==10;
+    return passed==10?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 static stnlabz_module_result_t dsd_start(const stnlabz_module_host_t *host){
     if(!host||!host->register_service||!host->unregister_service)
