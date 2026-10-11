@@ -68,6 +68,10 @@ MODULE_MANAGER_POLICY_SOURCES := \
 	src/qualification_store.c \
 	src/authority.c
 
+# Module rejection reports now use persistent alerts and their channel projection.
+# Standalone test binaries must link the same implementation as the Core.
+MODULE_MANAGER_ALERT_SOURCES := src/alert.c src/channel.c
+
 DIGIT_OBJECTS := $(DIGIT_SOURCES:src/%.c=build/digit_%.o)
 ABI_OBJECTS := $(ABI_SOURCES:$(ABI_SRC)/%.c=build/abi_%.o)
 OBJECTS := $(DIGIT_OBJECTS) $(ABI_OBJECTS)
@@ -111,11 +115,11 @@ $(SACRIFICIAL_RESTART_FAIL_SO): tests/modules/sacrificial/sacrificial.c | $(SACR
 $(SACRIFICIAL_CONF): tests/modules/sacrificial/module.conf | $(SACRIFICIAL_DIR)
 	cp $< $@
 
-$(TEST_MODULE_MANAGER): tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_MODULE_MANAGER): tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_module_manager.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
-$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) $(SACRIFICIAL_V2_SO) $(SACRIFICIAL_FAIL_SO) $(SACRIFICIAL_HANG_SO) $(SACRIFICIAL_STOP_FAIL_SO) $(SACRIFICIAL_RESTART_FAIL_SO) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_HOTLOAD): tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) $(SACRIFICIAL_SO) $(SACRIFICIAL_V2_SO) $(SACRIFICIAL_FAIL_SO) $(SACRIFICIAL_HANG_SO) $(SACRIFICIAL_STOP_FAIL_SO) $(SACRIFICIAL_RESTART_FAIL_SO) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_hotload.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_SERVICE_REGISTRY): tests/test_service_registry.c src/service_registry.c include/service_registry.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_service_registry.c src/service_registry.c -o $@ $(LDLIBS)
@@ -132,8 +136,8 @@ $(TEST_AUTHORITY): tests/test_authority.c src/authority.c src/qualification.c | 
 $(TEST_SACRIFICIAL): tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c $(SACRIFICIAL_SO) $(SACRIFICIAL_CONF) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sacrificial.c $(ABI_SRC)/loader_linux.c -o $@ $(LDLIBS)
 
-$(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
+$(TEST_RUNTIME): tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_runtime.c src/runtime.c src/hotload.c src/service_registry.c src/audit.c $(MODULE_MANAGER_POLICY_SOURCES) $(MODULE_MANAGER_ALERT_SOURCES) $(ABI_SOURCES) -o $@ $(LDLIBS)
 
 $(TEST_CORE_SA): tests/test_core_sa.c src/core_sa.c include/core_sa.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_core_sa.c src/core_sa.c -o $@
