@@ -837,7 +837,17 @@ static stnlabz_module_result_t response_qualify(stnlabz_module_qualification_res
   snprintf(sample.records[0].text,sizeof(sample.records[0].text),"ordinary means quirky");
   passed+=(unsigned)(select_evidence("You are quirky",&sample,matched)==0);
  }
- result->tests_executed=45;result->tests_passed=passed;
+ {
+  corpus_record_t item={0};char reply[256];
+  snprintf(item.category,sizeof(item.category),"OPERATOR_LEARNED");
+  snprintf(item.source,sizeof(item.source),"interface:learn");
+  snprintf(item.text,sizeof(item.text),"quirky means unusual");
+  passed+=(unsigned)(learned_glossary_acknowledgment("You are quirky",&item,reply,sizeof(reply))&&strstr(reply,"unusual")!=NULL);
+  passed+=(unsigned)!learned_glossary_acknowledgment("You are unrelated",&item,reply,sizeof(reply));
+  snprintf(item.source,sizeof(item.source),"untrusted");
+  passed+=(unsigned)!learned_glossary_acknowledgment("You are quirky",&item,reply,sizeof(reply));
+ }
+ result->tests_executed=48;result->tests_passed=passed;
  result->tests_failed=result->tests_executed-passed;
  result->negative_test_executed=1;
  result->negative_test_passed=!quoted_expression("unterminated 'quote",phrase,sizeof(phrase));
