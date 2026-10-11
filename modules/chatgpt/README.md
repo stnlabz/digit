@@ -130,3 +130,11 @@ Expected OAuth issuer: `https://digit.stn-labz.com:8081`.
 Protected resource: `https://digit.stn-labz.com:8081/mcp`.
 Both modules must be built and hotloaded together. Live OAuth connection
 and end-to-end MCP tool tests must still be verified after qualification.
+
+## Registered ChatGPT OAuth client (1.0.13 / Interface 1.9.5)
+
+Public client ID: `digit-chatgpt` (not a password or secret).
+The sole authorized callback is `https://chatgpt.com/connector/oauth/50yEgv2B3ONp`.
+The authorization and token endpoints require that exact client ID and callback;
+redirect responses from Interface are restricted to the same callback.
+This does not change Digit's fixed operator-controlled MCP key.
