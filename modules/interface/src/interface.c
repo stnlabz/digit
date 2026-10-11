@@ -106,7 +106,7 @@ static void interface_oauth_browser_reply(int client,const digit_chatgpt_oauth_r
  const char *ctype=out->html?"text/html; charset=utf-8":"application/json; charset=utf-8";
  if(out->status==302){
   if(strncmp(out->location,"https://chatgpt.com/",20)!=0 &&
-     strncmp(out->location,"https://chat.openai.com/",22)!=0)return;
+     strncmp(out->location,"https://chat.openai.com/",24)!=0)return;
   n=snprintf(header,sizeof(header),
    "HTTP/1.1 302 %s\r\nLocation: %s\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
    reason,out->location);
@@ -936,8 +936,8 @@ static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[D
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* Fixed operator key is checked against the existing MCP credentials/registry.
  * Only verified ai.* principal is passed to the ChatGPT OAuth service. */
-if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",57)==0||
-   strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",56)==0){
+if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0||
+   strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0){
  if(strstr(request,"oauth-protected-resource HTTP/1.1"))
   interface_reply(client,200,"{\"resource\":\"https://digit.stn-labz.com:8081/mcp\",\"authorization_servers\":[\"https://digit.stn-labz.com:8081\"]}");
  else
