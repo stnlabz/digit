@@ -24,6 +24,9 @@ typedef struct {
     /* [AI:GPT-6 | 2026-10-10] Volatile authenticated-session reply context. */
     char last_reply[DIGIT_SESSION_LAST_REPLY_MAX];
     char last_user_message[DIGIT_SESSION_LAST_REPLY_MAX];
+    unsigned int pending_diagnostic;
+    unsigned int pending_turn_handled;
+    time_t pending_diagnostic_until;
     unsigned int last_diagnostic_valid;
     digit_dsd_request_t last_diagnostic;
     time_t expires_at;
