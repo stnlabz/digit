@@ -346,7 +346,7 @@ int digit_project_channel_create_host(const char *root,const char *org,
  const char *project,const char *name,const char *actor,const char *sa_registry,
  const stnlabz_module_host_t *host,char *channel,size_t capacity){
  char filename[64],owner_org[DIGIT_PROJECT_ID_MAX],owner_project[DIGIT_PROJECT_ID_MAX];
- char entry[DIGIT_CHANNEL_ID_MAX+2],existing[DIGIT_CHANNEL_ID_MAX];
+ char entry[DIGIT_CHANNEL_ID_MAX+2];
  digit_channel_create_request_t request;digit_channel_create_response_t result;
  int lock=-1,dir=-1,fd=-1,ok=0,n;size_t used=0;
  struct stat st;
