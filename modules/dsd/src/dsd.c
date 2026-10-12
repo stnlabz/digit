@@ -145,12 +145,11 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
         snprintf(prior,sizeof(prior),"%s",out->diagnostic.report);
         if(in->intent_class==0||in->intent_class==10){
             snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
-              "Intent received Interpretation output and returned %s (established=%u). "
-              "Intent decision: %.215s. Interpretation changed %u token(s); reason: %.100s. "
-              "Dispatcher stopped before Response retrieval: zero answer records means NOT QUERIED, "
-              "not a failed answer search. Interpretation lexical lookups are shown separately when "
-              "observed. Exact rejection branches within a returned Corpus record remain unobserved. "
-              "Source: modules/intent/src/intent.c; gate: modules/dispatcher/src/dispatcher.c.",
+              "Intent: %s (established=%u), reason: %.110s. "
+              "Interpretation substitutions: %u, reason: %.70s. "
+              "Dispatcher stopped before Response retrieval (NOT QUERIED). "
+              "Lexical lookups follow. Individual Corpus record rejection rules were not traced. "
+              "Intent: modules/intent/src/intent.c; gate: modules/dispatcher/src/dispatcher.c.",
               classification,in->intent_established,in->intent_reason,
               in->interpretation_substitutions,in->interpretation_reason);
         }else{
@@ -281,12 +280,19 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
     passed+=(unsigned)(inspect(&q,&answer)&&
        strstr(answer.diagnostic.report,"Intent is not deterministically established.")!=NULL&&
        strstr(answer.diagnostic.report,"NOT QUERIED")!=NULL);
-    result->tests_executed=16;
+    q.lookup_count=1;
+    snprintf(q.lookups[0].term,sizeof(q.lookups[0].term),"wut");
+    snprintf(q.lookups[0].selected_record_id,sizeof(q.lookups[0].selected_record_id),"lesson-42");
+    q.lookups[0].returned=3;q.lookups[0].accepted=1;q.lookups[0].query_ok=1;
+    passed+=(unsigned)(inspect(&q,&answer)&&
+        strstr(answer.diagnostic.report,"Term wut -> Interpretation/Corpus search: COMPLETED")!=NULL&&
+        strstr(answer.diagnostic.report,"lesson-42")!=NULL);
+    result->tests_executed=17;
     result->tests_passed=passed;
-    result->tests_failed=16-passed;
+    result->tests_failed=17-passed;
     result->negative_test_executed=3;
-    result->negative_test_passed=passed==16?3:0;
-    return passed==16?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
+    result->negative_test_passed=passed==17?3:0;
+    return passed==17?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 static stnlabz_module_result_t dsd_start(const stnlabz_module_host_t *host){
     if(!host||!host->register_service||!host->unregister_service)
