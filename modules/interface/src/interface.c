@@ -316,6 +316,69 @@ static int interface_ai_dsd_command(const char *text){
  p+=n;while(isspace((unsigned char)*p))++p;
  return *p==0||(*p=='.'&&p[1]==0)||(*p=='?'&&p[1]==0);
 }
+/* [AI:GPT-6 | 2026-10-12] Bounded typo-confirmation state belongs to
+ * the authenticated session, never to a global operator context. */
+static int interface_diagnostic_typo(const char *p){
+ const char *cmd="dianose my last request";size_t n;
+ if(!p)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(strncasecmp(p,"digit,",6)==0){p+=6;while(isspace((unsigned char)*p))++p;}
+ n=strlen(cmd);if(strncasecmp(p,cmd,n))return 0;
+ p+=n;while(isspace((unsigned char)*p))++p;
+ return !*p||(*p=='.'&&!p[1])||(*p=='?'&&!p[1]);
+}
+static int interface_confirmation(const char *p,int yes){
+ size_t n=0;if(!p)return 0;
+ while(isspace((unsigned char)*p))++p;
+ if(yes){if(!strncasecmp(p,"yes",3))n=3;
+  else if(!strncasecmp(p,"correct",7))n=7;}
+ else if(!strncasecmp(p,"no",2))n=2;
+ if(!n)return 0;
+ p+=n;while(isspace((unsigned char)*p))++p;
+ return !*p||(*p=='.'&&!p[1])||(*p=='!'&&!p[1]);
+}
+static int interface_dispatch_private(const char *body,const char *identity,
+ const char *previous_answer,const char *previous_user_message,
+ unsigned int previous_diagnostic_valid,const digit_dsd_request_t *previous_diagnostic,
+ interface_dispatcher_result_t *out,
+ digit_dsd_request_t *diagnostic,unsigned int *diagnostic_valid);
+static int interface_pending_diagnostic(const char *text,digit_session_entry_t *session,
+ const char *identity,int allowed,interface_dispatcher_result_t *out,
+ digit_dsd_request_t *diagnostic,unsigned int *diagnostic_valid){
+ if(!session||!text||!out)return 0;
+ if(session->pending_diagnostic&&time(NULL)>session->pending_diagnostic_until)
+  session->pending_diagnostic=0;
+ if(interface_diagnostic_typo(text)){
+  if(!allowed)return 0;
+  session->pending_diagnostic=1;session->pending_diagnostic_until=time(NULL)+120;
+  session->pending_turn_handled=1;out->answered=1;
+  snprintf(out->answer,sizeof(out->answer),
+    "I believe you meant 'diagnose my last request.' Is that correct?");
+  return 1;
+ }
+ if(!session->pending_diagnostic)return 0;
+ if(interface_confirmation(text,0)){
+  session->pending_diagnostic=0;session->pending_turn_handled=1;
+  out->answered=1;
+  snprintf(out->answer,sizeof(out->answer),"Correction discarded. What did you intend?");
+  return 1;
+ }
+ if(interface_confirmation(text,1)){
+  session->pending_diagnostic=0;session->pending_turn_handled=1;
+  if(!allowed){out->answered=1;
+   snprintf(out->answer,sizeof(out->answer),"Diagnostic permission denied.");return 1;}
+  if(!interface_dispatch_private("diagnose my last request",identity,
+     session->last_reply,session->last_user_message,
+     session->last_diagnostic_valid,&session->last_diagnostic,
+     out,diagnostic,diagnostic_valid)){
+   out->answered=1;
+   snprintf(out->answer,sizeof(out->answer),"Diagnostic service unavailable.");
+  }
+  return 1;
+ }
+ session->pending_diagnostic=0;
+ return 0;
+}
 static int interface_dispatch_private(const char *body,const char *identity,
                                        const char *previous_answer,const char *previous_user_message,
                                        unsigned int previous_diagnostic_valid,const digit_dsd_request_t *previous_diagnostic,
@@ -925,7 +988,7 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
      !interface_mcp_field(body,"text",text,sizeof(text))||!text[0]){
    interface_reply(client,400,"{\"error\":\"invalid MCP tool arguments\"}\n");return;
   }
-  if((!perm.diagnostics&&interface_ai_dsd_command(text))||
+  if((!perm.diagnostics&&(interface_ai_dsd_command(text)||interface_diagnostic_typo(text)))||
      (!perm.memory_write&&(!strncasecmp(text,"remember ",9)||
                            !strncasecmp(text,"i am ",5)))||
      interface_learn_text(text)){
@@ -933,16 +996,19 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
   }
   if(strcmp(identity,"ai.public")!=0&&interface_memory_private(text,identity,&out)){}
   else if(interface_private_name(text,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}
-  else if(!interface_dispatch_private(text,identity,session->last_reply,
+  else if(!interface_pending_diagnostic(text,session,identity,perm.diagnostics,&out,&diagnostic,&diagnostic_valid) &&
+          !interface_dispatch_private(text,identity,session->last_reply,
             session->last_user_message,session->last_diagnostic_valid,
             &session->last_diagnostic,&out,&diagnostic,&diagnostic_valid)){
    interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;
   }
+  if(!session->pending_turn_handled){
   session->last_diagnostic_valid=diagnostic_valid==1U;
   if(session->last_diagnostic_valid)session->last_diagnostic=diagnostic;
   else memset(&session->last_diagnostic,0,sizeof(session->last_diagnostic));
   snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);
   snprintf(session->last_user_message,sizeof(session->last_user_message),"%s",text);
+  }else session->pending_turn_handled=0;
   interface_json_escape(out.answer,escaped,sizeof(escaped));
   snprintf(payload,sizeof(payload),
     "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"%s\"}]}}\n",id,escaped);
@@ -1606,7 +1672,7 @@ if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};di
  if(!digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
   interface_reply(client,403,"{\"error\":\"AI platform DM access denied\"}\n");return;
  }
- if(!perm.diagnostics&&interface_ai_dsd_command(body)){
+ if(!perm.diagnostics&&(interface_ai_dsd_command(body)||interface_diagnostic_typo(body))){
   interface_reply(client,403,"{\"error\":\"AI platform diagnostics denied\"}\n");return;
  }
  if(!perm.memory_write &&
@@ -1614,10 +1680,12 @@ if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};di
   interface_reply(client,403,"{\"error\":\"AI platform memory write denied\"}\n");return;
  }
 }
-learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_memory_private(body,identity,&out)){}else if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_dispatch_private(body,identity,session->last_reply,session->last_user_message,session->last_diagnostic_valid,&session->last_diagnostic,&out,&diagnostic,&diagnostic_valid)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}session->last_diagnostic_valid=diagnostic_valid==1U;
+learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_memory_private(body,identity,&out)){}else if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_pending_diagnostic(body,session,identity,
+   strncmp(identity,"ai.",3)!=0 || perm.diagnostics,&out,&diagnostic,&diagnostic_valid) &&
+  !interface_dispatch_private(body,identity,session->last_reply,session->last_user_message,session->last_diagnostic_valid,&session->last_diagnostic,&out,&diagnostic,&diagnostic_valid)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}if(!session->pending_turn_handled){session->last_diagnostic_valid=diagnostic_valid==1U;
 if(session->last_diagnostic_valid)session->last_diagnostic=diagnostic;
 else memset(&session->last_diagnostic,0,sizeof(session->last_diagnostic));
-snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);snprintf(session->last_user_message,sizeof(session->last_user_message),"%s",body);interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
+snprintf(session->last_reply,sizeof(session->last_reply),"%s",out.answer);snprintf(session->last_user_message,sizeof(session->last_user_message),"%s",body);}else session->pending_turn_handled=0;interface_json_escape(out.answer,escaped,sizeof(escaped));snprintf(json,sizeof(json),"{\"answered\":%s,\"evidence_count\":0,\"answer\":\"%s\"}\n",out.answered?"true":"false",escaped);interface_reply(client,200,json);return;}
 /* [AI:GPT-6 | 2026-10-08] 1.4.3: authenticated, source-checked
  * record lookup, using the existing Corpus get service. UNKNOWN is
  * explicit when no record exists; unverified Core output is rejected. */
@@ -1845,5 +1913,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,5,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
