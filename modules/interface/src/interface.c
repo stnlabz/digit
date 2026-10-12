@@ -1795,7 +1795,7 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
 {
     digit_knowledge_record_t record={0};
     char json[10000];
-    int tests[35];
+    int tests[43];
     size_t i;
     if(!r)return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(r,0,sizeof(*r));
@@ -1854,6 +1854,29 @@ static stnlabz_module_result_t interface_qualify(stnlabz_module_qualification_re
     tests[32]=interface_ai_dsd_command("diagnose my last request");
     tests[33]=!interface_ai_dsd_command("diagnose your module");
     tests[34]=!interface_ai_dsd_command("diagnose my last requester");
+    tests[35]=interface_diagnostic_typo("Digit, dianose my last request.");
+    tests[36]=!interface_diagnostic_typo("diagnose my last request");
+    tests[37]=!interface_diagnostic_typo("dianose my last requester");
+    tests[38]=interface_confirmation("yes",1);
+    tests[39]=interface_confirmation("No.",0);
+    tests[40]=!interface_confirmation("yesterday",1);
+    {
+        digit_session_entry_t session={0};
+        interface_dispatcher_result_t response={0};
+        digit_dsd_request_t evidence={0};
+        unsigned int valid=0;
+        session.last_diagnostic_valid=1;
+        session.last_diagnostic.stage_count=1;
+        tests[41]=interface_pending_diagnostic("dianose my last request",
+              &session,"qualified-user",1,&response,&evidence,&valid)&&
+              session.pending_diagnostic==1&&session.pending_turn_handled==1&&
+              session.last_diagnostic_valid==1&&session.last_diagnostic.stage_count==1;
+        session.pending_turn_handled=0;
+        tests[42]=interface_pending_diagnostic("no",&session,
+              "qualified-user",1,&response,&evidence,&valid)&&
+              session.pending_diagnostic==0&&session.pending_turn_handled==1&&
+              session.last_diagnostic_valid==1&&session.last_diagnostic.stage_count==1;
+    }
     for(i=0;i<sizeof(tests)/sizeof(tests[0]);++i){
         ++r->tests_executed;
         if(tests[i])++r->tests_passed;
@@ -1913,5 +1936,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,6,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,7,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
