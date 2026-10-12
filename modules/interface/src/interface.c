@@ -161,7 +161,7 @@ static void interface_reply(int c,int status,const char *body){
           (strncmp(interface_audit_request,"POST /mcp HTTP/1.1",18)==0||
            strncmp(interface_audit_request,"GET /mcp HTTP/1.1",17)==0)?
           "WWW-Authenticate: Bearer resource_metadata=\"https://digit.stn-labz.com:8081/.well-known/oauth-protected-resource\"\r\n":"",
-          status==405?"Allow: POST\\r\\n":"",
+          status==405?"Allow: POST\r\n":"",
           strlen(body));
         size_t off;
         if(n<=0||(size_t)n>=sizeof(header))return;
