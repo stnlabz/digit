@@ -230,6 +230,7 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
         const digit_interpretation_lookup_t *from=&interpretation_result.lookups[i];
         snprintf(to->term,sizeof(to->term),"%s",from->term);
         snprintf(to->selected_record_id,sizeof(to->selected_record_id),"%s",from->selected_record_id);
+        snprintf(to->decision,sizeof(to->decision),"%s",from->decision);
         to->returned=from->returned;to->accepted=from->accepted;to->query_ok=from->query_ok;
     }}
     snprintf(out.diagnostic.interpretation_reason,sizeof(out.diagnostic.interpretation_reason),"%s",interpretation_result.reason);
