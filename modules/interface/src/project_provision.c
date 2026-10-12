@@ -294,15 +294,18 @@ int digit_project_members_json(const char *root,const char *org,
  file=fdopen(fd,"r");if(!file)goto done;fd=-1;
  {int n=snprintf(json,capacity,
    "{\"organization\":\"%s\",\"project\":\"%s\",\"members\":[",org,project);
-  if(n<0||(size_t)n>=capacity)goto done;used=(size_t)n;}
+  if(n<0||(size_t)n>=capacity)goto done;
+  used=(size_t)n;}
  while(fgets(row,sizeof(row),file)){
   char *first,*second,*user;size_t i,n=strlen(row);
   int length;
   if(n<2||row[n-1]!='\n'||memchr(row,'\0',n-1)!=NULL||
      count>=128)goto done;
   row[n-1]=0;first=row;second=strchr(first,'\t');
-  if(!second)goto done;*second++=0;user=strchr(second,'\t');
-  if(!user)goto done;*user++=0;
+  if(!second)goto done;
+  *second++=0;user=strchr(second,'\t');
+  if(!user)goto done;
+  *user++=0;
   if(strchr(user,'\t')||strcmp(first,"security")||
      strcmp(second,"restricted")||!project_name(user)||
      strlen(user)>=DIGIT_PROJECT_USER_MAX)goto done;
@@ -337,7 +340,10 @@ int digit_project_members_json(const char *root,const char *org,
  ok=1;
 done:
  if(!ok&&json&&capacity)json[0]=0;
- if(file)fclose(file);if(fd>=0)close(fd);
- if(p>=0)close(p);if(o>=0)close(o);if(base>=0)close(base);
+ if(file)fclose(file);
+ if(fd>=0)close(fd);
+ if(p>=0)close(p);
+ if(o>=0)close(o);
+ if(base>=0)close(base);
  return ok;
 }
