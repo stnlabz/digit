@@ -294,7 +294,7 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
       strcmp(answer.diagnostic.affected_module,"response")==0&&
       strcmp(answer.source_location,"modules/response/src/response.c")==0&&
       answer.location_status==DIGIT_DSD_LOCATION_INVESTIGATE&&
-      strstr(answer.diagnostic.report,"Module: response.")!=NULL);
+      strstr(answer.diagnostic.report,"Module: response\n")!=NULL);
     memset(&q,0,sizeof(q));q.stage_count=1;
     snprintf(q.stages[0].module,sizeof(q.stages[0].module),"intent");
     snprintf(q.stages[0].reason,sizeof(q.stages[0].reason),"SERVICE_TIMEOUT");
