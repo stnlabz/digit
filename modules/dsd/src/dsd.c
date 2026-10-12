@@ -148,7 +148,7 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
               "Intent: %s (established=%u), reason: %.110s. "
               "Interpretation substitutions: %u, reason: %.70s. "
               "Dispatcher stopped before Response retrieval (NOT QUERIED). "
-              "Lexical lookups follow. Individual Corpus record rejection rules were not traced. "
+              "Lexical lookup decisions follow; unrecorded record-level reasons remain unknown. "
               "Intent: modules/intent/src/intent.c (digit_intent_interpret); "
               "gate: modules/dispatcher/src/dispatcher.c (dispatcher_handle_observed).",
               classification,in->intent_established,in->intent_reason,
