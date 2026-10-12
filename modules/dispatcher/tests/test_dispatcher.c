@@ -156,7 +156,7 @@ int main(void){
    snprintf(req.previous_answer,sizeof(req.previous_answer),"I don't have enough grounded information to answer that.");
    dsd_calls=0;
    if(!scoped_context_handler||scoped_context_handler(&req,sizeof(req),&out,sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
-      used!=sizeof(out)||dsd_calls!=1||!strstr(out.answer,"Insufficient verified stage evidence.")){
+      used!=sizeof(out)||dsd_calls!=0||!strstr(out.answer,"PREVIOUS_TRACE_UNAVAILABLE")){
     fprintf(stderr,"Authenticated DSD routing FAILED\\n");return 1;
    }
    /* Exercise a real request through the mocked stage services and
