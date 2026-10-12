@@ -22,6 +22,8 @@ static unsigned int chosen_established=1;
 static const char *chosen_context_subject;
 static unsigned int lesson_calls=0;
 static unsigned int arithmetic_calls=0;
+static unsigned int learned_social_fixture=0;
+static unsigned int intent_invocations=0;
 
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
  (void)ctx;
@@ -60,12 +62,24 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
   if(isize!=sizeof(*in)||osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
   memset(out,0,sizeof(*out));out->resolved=1;
   snprintf(out->normalized,sizeof(out->normalized),"%s",in->text);
+  if(learned_social_fixture&&!strcmp(in->text,"purrs")){
+   snprintf(out->normalized,sizeof(out->normalized),"affection");
+   out->substitutions=1;
+  }
   *used=sizeof(*out);return STNLABZ_MODULE_OK;
  }
  if(!strcmp(name,DIGIT_INTENT_SERVICE)){
   digit_intent_result_t *out=output;
   if(osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
+  intent_invocations++;
   memset(out,0,sizeof(*out));out->intent=chosen_intent;
+  if(learned_social_fixture&&isize==sizeof(digit_intent_request_t)&&
+     !strcmp(((const digit_intent_request_t *)input)->text,"purrs")){
+   out->intent=DIGIT_INTENT_CONVERSATION;
+   out->target=DIGIT_INTENT_TARGET_SOCIAL;
+   out->established=1;
+   *used=sizeof(*out);return STNLABZ_MODULE_OK;
+  }
   out->target=chosen_intent==DIGIT_INTENT_ACTION?DIGIT_INTENT_TARGET_CAPABILITY:
               DIGIT_INTENT_TARGET_KNOWLEDGE;
   out->established=chosen_established;
@@ -144,6 +158,26 @@ int main(void){
   host.invoke_service=mock_invoke;
   if(!d->start||d->start(&host)!=STNLABZ_MODULE_OK||!dispatcher_handler){
    fprintf(stderr,"Dispatcher mock registration FAILED\\n");return 1;
+  }
+  /* Learned social expression survives lexical normalization, but cannot
+   * elevate a normalized UNKNOWN into an operational capability. */
+  {
+   digit_dispatcher_observed_context_request_t in={0};
+   digit_dispatcher_observed_result_t out={0};
+   size_t used=0;
+   snprintf(in.context.scoped.actor,sizeof(in.context.scoped.actor),"authenticated-user");
+   in.context.scoped.scope_kind=DIGIT_DISPATCHER_SCOPE_PRIVATE;
+   snprintf(in.context.scoped.request,sizeof(in.context.scoped.request),"purrs");
+   learned_social_fixture=1;chosen_intent=DIGIT_INTENT_UNKNOWN;
+   chosen_established=0;intent_invocations=0;response_calls=0;
+   if(!observed_handler||observed_handler(&in,sizeof(in),&out,
+       sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
+      used!=sizeof(out)||out.diagnostic.intent_class!=DIGIT_INTENT_CONVERSATION||
+      !out.diagnostic.intent_established||intent_invocations!=2||
+      response_calls!=1){
+    fprintf(stderr,"Learned social fallback FAILED\\n");return 1;
+   }
+   learned_social_fixture=0;
   }
   {
    digit_dispatcher_scoped_context_request_t req={0};
