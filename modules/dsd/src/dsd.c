@@ -319,7 +319,7 @@ static stnlabz_module_result_t dsd_stop(void){
     return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 static const stnlabz_module_descriptor_t descriptor={
-    "dsd","Digit Self-Diagnostics",1,2,0,
+    "dsd","Digit Self-Diagnostics",1,2,1,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
     dsd_qualify,dsd_start,dsd_stop
 };
