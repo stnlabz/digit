@@ -325,7 +325,6 @@ static int interface_dispatch_private(const char *body,const char *identity,
  interface_scoped_context_dispatcher_request_t in;
  interface_observed_context_request_t observed_request={0};
  interface_observed_dispatcher_result_t observed_result={0};
- interface_scoped_dispatcher_request_t legacy;
  size_t used=0,len,actor_len;
  if(diagnostic_valid)*diagnostic_valid=0;
  if(diagnostic)memset(diagnostic,0,sizeof(*diagnostic));
@@ -362,7 +361,6 @@ static int interface_dispatch_private(const char *body,const char *identity,
    }
    return 1;
  }
- used=0;
  /* Do not silently fall back to a non-observed Dispatcher for authenticated
   * private requests: doing so discards the evidence DSD requires. */
  if(interface_host&&interface_host->send_message)
