@@ -363,7 +363,14 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
         source_scan(interpreted_request,&out);
     }else{
         observed_stage(&out,"intent",DIGIT_DSD_OK,"ESTABLISHED");
-        dispatch_intent_response(interpreted_request,&intent_result,&out);
+        /* [AI:GPT-6 | 2026-10-12] If Intent established SOCIAL from the
+         * original learned expression, preserve that referent for Response
+         * retrieval and its authorized learned-relation composition. */
+        dispatch_intent_response(intent_result.intent==DIGIT_INTENT_CONVERSATION&&
+            intent_result.target==DIGIT_INTENT_TARGET_SOCIAL&&
+            interpretation_result.substitutions>0U&&
+            strcmp(interpreted_request,in->request)!=0?
+            in->request:interpreted_request,&intent_result,&out);
     }
     normalize_answer(out.answer);
     memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
@@ -527,5 +534,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
