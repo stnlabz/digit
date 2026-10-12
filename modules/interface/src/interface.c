@@ -942,8 +942,10 @@ if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\
 /* Fixed operator key is checked against the existing MCP credentials/registry.
  * Only verified ai.* principal is passed to the ChatGPT OAuth service. */
 if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0||
-   strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0){
- if(strstr(request,"oauth-protected-resource HTTP/1.1"))
+   (strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0||
+   strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0)){
+ if(strstr(request,"oauth-protected-resource HTTP/1.1")||
+    strstr(request,"oauth-protected-resource/mcp HTTP/1.1"))
   interface_reply(client,200,"{\"resource\":\"https://digit.stn-labz.com:8081/mcp\",\"authorization_servers\":[\"https://digit.stn-labz.com:8081\"]}");
  else
   interface_reply(client,200,"{\"issuer\":\"https://digit.stn-labz.com:8081\",\"authorization_endpoint\":\"https://digit.stn-labz.com:8081/oauth/authorize\",\"token_endpoint\":\"https://digit.stn-labz.com:8081/oauth/token\",\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"]}");
