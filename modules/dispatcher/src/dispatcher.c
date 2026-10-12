@@ -317,6 +317,9 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
      * Intent before executing any capability, including lesson ingestion. */
     /* [AI:GPT-6 | 2026-10-09] An unclassified request is not an
      * authorization failure. Preserve the capability-only action gate. */
+    if(intent_sr!=STNLABZ_MODULE_OK||intent_used!=sizeof(intent_result)){
+        /* Service failure was already reported above. */
+    }
     else if(intent_result.intent==DIGIT_INTENT_UNKNOWN||
             intent_result.intent==DIGIT_INTENT_AMBIGUOUS){
         out.answered=1;
@@ -524,5 +527,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
