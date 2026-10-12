@@ -1,4 +1,4 @@
-# Digit Self-Diagnostics (DSD) 1.2.0
+# Digit Self-Diagnostics (DSD) 1.2.1
 
 **Status: committed source candidate; local Linux build, qualification and live acceptance pending.**
 
@@ -13,7 +13,7 @@ distinguishes reported processing boundaries from unverified root causes.
    It exposes evidence retrieval and selection counts, composition disposition,
    and Validator outcome codes. Existing `response.answer` output remains
    byte-compatible.
-2. Dispatcher 1.3.9 provides the **additive**
+2. Dispatcher 1.3.10 provides the **additive**
    `dispatcher.handle_scoped_context_observed` service.
    It records Interpretation and Intent status, invokes observed Response,
    and builds a bounded DSD request. Existing Dispatcher services retain their
