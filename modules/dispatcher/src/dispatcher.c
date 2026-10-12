@@ -283,6 +283,34 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
         snprintf(diagnostic,sizeof(diagnostic),"[DISPATCHER] intent.interpret failure: status=%d returned=%zu expected=%zu",(int)intent_sr,intent_used,sizeof(intent_result));
         if(dispatcher_host->send_message!=NULL)(void)dispatcher_host->send_message(diagnostic);
     }
+    /* [AI:GPT-6 | 2026-10-12] A learned lexical replacement may
+     * erase the original social term. Only when normalized Intent is
+     * UNKNOWN, check original text for an established CONVERSATION.
+     * Never promote an action, status, or capability through this path. */
+    if(intent_sr==STNLABZ_MODULE_OK&&intent_used==sizeof(intent_result)&&
+       intent_result.intent==DIGIT_INTENT_UNKNOWN&&
+       interpretation_result.substitutions>0U&&
+       strcmp(interpreted_request,in->request)!=0){
+        digit_intent_request_t original={0};
+        digit_intent_result_t social={0};
+        size_t social_used=0;
+        snprintf(original.text,sizeof(original.text),"%s",in->request);
+        if(dispatcher_host->invoke_service(DIGIT_INTENT_SERVICE,&original,
+             sizeof(original),&social,sizeof(social),&social_used)==STNLABZ_MODULE_OK&&
+           social_used==sizeof(social)&&
+           social.intent==DIGIT_INTENT_CONVERSATION&&
+           social.target==DIGIT_INTENT_TARGET_SOCIAL&&social.established==1U){
+            intent_result=social;
+            out.diagnostic.intent_class=(unsigned int)social.intent;
+            out.diagnostic.intent_target=(unsigned int)social.target;
+            out.diagnostic.intent_established=social.established;
+            snprintf(out.diagnostic.intent_reason,
+                sizeof(out.diagnostic.intent_reason),
+                "Original learned expression established social context; normalized text did not.");
+            snprintf(out.diagnostic.intent_subject,
+                sizeof(out.diagnostic.intent_subject),"%s",social.subject);
+        }
+    }
     /* [AI:GPT-6 | 2026-10-09] Only explicitly named, supported
      * capabilities execute. A generic ACTION cannot enter retrieval. */
     /* [AI:GPT-6 | 2026-10-09] Require an established, target-consistent
@@ -496,5 +524,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
