@@ -961,14 +961,13 @@ if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\
 /* /mcp is public. Do not publish OAuth protected-resource metadata
  * declaring it an authentication-required resource. Retain the independent
  * authorization-server metadata for clients that explicitly use OAuth. */
-if(strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0||
-   strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0){
+/* Public MCP endpoint: discovery probes must not fall through to
+ * protected application routes and falsely trigger OAuth negotiation. */
+if(strncmp(request,"GET /.well-known/oauth-protected-resource",40)==0||
+   strncmp(request,"GET /.well-known/oauth-authorization-server",40)==0||
+   strncmp(request,"GET /.well-known/openid-configuration",37)==0||
+   strncmp(request,"GET /mcp/.well-known/",21)==0){
  interface_reply(client,404,"{\"error\":\"not_found\"}\n");return;
-}
-if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0){
- interface_reply(client,200,
- "{\"issuer\":\"https://digit.stn-labz.com:8081\",\"authorization_endpoint\":\"https://digit.stn-labz.com:8081/oauth/authorize\",\"token_endpoint\":\"https://digit.stn-labz.com:8081/oauth/token\",\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"]}");
- return;
 }
 if((strncmp(request,"GET /oauth/authorize",20)==0 && (request[20]=='?'||request[20]==' '))||
    (strncmp(request,"POST /oauth/approve",19)==0 && request[19]=='?')||
@@ -1850,5 +1849,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
