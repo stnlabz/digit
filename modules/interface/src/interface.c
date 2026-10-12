@@ -958,28 +958,16 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
 }
 static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[DIGIT_CHANNEL_ID_MAX],identity[DIGIT_SESSION_ID_SIZE];ssize_t received;char *body;received=interface_receive_request(client,request,sizeof(request));interface_audit_request=NULL;if(received==-2){interface_reply(client,400,"{\"error\":\"invalid or oversized HTTP request\"}\n");return;}if(received<=0)return;request[received]=0;interface_audit_request=request;body=strstr(request,"\r\n\r\n");if(body)body+=4;
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
-/* Fixed operator key is checked against the existing MCP credentials/registry.
- * Only verified ai.* principal is passed to the ChatGPT OAuth service. */
-/* Trace successful OAuth discovery, without logging query parameters or secrets. */
-if(interface_host && interface_host->send_message &&
-   (strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0 ||
-    strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0 ||
-    strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0)){
- const char *kind=strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0
-                    ?"authorization_server":"protected_resource";
- char note[160];
- snprintf(note,sizeof(note),
-          "[INTERFACE] OAUTH_DISCOVERY kind=%s method=GET outcome=SERVED",kind);
- (void)interface_host->send_message(note);
+/* /mcp is public. Do not publish OAuth protected-resource metadata
+ * declaring it an authentication-required resource. Retain the independent
+ * authorization-server metadata for clients that explicitly use OAuth. */
+if(strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0||
+   strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0){
+ interface_reply(client,404,"{\"error\":\"not_found\"}\n");return;
 }
-if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0||
-   (strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0||
-   strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0)){
- if(strstr(request,"oauth-protected-resource HTTP/1.1")||
-    strstr(request,"oauth-protected-resource/mcp HTTP/1.1"))
-  interface_reply(client,200,"{\"resource\":\"https://digit.stn-labz.com:8081/mcp\",\"authorization_servers\":[\"https://digit.stn-labz.com:8081\"]}");
- else
-  interface_reply(client,200,"{\"issuer\":\"https://digit.stn-labz.com:8081\",\"authorization_endpoint\":\"https://digit.stn-labz.com:8081/oauth/authorize\",\"token_endpoint\":\"https://digit.stn-labz.com:8081/oauth/token\",\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"]}");
+if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0){
+ interface_reply(client,200,
+ "{\"issuer\":\"https://digit.stn-labz.com:8081\",\"authorization_endpoint\":\"https://digit.stn-labz.com:8081/oauth/authorize\",\"token_endpoint\":\"https://digit.stn-labz.com:8081/oauth/token\",\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"]}");
  return;
 }
 if((strncmp(request,"GET /oauth/authorize",20)==0 && (request[20]=='?'||request[20]==' '))||
@@ -1862,5 +1850,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
