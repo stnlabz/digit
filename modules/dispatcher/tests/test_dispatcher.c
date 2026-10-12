@@ -23,6 +23,7 @@ static const char *chosen_context_subject;
 static unsigned int lesson_calls=0;
 static unsigned int arithmetic_calls=0;
 static unsigned int learned_social_fixture=0;
+static unsigned int learned_social_request_preserved=0;
 static unsigned int intent_invocations=0;
 
 static int register_dispatcher(const char *name,stnlabz_module_service_handler_fn fn,void *ctx){
