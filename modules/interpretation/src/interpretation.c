@@ -553,7 +553,7 @@ static stnlabz_module_result_t interpretation_stop(void)
 
 static const stnlabz_module_descriptor_t interpretation_descriptor =
 {
-    "interpretation", "Digit Interpretation", 1, 0, 10,
+    "interpretation", "Digit Interpretation", 1, 1, 0,
     STNLABZ_MODULE_API_MAJOR, STNLABZ_MODULE_API_MINOR,
     interpretation_qualify, interpretation_start, interpretation_stop
 };
