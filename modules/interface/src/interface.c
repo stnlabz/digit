@@ -135,7 +135,7 @@ static void interface_reply(int c,int status,const char *body){
         const char *end=path?strpbrk(path," ?\r\n"):NULL;
         size_t path_len=end?(size_t)(end-path):0;
         if(path_len && path_len<96 &&
-           (strncmp(path,"/mcp",4)==0 && (path_len==4 || path[4]=='/') ||
+           ((strncmp(path,"/mcp",4)==0 && (path_len==4 || path[4]=='/')) ||
             strncmp(path,"/.well-known/oauth-",19)==0 ||
             strncmp(path,"/oauth/",7)==0)){
             int method_len=space?(int)(space-req):0;
@@ -918,7 +918,8 @@ static int interface_mcp_id(const char *json,char *out,size_t cap){
    if((unsigned char)*p<32||*p=='\\')return 0;
    out[n++]=*p++;
   }
-  if(*p!='"')return 0;out[n++]=*p++;
+  if(*p!='"')return 0;
+  out[n++]=*p++;
  }else{
   while(*p>='0'&&*p<='9'&&n+1<cap)out[n++]=*p++;
   if(n==0||((*p>='0'&&*p<='9')||*p=='.'))return 0;
@@ -1667,11 +1668,12 @@ if(strncmp(request,"GET /channels ",14)==0){interface_channels_list(client,ident
     interface_reply(client,200,json);return;
 }if(strncmp(request,"GET /channels/",14)==0&&interface_path_two(request,"GET /channels/",id,sizeof(id),"/messages HTTP/1.1")){if(!interface_alert_channel_messages(client,id,identity))interface_messages_list(client,id);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/messages HTTP/1.1")){interface_message_post(client,id,body,identity);return;}if(strncmp(request,"POST /channels/",15)==0&&interface_path_two(request,"POST /channels/",id,sizeof(id),"/ask HTTP/1.1")){interface_channel_ask(client,id,body,identity);return;}if(strncmp(request,"GET /channels/",14)==0&&interface_path_value(request,"GET /channels/",id,sizeof(id))){interface_channel_get(client,id);return;}
 if(strncmp(request,"GET /alerts?unacknowledged=1 ",29)==0){interface_alerts_list(client,1);return;}if(strncmp(request,"GET /alerts ",12)==0){interface_alerts_list(client,0);return;}if(strncmp(request,"POST /alerts/",13)==0&&interface_path_two(request,"POST /alerts/",id,sizeof(id),"/acknowledge HTTP/1.1")){interface_alert_ack(client,id);return;}if(strncmp(request,"GET /alerts/",12)==0&&interface_path_value(request,"GET /alerts/",id,sizeof(id))){interface_alert_get(client,id);return;}
-if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};digit_dsd_request_t diagnostic={0};unsigned int diagnostic_valid=0;char escaped[8192],json[9000];const char *learn;digit_session_entry_t *session;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}session=interface_private_session(request,identity);if(!session){interface_reply(client,403,"{\"error\":\"valid authenticated session required\"}\n");return;}if(strncmp(identity,"ai.",3)==0){
+if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};digit_dsd_request_t diagnostic={0};unsigned int diagnostic_valid=0;char escaped[8192],json[9000];const char *learn;digit_session_entry_t *session;int diagnostic_allowed=1;if(!body||!body[0]||strlen(body)>=DISPATCHER_REQUEST_MAX){interface_reply(client,400,"{\"error\":\"valid question required\"}\n");return;}session=interface_private_session(request,identity);if(!session){interface_reply(client,403,"{\"error\":\"valid authenticated session required\"}\n");return;}if(strncmp(identity,"ai.",3)==0){
  digit_ai_platform_permissions_t perm={0};
  if(!digit_ai_platform_permissions(DIGIT_AI_PLATFORM_REGISTRY,identity,&perm)||!perm.dm){
   interface_reply(client,403,"{\"error\":\"AI platform DM access denied\"}\n");return;
  }
+ diagnostic_allowed=perm.diagnostics;
  if(!perm.diagnostics&&(interface_ai_dsd_command(body)||interface_diagnostic_typo(body))){
   interface_reply(client,403,"{\"error\":\"AI platform diagnostics denied\"}\n");return;
  }
@@ -1681,7 +1683,7 @@ if(strncmp(request,"POST /ask ",10)==0){interface_dispatcher_result_t out={0};di
  }
 }
 learn=interface_learn_text(body);if(learn){interface_reply(client,403,"{\"error\":\"private conversation cannot write to shared corpus\"}\n");return;}if(interface_memory_private(body,identity,&out)){}else if(interface_private_name(body,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}else if(!interface_pending_diagnostic(body,session,identity,
-   strncmp(identity,"ai.",3)!=0 || perm.diagnostics,&out,&diagnostic,&diagnostic_valid) &&
+   diagnostic_allowed,&out,&diagnostic,&diagnostic_valid) &&
   !interface_dispatch_private(body,identity,session->last_reply,session->last_user_message,session->last_diagnostic_valid,&session->last_diagnostic,&out,&diagnostic,&diagnostic_valid)){interface_reply(client,503,"{\"error\":\"scoped dispatcher unavailable\"}\n");return;}if(!session->pending_turn_handled){session->last_diagnostic_valid=diagnostic_valid==1U;
 if(session->last_diagnostic_valid)session->last_diagnostic=diagnostic;
 else memset(&session->last_diagnostic,0,sizeof(session->last_diagnostic));
