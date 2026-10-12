@@ -163,8 +163,15 @@ static void scoped_diagnostic(const digit_dispatcher_observed_context_request_t 
            "I have no complete previous request and reply in this private session. No diagnosis is available.");
   return;
  }
- if(context->previous_diagnostic_valid==1U)
-  request=context->previous_diagnostic;
+ if(context->previous_diagnostic_valid!=1U){
+  snprintf(out->answer,sizeof(out->answer),
+   "Module: telemetry. Code: PREVIOUS_TRACE_UNAVAILABLE -> Previous request decisions were not retained. "
+   "Source: modules/interface/src/interface.c (private-session diagnostic handoff). "
+   "Root cause: unknown; original execution was not observed. Repair authorization: none. "
+   "Summary: I have the prior conversation, but no execution evidence to diagnose.");
+  return;
+ }
+ request=context->previous_diagnostic;
  /* Prior session-local observations only; never replay an action. */
  status=dispatcher_host->invoke_service(DIGIT_DSD_SERVICE,&request,sizeof(request),
                                         &result,sizeof(result),&used);
@@ -173,9 +180,7 @@ static void scoped_diagnostic(const digit_dispatcher_observed_context_request_t 
            "My DSD service is unavailable or returned an invalid diagnostic result. The previous reply is available, but module-stage evidence is not.");
   return;
  }
- snprintf(out->answer,sizeof(out->answer),
-          "Previous private request and reply are available. DSD: %.768s",
-          result.report);
+ snprintf(out->answer,sizeof(out->answer),"%s",result.report);
 }
 
 static void observed_stage(digit_dispatcher_observed_result_t *out,const char *name,
@@ -207,6 +212,11 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
     memset(&out,0,sizeof(out));
     if(diagnostic_request(in->request)){
         scoped_diagnostic((const digit_dispatcher_observed_context_request_t *)handler_context,&out);
+        /* A diagnostic follow-up must not discard its previous trace. */
+        if(context&&context->previous_diagnostic_valid==1U){
+            out.diagnostic=context->previous_diagnostic;
+            out.diagnostic_valid=1U;
+        }
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);
         return STNLABZ_MODULE_OK;
     }
@@ -486,5 +496,5 @@ static stnlabz_module_result_t dispatcher_stop(void)
  dispatcher_host=NULL;
  return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
-static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,3,10,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
+static const stnlabz_module_descriptor_t dispatcher_descriptor={"dispatcher","Digit Dispatcher",1,4,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,dispatcher_qualify,dispatcher_start,dispatcher_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &dispatcher_descriptor;}
