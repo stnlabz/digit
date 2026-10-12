@@ -176,6 +176,24 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
             used+=(size_t)written;
         }
     }
+    /* [AI:GPT-6 | 2026-10-12] Operator-facing evidence summary. */
+    {
+        char evidence[DIGIT_DSD_REPORT_MAX];
+        const char *meaning="Module processing failed; specific cause not observed";
+        const char *source=out->source_location[0]?out->source_location:"not established";
+        if(strcmp(out->diagnostic.reason,"INTENT_UNCLASSIFIED")==0){
+            meaning="Intent returned UNKNOWN or AMBIGUOUS; Dispatcher stopped routing";
+            source="modules/dispatcher/src/dispatcher.c (dispatcher_handle_observed)";
+        }
+        if(strcmp(out->diagnostic.reason,"INSUFFICIENT_EVIDENCE")==0)
+            meaning="No retained stage observation identifies the failure";
+        snprintf(evidence,sizeof(evidence),"%s",out->diagnostic.report);
+        snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
+            "Module: %s. Code: %s -> %s. Source: %s. Root cause: unknown. "
+            "Repair authorization: none. Summary: %.180s",
+            out->diagnostic.affected_module[0]?out->diagnostic.affected_module:"unidentified",
+            out->diagnostic.reason,meaning,source,evidence);
+    }
     return 1;
 }
 static stnlabz_module_result_t diagnose_service(const void *request,size_t request_size,
@@ -319,7 +337,7 @@ static stnlabz_module_result_t dsd_stop(void){
     return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 static const stnlabz_module_descriptor_t descriptor={
-    "dsd","Digit Self-Diagnostics",1,2,1,
+    "dsd","Digit Self-Diagnostics",1,2,2,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
     dsd_qualify,dsd_start,dsd_stop
 };
