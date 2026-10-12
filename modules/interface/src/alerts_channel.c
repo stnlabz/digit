@@ -15,7 +15,8 @@
  * remains reserved, preventing duplicate Core channel creation. */
 static int valid(const char *s){
  size_t i,n;
- if(!s)return 0;n=strnlen(s,64);
+ if(!s)return 0;
+ n=strnlen(s,64);
  if(!n||n>=64)return 0;
  for(i=0;i<n;++i){char c=s[i];
   if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
@@ -37,7 +38,8 @@ static int open_project(const char *root,const char *org,const char *project){
  p=openat(o,project,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
  if(!private_dir(p)){if(p>=0)close(p);p=-1;}
 done:
- if(o>=0)close(o);if(base>=0)close(base);
+ if(o>=0)close(o);
+ if(base>=0)close(base);
  return p;
 }
 static int lookup_fd(int dir,char *out,size_t cap){
