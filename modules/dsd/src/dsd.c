@@ -166,9 +166,10 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
             const digit_dsd_lookup_t *ev=&in->lookups[i];
             int written=snprintf(out->diagnostic.report+used,sizeof(out->diagnostic.report)-used,
                 " Term %.40s -> Interpretation/Corpus search: %s, %u result(s), "
-                "learned token accepted=%s, record=%.48s.",ev->term,
+                "decision=%.42s, record=%.42s.",ev->term,
                 ev->query_ok?"COMPLETED":"UNAVAILABLE",ev->returned,
-                ev->accepted?"YES":"NO",ev->accepted?ev->selected_record_id:"NONE");
+                ev->decision[0]?ev->decision:"NOT_RECORDED",
+                ev->accepted?ev->selected_record_id:"NONE");
             if(written<0)break;
             if((size_t)written>=sizeof(out->diagnostic.report)-used)break;
             used+=(size_t)written;
