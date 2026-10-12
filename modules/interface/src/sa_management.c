@@ -15,7 +15,8 @@
  * Serialized complete-file replacement preserves all unrelated records. */
 static int ident(const char *s){
  size_t i,n;
- if(!s)return 0;n=strnlen(s,64);
+ if(!s)return 0;
+ n=strnlen(s,64);
  if(!n||n>=64)return 0;
  for(i=0;i<n;++i){char c=s[i];if(!((c>='a'&&c<='z')||
  (c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'))return 0;}
@@ -69,7 +70,9 @@ int digit_sa_list(const char *registry,const char *org,const char *actor,
    !strcmp(fields[3],"1")?"true":"false",
    !strcmp(fields[4],"1")?"true":"false",
    !strcmp(fields[5],"1")?"true":"false");
-  if(n<0||(size_t)n>=cap-off)goto done;off+=(size_t)n;++count;
+  if(n<0||(size_t)n>=cap-off)goto done;
+  off+=(size_t)n;
+  ++count;
  }
  if(off+4>cap)goto done;
  strcpy(json+off,"]}\n");ok=1;
@@ -140,7 +143,8 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
  for(seq=0;seq<16;seq++){
   snprintf(temp,sizeof(temp),".security_sa.%ld.%lu.tmp",(long)getpid(),seq);
   tmp=openat(dir,temp,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
-  if(tmp>=0)break;if(errno!=EEXIST)goto done;
+  if(tmp>=0)break;
+  if(errno!=EEXIST)goto done;
  }
  if(tmp<0)goto done;
  if(write(tmp,out,used)!=(ssize_t)used||fsync(tmp)!=0)goto done;
@@ -148,6 +152,7 @@ int digit_sa_change(const char *registry,const char *org,const char *actor,
  ok=1;
 done:
  if(tmp>=0){close(tmp);if(!ok)unlinkat(dir,temp,0);}
- if(fd>=0)close(fd);if(dir>=0)close(dir);
+ if(fd>=0)close(fd);
+ if(dir>=0)close(dir);
  free(buf);free(out);return ok;
 }
