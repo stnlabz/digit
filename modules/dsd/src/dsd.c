@@ -147,10 +147,10 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
             snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
               "Intent received Interpretation output and returned %s (established=%u). "
               "Intent decision: %.215s. Interpretation changed %u token(s); reason: %.100s. "
-              "Dispatcher stopped before Response/Corpus retrieval; zero records here means NOT QUERIED, "
-              "not a failed Corpus search. Word-by-word lookup and rule identifiers were not emitted by "
-              "the upstream modules and cannot be verified from this trace. Source decision: "
-              "modules/intent/src/intent.c; dispatcher gate: modules/dispatcher/src/dispatcher.c.",
+              "Dispatcher stopped before Response retrieval: zero answer records means NOT QUERIED, "
+              "not a failed answer search. Interpretation lexical lookups are shown separately when "
+              "observed. Exact rejection branches within a returned Corpus record remain unobserved. "
+              "Source: modules/intent/src/intent.c; gate: modules/dispatcher/src/dispatcher.c.",
               classification,in->intent_established,in->intent_reason,
               in->interpretation_substitutions,in->interpretation_reason);
         }else{
