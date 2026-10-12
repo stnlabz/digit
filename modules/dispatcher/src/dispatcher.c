@@ -221,6 +221,8 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
         normalize_answer(out.answer);
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
     }
+    out.diagnostic.interpretation_substitutions=interpretation_result.substitutions;
+    snprintf(out.diagnostic.interpretation_reason,sizeof(out.diagnostic.interpretation_reason),"%s",interpretation_result.reason);
     observed_stage(&out,"interpretation",DIGIT_DSD_OK,"RESOLVED");
     if(memchr(interpretation_result.normalized,'\0',sizeof(interpretation_result.normalized))==NULL||
        interpretation_result.normalized[0]=='\0'){
@@ -241,6 +243,14 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
     memset(&intent_request,0,sizeof(intent_request));memset(&intent_result,0,sizeof(intent_result));
     snprintf(intent_request.text,sizeof(intent_request.text),"%s",interpreted_request);
     intent_sr=dispatcher_host->invoke_service(DIGIT_INTENT_SERVICE,&intent_request,sizeof(intent_request),&intent_result,sizeof(intent_result),&intent_used);
+    if(intent_sr==STNLABZ_MODULE_OK&&intent_used==sizeof(intent_result)){
+        out.diagnostic.intent_observed=1U;
+        out.diagnostic.intent_class=(unsigned int)intent_result.intent;
+        out.diagnostic.intent_target=(unsigned int)intent_result.target;
+        out.diagnostic.intent_established=intent_result.established;
+        snprintf(out.diagnostic.intent_reason,sizeof(out.diagnostic.intent_reason),"%s",intent_result.reason);
+        snprintf(out.diagnostic.intent_subject,sizeof(out.diagnostic.intent_subject),"%s",intent_result.subject);
+    }
     if(intent_sr!=STNLABZ_MODULE_OK||intent_used!=sizeof(intent_result)){
         observed_stage(&out,"intent",DIGIT_DSD_FAILED,"INTENT_SERVICE_FAILURE");
         char diagnostic[256];
