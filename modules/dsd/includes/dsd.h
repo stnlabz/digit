@@ -42,6 +42,16 @@ typedef struct {
     unsigned int selected;
     unsigned int candidate_constructed;
     unsigned int outbound_approved;
+    /* [AI:GPT-6 | 2026-10-12] Observations from actual module results;
+     * retained only in the authenticated request-local diagnostic chain. */
+    unsigned int interpretation_substitutions;
+    unsigned int intent_observed;
+    unsigned int intent_class;
+    unsigned int intent_target;
+    unsigned int intent_established;
+    char interpretation_reason[256];
+    char intent_reason[256];
+    char intent_subject[256];
 } digit_dsd_request_t;
 
 typedef enum {
