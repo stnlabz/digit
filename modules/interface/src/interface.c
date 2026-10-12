@@ -126,10 +126,28 @@ static void interface_oauth_browser_reply(int client,const digit_chatgpt_oauth_r
 static void interface_reply(int c,int status,const char *body){
     /* [AI:GPT-6 | 2026-10-09] Suppress routine HTTP success audit noise.\n     * Keep rejected requests and server errors visible to operations. */
     char audit[160];
-    if(status>=400 && interface_host && interface_host->send_message &&
-       digit_interface_audit_format(interface_audit_request,status,
-                                    audit,sizeof(audit))){
-        (void)interface_host->send_message(audit);
+    if(status>=400 && interface_host && interface_host->send_message){
+        /* Report the rejected OAuth/MCP route without exposing query parameters,
+         * authorization codes, bearer tokens, or request bodies. */
+        const char *req=interface_audit_request;
+        const char *space=req?strchr(req,' '):NULL;
+        const char *path=space?space+1:NULL;
+        const char *end=path?strpbrk(path," ?\\r\\n"):NULL;
+        size_t path_len=end?(size_t)(end-path):0;
+        if(path_len && path_len<96 &&
+           (strncmp(path,"/mcp",4)==0 && (path_len==4 || path[4]=='/') ||
+            strncmp(path,"/.well-known/oauth-",19)==0 ||
+            strncmp(path,"/oauth/",7)==0)){
+            int method_len=space?(int)(space-req):0;
+            if(method_len>0 && method_len<12){
+                snprintf(audit,sizeof(audit),
+                         "[INTERFACE AUDIT] operation=oauth_mcp_request method=%.*s path=%.*s outcome=REJECTED status=%d",
+                         method_len,req,(int)path_len,path,status);
+                (void)interface_host->send_message(audit);
+            }
+        }else if(digit_interface_audit_format(req,status,audit,sizeof(audit))){
+            (void)interface_host->send_message(audit);
+        }
     }
     if(interface_tls_client){
         char header[512];
