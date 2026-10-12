@@ -103,7 +103,8 @@ static stnlabz_module_result_t mock_invoke(const char *name,const void *input,si
  if(!strcmp(name,DIGIT_RESPONSE_OBSERVED_SERVICE)){
   digit_response_observed_result_t *out=output;
   if(osize<sizeof(*out))return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
-  response_calls++;memset(out,0,sizeof(*out));out->answered=1;
+  response_calls++;if(learned_social_fixture && strstr(((const digit_response_request_t *)input)->question,"REQUEST: purrs"))learned_social_request_preserved=1;
+   memset(out,0,sizeof(*out));out->answered=1;
   if(strstr(((const digit_response_request_t *)input)->question,"You are Stoopid")){
    snprintf(out->answer,sizeof(out->answer),"I don\'t have enough grounded information to answer that.");
    out->retrieved_count=2;out->selected_count=1;
@@ -140,7 +141,7 @@ static int dispatch_case(const char *request,digit_intent_class_t intent,
 int main(void){
  const stnlabz_module_descriptor_t *d=stnlabz_module_get_descriptor();
  stnlabz_module_qualification_result_t q;
- if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=4||d->version_patch!=2||!d->qualify){
+ if(!d||strcmp(d->id,"dispatcher")||d->version_major!=1||d->version_minor!=4||d->version_patch!=3||!d->qualify){
   fprintf(stderr,"Dispatcher descriptor invalid\\n");return 1;
  }
  memset(&q,0,sizeof(q));
@@ -174,7 +175,7 @@ int main(void){
        sizeof(out),&used,NULL)!=STNLABZ_MODULE_OK||
       used!=sizeof(out)||out.diagnostic.intent_class!=DIGIT_INTENT_CONVERSATION||
       !out.diagnostic.intent_established||intent_invocations!=2||
-      response_calls!=1){
+      response_calls!=1||!learned_social_request_preserved){
     fprintf(stderr,"Learned social fallback FAILED\\n");return 1;
    }
    learned_social_fixture=0;
