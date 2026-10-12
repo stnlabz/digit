@@ -155,12 +155,13 @@ static void interface_reply(int c,int status,const char *body){
                            status==401?"Unauthorized":status==403?"Forbidden":
                            status==404?"Not Found":status==202?"Accepted":status==405?"Method Not Allowed":status==503?"Service Unavailable":"Bad Request";
         int n=snprintf(header,sizeof(header),
-          "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\n%sContent-Length: %zu\r\nConnection: close\r\n\r\n",
+          "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\n%s%sContent-Length: %zu\r\nConnection: close\r\n\r\n",
           status,reason,
           status==401 && interface_audit_request &&
           (strncmp(interface_audit_request,"POST /mcp HTTP/1.1",18)==0||
            strncmp(interface_audit_request,"GET /mcp HTTP/1.1",17)==0)?
           "WWW-Authenticate: Bearer resource_metadata=\"https://digit.stn-labz.com:8081/.well-known/oauth-protected-resource\"\r\n":"",
+          status==405?"Allow: POST\\r\\n":"",
           strlen(body));
         size_t off;
         if(n<=0||(size_t)n>=sizeof(header))return;
@@ -922,7 +923,7 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
   snprintf(payload,sizeof(payload),"{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n",id);
  }else if(!strcmp(method,"tools/list")){
   snprintf(payload,sizeof(payload),
-  "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"tools\":[{\"name\":\"digit_ask\",\"description\":\"Send a private authenticated request to Digit; session retains previous-turn diagnostic evidence\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}}]}}\n",id);
+  "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"tools\":[{\"name\":\"digit_ask\",\"description\":\"Send a public unprivileged conversational request to Digit\",\"securitySchemes\":[{\"type\":\"noauth\"}],\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}}]}}\n",id);
  }else if(!strcmp(method,"tools/call")){
   if(!interface_mcp_field(body,"name",name,sizeof(name))||
      strcmp(name,"digit_ask")||
@@ -1849,5 +1850,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,3,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",2,0,4,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
