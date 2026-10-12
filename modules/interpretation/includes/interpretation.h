@@ -14,6 +14,7 @@
 typedef struct {
     char term[64];
     char selected_record_id[65];
+    char decision[48];
     unsigned int returned;
     unsigned int accepted;
     unsigned int query_ok;
