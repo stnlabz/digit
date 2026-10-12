@@ -9,6 +9,15 @@
 #define DIGIT_INTERPRETATION_REASON_MAX 256
 #define DIGIT_INTERPRETATION_DEFINITION_SERVICE "interpretation.definition"
 #define DIGIT_INTERPRETATION_TERM_MAX 128
+#define DIGIT_INTERPRETATION_TRACE_MAX 4
+/* Read-only, request-local observations from actual lexical Corpus searches. */
+typedef struct {
+    char term[64];
+    char selected_record_id[65];
+    unsigned int returned;
+    unsigned int accepted;
+    unsigned int query_ok;
+} digit_interpretation_lookup_t;
 
 typedef struct
 {
@@ -33,6 +42,8 @@ typedef struct
     unsigned int substitutions;
     char normalized[DIGIT_INTERPRETATION_TEXT_MAX];
     char reason[DIGIT_INTERPRETATION_REASON_MAX];
+    unsigned int lookup_count;
+    digit_interpretation_lookup_t lookups[DIGIT_INTERPRETATION_TRACE_MAX];
 } digit_interpretation_result_t;
 
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void);
