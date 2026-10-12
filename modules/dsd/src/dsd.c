@@ -253,12 +253,25 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
     passed+=(unsigned)(inspect(&q,&answer)&&
       strcmp(answer.source_location,"modules/response/src/response.c")==0&&
       strstr(answer.diagnostic.report,"NOT_VERIFIED_ROOT_CAUSE")!=NULL);
-    result->tests_executed=15;
+    /* [AI:GPT-6 | 2026-10-12] Recorded intent reason must survive the
+     * previous-turn diagnostic path without inventing Corpus activity. */
+    memset(&q,0,sizeof(q));q.stage_count=2;
+    snprintf(q.stages[0].module,sizeof(q.stages[0].module),"interpretation");
+    q.stages[0].state=DIGIT_DSD_OK;
+    snprintf(q.stages[1].module,sizeof(q.stages[1].module),"intent");
+    q.stages[1].state=DIGIT_DSD_FAILED;
+    snprintf(q.stages[1].reason,sizeof(q.stages[1].reason),"INTENT_UNCLASSIFIED");
+    q.intent_observed=1;q.intent_class=0;q.intent_established=0;
+    snprintf(q.intent_reason,sizeof(q.intent_reason),"Intent is not deterministically established.");
+    passed+=(unsigned)(inspect(&q,&answer)&&
+       strstr(answer.diagnostic.report,"Intent is not deterministically established.")!=NULL&&
+       strstr(answer.diagnostic.report,"NOT QUERIED")!=NULL);
+    result->tests_executed=16;
     result->tests_passed=passed;
-    result->tests_failed=15-passed;
+    result->tests_failed=16-passed;
     result->negative_test_executed=3;
-    result->negative_test_passed=passed==15?3:0;
-    return passed==15?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
+    result->negative_test_passed=passed==16?3:0;
+    return passed==16?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_QUALIFICATION;
 }
 static stnlabz_module_result_t dsd_start(const stnlabz_module_host_t *host){
     if(!host||!host->register_service||!host->unregister_service)
