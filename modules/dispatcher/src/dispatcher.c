@@ -222,6 +222,16 @@ static stnlabz_module_result_t dispatcher_handle_observed(const void *request,si
         memcpy(response,&out,sizeof(out));*response_used=sizeof(out);return STNLABZ_MODULE_OK;
     }
     out.diagnostic.interpretation_substitutions=interpretation_result.substitutions;
+    out.diagnostic.lookup_count=interpretation_result.lookup_count;
+    if(out.diagnostic.lookup_count>DIGIT_DSD_LOOKUP_MAX)
+        out.diagnostic.lookup_count=DIGIT_DSD_LOOKUP_MAX;
+    {unsigned int i;for(i=0;i<out.diagnostic.lookup_count;++i){
+        digit_dsd_lookup_t *to=&out.diagnostic.lookups[i];
+        const digit_interpretation_lookup_t *from=&interpretation_result.lookups[i];
+        snprintf(to->term,sizeof(to->term),"%s",from->term);
+        snprintf(to->selected_record_id,sizeof(to->selected_record_id),"%s",from->selected_record_id);
+        to->returned=from->returned;to->accepted=from->accepted;to->query_ok=from->query_ok;
+    }}
     snprintf(out.diagnostic.interpretation_reason,sizeof(out.diagnostic.interpretation_reason),"%s",interpretation_result.reason);
     observed_stage(&out,"interpretation",DIGIT_DSD_OK,"RESOLVED");
     if(memchr(interpretation_result.normalized,'\0',sizeof(interpretation_result.normalized))==NULL||
