@@ -73,6 +73,10 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
     size_t i;
     unsigned int ok=0;
     if(!in||!out||in->stage_count>DIGIT_DSD_STAGE_COUNT||
+       in->intent_observed>1||in->intent_established>1||
+       !terminated(in->interpretation_reason,sizeof(in->interpretation_reason))||
+       !terminated(in->intent_reason,sizeof(in->intent_reason))||
+       !terminated(in->intent_subject,sizeof(in->intent_subject))||
        in->candidate_constructed>1||in->outbound_approved>1||
        in->selected>in->retrieved||in->outbound_approved&&!in->candidate_constructed)
         return 0;
@@ -130,6 +134,32 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
                  in->stage_count,ok,in->retrieved,in->selected);
     }
     engineering_handoff(out);
+    /* [AI:GPT-6 | 2026-10-12] Explain the recorded decision, not merely
+     * the last stage code. Never claim a Corpus lookup ran if Intent stopped
+     * dispatch before Response. State unresolved evidence explicitly. */
+    if(in->intent_observed){
+        char prior[DIGIT_DSD_REPORT_MAX];
+        const char *classification=in->intent_class==0?"UNKNOWN":
+            in->intent_class==10?"AMBIGUOUS":"CLASSIFIED";
+        snprintf(prior,sizeof(prior),"%s",out->diagnostic.report);
+        if(in->intent_class==0||in->intent_class==10){
+            snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
+              "Intent received Interpretation output and returned %s (established=%u). "
+              "Intent decision: %.215s. Interpretation changed %u token(s); reason: %.100s. "
+              "Dispatcher stopped before Response/Corpus retrieval; zero records here means NOT QUERIED, "
+              "not a failed Corpus search. Word-by-word lookup and rule identifiers were not emitted by "
+              "the upstream modules and cannot be verified from this trace. Source decision: "
+              "modules/intent/src/intent.c; dispatcher gate: modules/dispatcher/src/dispatcher.c.",
+              classification,in->intent_established,in->intent_reason,
+              in->interpretation_substitutions,in->interpretation_reason);
+        }else{
+            snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
+              "Intent classified the interpreted request (class=%u, target=%u, established=%u; "
+              "subject: %.100s; reason: %.150s). Interpretation substitutions=%u. %.260s",
+              in->intent_class,in->intent_target,in->intent_established,in->intent_subject,
+              in->intent_reason,in->interpretation_substitutions,prior);
+        }
+    }
     return 1;
 }
 static stnlabz_module_result_t diagnose_service(const void *request,size_t request_size,
