@@ -898,7 +898,8 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
  char payload[11000],escaped[8192];digit_ai_platform_permissions_t perm={0};
  interface_dispatcher_result_t out={0};
  digit_dsd_request_t diagnostic={0};unsigned int diagnostic_valid=0;
- if(strncmp(identity,"ai.",3)!=0||
+ if(strcmp(identity,"ai.public")==0){perm.dm=1;}
+ else if(strncmp(identity,"ai.",3)!=0||
     !digit_ai_platform_permissions(DIGIT_MCP_REGISTRY,identity,&perm)||!perm.dm){
   interface_reply(client,403,"{\"error\":\"AI platform required\"}\n");return;
  }
@@ -934,7 +935,7 @@ static void interface_mcp_handle(int client,const char *request,const char *iden
      interface_learn_text(text)){
    interface_reply(client,403,"{\"error\":\"AI capability denied\"}\n");return;
   }
-  if(interface_memory_private(text,identity,&out)){}
+  if(strcmp(identity,"ai.public")!=0&&interface_memory_private(text,identity,&out)){}
   else if(interface_private_name(text,request,identity,out.answer,sizeof(out.answer))){out.answered=1;}
   else if(!interface_dispatch_private(text,identity,session->last_reply,
             session->last_user_message,session->last_diagnostic_valid,
@@ -1131,51 +1132,12 @@ if(strncmp(request,"POST /session/logout ",21)==0){
 /* Streamable HTTP clients may probe GET before POST. Challenge with
  * OAuth metadata rather than falling through to unrelated session routes. */
 if(strncmp(request,"GET /mcp HTTP/1.1",17)==0){
- interface_reply(client,401,"{\"error\":\"authentication_required\"}\n");return;
+ interface_reply(client,405,"{\"error\":\"method_not_allowed\"}\n");return;
 }
 if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
- char key[DIGIT_SESSION_TOKEN_SIZE],actor[64]={0};
- digit_session_entry_t *session=NULL;
- {
-  const char *stage=NULL;
-  if(!digit_http_bearer_token(request,key))stage="HEADER_REJECTED";
-  else if(!digit_ai_platform_verify_key(DIGIT_MCP_REGISTRY,
-                                       DIGIT_MCP_CREDENTIALS,key,actor)){
-   /* OAuth-issued bearer is introspected by the ChatGPT module; neither
-    * the public Interface nor the caller may assert their own identity. */
-   digit_chatgpt_oauth_validate_request_t in={{0}};
-   digit_chatgpt_oauth_validate_response_t out={0};
-   digit_ai_platform_permissions_t permissions={0};
-   size_t used=0;
-   snprintf(in.authorization,sizeof(in.authorization),"Bearer %s",key);
-   if(!interface_invoke(DIGIT_CHATGPT_OAUTH_VALIDATE_SERVICE,&in,sizeof(in),
-                        &out,sizeof(out),&used)||
-      used!=sizeof(out)||!out.authenticated||
-      !memchr(out.principal,0,sizeof(out.principal))||
-      strncmp(out.principal,"ai.",3)!=0||
-      !digit_account_active_file(DIGIT_MCP_CREDENTIALS,out.principal)||
-      !digit_ai_platform_permissions(DIGIT_MCP_REGISTRY,
-                                      out.principal,&permissions)||
-      !permissions.dm)
-       stage="ACCOUNT_OR_PERMISSION_REJECTED";
-   else
-       strcpy(actor,out.principal);
-  }
-  if(!stage && !(session=interface_mcp_key_session(key,actor)))
-   stage="PRIVATE_SESSION_UNAVAILABLE";
-  if(stage){
-   if(interface_host && interface_host->send_message){
-    char note[144];
-    snprintf(note,sizeof(note),"[INTERFACE] MCP AUTH_DENIED stage=%s",stage);
-    (void)interface_host->send_message(note);
-   }
-   memset(key,0,sizeof(key));
-   interface_reply(client,401,"{\"error\":\"AI MCP bearer authentication required\"}\n");
-   return;
-  }
- }
- memset(key,0,sizeof(key));
- interface_mcp_handle(client,request,actor,session,body);return;
+ digit_session_entry_t anonymous_session={0};
+ interface_mcp_handle(client,request,"ai.public",&anonymous_session,body);
+ return;
 }
 /* [AI:GPT-6 | 2026-10-08] No API operation beyond health/login/logout/session
  * enters a service without authenticated current account state. Resource ACL
@@ -1900,5 +1862,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,9,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,0,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
