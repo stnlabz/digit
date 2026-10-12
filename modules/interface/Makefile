@@ -64,10 +64,10 @@ check-abi:
 	@test -f "$(ABI_INCLUDE)/module.h" || { echo "Missing external ABI: $(ABI_INCLUDE)/module.h"; exit 1; }
 	@test -f "$(DIGIT_INCLUDE)/core_services.h" || { echo "Missing Digit Core service contract: $(DIGIT_INCLUDE)/core_services.h"; exit 1; }
 
-$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h includes/project_admin_route.h includes/message_origin.h includes/message_results.h includes/channel_results.h includes/corpus_response.h includes/alert_results.h includes/http_write.h includes/knowledge_query.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TARGET): $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h ../dsd/includes/dsd.h includes/project_channel_bridge.h includes/project_provision.h includes/security_sa.h includes/project_admin_route.h includes/message_origin.h includes/message_results.h includes/channel_results.h includes/corpus_response.h includes/alert_results.h includes/http_write.h includes/knowledge_query.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -shared $(SOURCE) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h $(DIGIT_INCLUDE)/core_services.h | bin
+$(TEST_TARGET): $(TEST_SOURCE) $(SOURCE) includes/channel_acl.h includes/access_policy.h includes/interface.h includes/session_store.h ../dsd/includes/dsd.h $(DIGIT_INCLUDE)/core_services.h | bin
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TEST_SOURCE) $(SOURCE) -o $@ $(LDLIBS)
 
 $(ACCESS_TEST_TARGET): tests/test_access_policy.c includes/access_policy.h | bin
