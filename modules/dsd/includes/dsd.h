@@ -14,6 +14,14 @@
 #define DIGIT_DSD_SYMPTOM_MAX 192
 #define DIGIT_DSD_LOCATION_MAX 160
 #define DIGIT_DSD_STAGE_COUNT 6
+#define DIGIT_DSD_LOOKUP_MAX 4
+typedef struct {
+    char term[64];
+    char selected_record_id[65];
+    unsigned int returned;
+    unsigned int accepted;
+    unsigned int query_ok;
+} digit_dsd_lookup_t;
 
 typedef enum {
     DIGIT_DSD_UNOBSERVED = 0,
@@ -52,6 +60,8 @@ typedef struct {
     char interpretation_reason[256];
     char intent_reason[256];
     char intent_subject[256];
+    unsigned int lookup_count;
+    digit_dsd_lookup_t lookups[DIGIT_DSD_LOOKUP_MAX];
 } digit_dsd_request_t;
 
 typedef enum {
