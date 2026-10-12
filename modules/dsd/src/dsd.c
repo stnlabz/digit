@@ -74,6 +74,7 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
     unsigned int ok=0;
     if(!in||!out||in->stage_count>DIGIT_DSD_STAGE_COUNT||
        in->intent_observed>1||in->intent_established>1||
+       in->lookup_count>DIGIT_DSD_LOOKUP_MAX||
        !terminated(in->interpretation_reason,sizeof(in->interpretation_reason))||
        !terminated(in->intent_reason,sizeof(in->intent_reason))||
        !terminated(in->intent_subject,sizeof(in->intent_subject))||
@@ -158,6 +159,20 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
               "subject: %.100s; reason: %.150s). Interpretation substitutions=%u. %.260s",
               in->intent_class,in->intent_target,in->intent_established,in->intent_subject,
               in->intent_reason,in->interpretation_substitutions,prior);
+        }
+    }
+    if(in->lookup_count){
+        size_t used=strlen(out->diagnostic.report),i;
+        for(i=0;i<in->lookup_count&&used+110<sizeof(out->diagnostic.report);++i){
+            const digit_dsd_lookup_t *ev=&in->lookups[i];
+            int written=snprintf(out->diagnostic.report+used,sizeof(out->diagnostic.report)-used,
+                " Term %.40s -> Interpretation/Corpus search: %s, %u result(s), "
+                "learned token accepted=%s, record=%.48s.",ev->term,
+                ev->query_ok?"COMPLETED":"UNAVAILABLE",ev->returned,
+                ev->accepted?"YES":"NO",ev->accepted?ev->selected_record_id:"NONE");
+            if(written<0)break;
+            if((size_t)written>=sizeof(out->diagnostic.report)-used)break;
+            used+=(size_t)written;
         }
     }
     return 1;
