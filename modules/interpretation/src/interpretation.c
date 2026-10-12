@@ -158,8 +158,36 @@ static int learned_meaning_observed(const char *word, char *out, size_t out_size
     snprintf(request.query,sizeof(request.query),"%s",word);
     if(interpretation_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&request,sizeof(request),
        &result,sizeof(result),&used)!=STNLABZ_MODULE_OK||used!=sizeof(result))return 0;
-    if(trace){trace->query_ok=1;trace->returned=(unsigned int)result.count;}
+    if(trace){trace->query_ok=1;trace->returned=(unsigned int)result.count;
+        snprintf(trace->decision,sizeof(trace->decision),"%s","NO_ACCEPTED_LEARNED_RELATION");}
     accepted=unique_learned_meaning(&result,word,out,out_size);
+    if(trace&&accepted)
+        snprintf(trace->decision,sizeof(trace->decision),"%s","LEARNED_RELATION_ACCEPTED");
+    if(trace&&!accepted){
+        char first[128]={0};int conflict=0,multiword=0;
+        for(i=0;i<result.count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
+            const digit_corpus_record_t *record=&result.records[i];
+            char candidate[128];const char *sep,*value;
+            if(parse_learned_definition(record,word,candidate,sizeof(candidate))||
+               parse_learned_equivalence(record,word,candidate,sizeof(candidate))){
+                if(first[0]&&strcasecmp(first,candidate))conflict=1;
+                else snprintf(first,sizeof(first),"%s",candidate);
+            }
+            if(strcmp(record->category,"OPERATOR_LEARNED")||
+               strcmp(record->source,"interface:learn"))continue;
+            sep=strstr(record->text," means ");
+            if(!sep||!word_equal_ci(record->text,(size_t)(sep-record->text),word))continue;
+            value=sep+7;
+            while(*value&&isspace((unsigned char)*value))++value;
+            while(*value&&(isalnum((unsigned char)*value)||*value=='_'||*value=='-'))++value;
+            if(isspace((unsigned char)*value)){
+                while(isspace((unsigned char)*value))++value;
+                if(*value&&(*value!='.'||value[1]))multiword=1;
+            }
+        }
+        if(conflict)snprintf(trace->decision,sizeof(trace->decision),"%s","CONFLICTING_LEARNED_RELATIONS");
+        else if(multiword)snprintf(trace->decision,sizeof(trace->decision),"%s","MULTIWORD_DEFINITION_REJECTED");
+    }
     if(trace&&accepted){
         trace->accepted=1;
         for(i=0;i<result.count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
