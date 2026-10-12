@@ -140,7 +140,8 @@ static void interface_reply(int c,int status,const char *body){
           "HTTP/1.1 %d %s\r\nContent-Type: application/json; charset=utf-8\r\n%sContent-Length: %zu\r\nConnection: close\r\n\r\n",
           status,reason,
           status==401 && interface_audit_request &&
-          strncmp(interface_audit_request,"POST /mcp HTTP/1.1",18)==0?
+          (strncmp(interface_audit_request,"POST /mcp HTTP/1.1",18)==0||
+           strncmp(interface_audit_request,"GET /mcp HTTP/1.1",17)==0)?
           "WWW-Authenticate: Bearer resource_metadata=\"https://digit.stn-labz.com:8081/.well-known/oauth-protected-resource\"\r\n":"",
           strlen(body));
         size_t off;
@@ -1095,6 +1096,11 @@ if(strncmp(request,"POST /session/logout ",21)==0){
 
 /* Dedicated authenticated MCP bearer path. Credentials remain operator-owned,
  * separately revocable, and never authorize human administration. */
+/* Streamable HTTP clients may probe GET before POST. Challenge with
+ * OAuth metadata rather than falling through to unrelated session routes. */
+if(strncmp(request,"GET /mcp HTTP/1.1",17)==0){
+ interface_reply(client,401,"{\"error\":\"authentication_required\"}\n");return;
+}
 if(strncmp(request,"POST /mcp HTTP/1.1",18)==0){
  char key[DIGIT_SESSION_TOKEN_SIZE],actor[64]={0};
  digit_session_entry_t *session=NULL;
