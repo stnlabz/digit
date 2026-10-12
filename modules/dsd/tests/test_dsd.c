@@ -12,7 +12,7 @@ int main(void){
     check(module!=NULL,"DSD descriptor");
     check(module&&strcmp(module->id,"dsd")==0,"DSD module identity");
     check(module&&module->version_major==1&&module->version_minor==2&&
-          module->version_patch==2,"DSD 1.2.2 version");
+          module->version_patch==3,"DSD 1.2.3 version");
     check(module&&module->qualify&&module->qualify(&result)==STNLABZ_MODULE_OK,
           "executable qualification");
     check(result.tests_executed==17&&result.tests_passed==17&&
