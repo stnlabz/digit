@@ -132,7 +132,7 @@ static void interface_reply(int c,int status,const char *body){
         const char *req=interface_audit_request;
         const char *space=req?strchr(req,' '):NULL;
         const char *path=space?space+1:NULL;
-        const char *end=path?strpbrk(path," ?\\r\\n"):NULL;
+        const char *end=path?strpbrk(path," ?\r\n"):NULL;
         size_t path_len=end?(size_t)(end-path):0;
         if(path_len && path_len<96 &&
            (strncmp(path,"/mcp",4)==0 && (path_len==4 || path[4]=='/') ||
@@ -1850,5 +1850,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,1,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,10,2,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
