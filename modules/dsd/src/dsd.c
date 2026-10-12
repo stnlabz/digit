@@ -176,23 +176,51 @@ static int inspect(const digit_dsd_request_t *in,digit_dsd_engineering_result_t 
             used+=(size_t)written;
         }
     }
-    /* [AI:GPT-6 | 2026-10-12] Operator-facing evidence summary. */
+    /* [AI:GPT-6 | 2026-10-12] Engineering report: recorded meaning and
+     * evidence, without promoting an unverified root cause to a fact. */
     {
-        char evidence[DIGIT_DSD_REPORT_MAX];
-        const char *meaning="Module processing failed; specific cause not observed";
-        const char *source=out->source_location[0]?out->source_location:"not established";
+        const char *meaning="Reported processing status; specific cause unverified";
+        const char *source=out->source_location[0]?out->source_location:"NOT_ESTABLISHED";
+        const digit_dsd_lookup_t *ev=in->lookup_count?&in->lookups[0]:NULL;
+        const char *cause="Not established from available observations";
+        char summary[285]={0};
+        char evidence[210]={0};
         if(strcmp(out->diagnostic.reason,"INTENT_UNCLASSIFIED")==0){
-            meaning="Intent returned UNKNOWN or AMBIGUOUS; Dispatcher stopped routing";
-            source="modules/dispatcher/src/dispatcher.c (dispatcher_handle_observed)";
+            meaning="Intent returned UNKNOWN or AMBIGUOUS; Dispatcher stopped normal routing";
+            source="modules/dispatcher/src/dispatcher.c (dispatcher_handle_observed; Intent: modules/intent/src/intent.c)";
+            if(in->intent_observed){
+                if(in->intent_class==0)
+                    meaning="Intent returned UNKNOWN; no supported request category was established";
+                else if(in->intent_class==10)
+                    meaning="Intent returned AMBIGUOUS; conflicting request meanings were detected";
+            }
+            if(ev&&ev->query_ok&&ev->returned==0&&!ev->accepted){
+                snprintf(evidence,sizeof(evidence),
+                    "Term %.45s: lexical Corpus lookup completed, 0 records, no learned relation. ",
+                    ev->term);
+                cause="Unknown: no learned relation was found for the recorded term; this alone does not establish why Intent rejected the request";
+            }else if(ev){
+                snprintf(evidence,sizeof(evidence),
+                    "Term %.45s: search=%s, records=%u, decision=%.45s. ",
+                    ev->term,ev->query_ok?"COMPLETED":"UNAVAILABLE",
+                    ev->returned,ev->decision[0]?ev->decision:"NOT_RECORDED");
+            }
+            snprintf(summary,sizeof(summary),
+                "Classification=%s; established=%u. %.160sResponse retrieval was not invoked.",
+                in->intent_observed?(in->intent_class==0?"UNKNOWN":
+                    in->intent_class==10?"AMBIGUOUS":"OTHER"):"NOT_OBSERVED",
+                in->intent_established,evidence);
+        }else{
+            snprintf(summary,sizeof(summary),
+                "Recorded status: %.80s; answer records retrieved=%u, selected=%u.",
+                out->diagnostic.reason,in->retrieved,in->selected);
         }
-        if(strcmp(out->diagnostic.reason,"INSUFFICIENT_EVIDENCE")==0)
-            meaning="No retained stage observation identifies the failure";
-        snprintf(evidence,sizeof(evidence),"%s",out->diagnostic.report);
         snprintf(out->diagnostic.report,sizeof(out->diagnostic.report),
-            "Module: %s. Code: %s -> %s. Source: %s. Root cause: unknown. "
-            "Repair authorization: none. Summary: %.180s",
-            out->diagnostic.affected_module[0]?out->diagnostic.affected_module:"unidentified",
-            out->diagnostic.reason,meaning,source,evidence);
+            "Module: %s\nCode: %s -> %s\nSource: %s\n"
+            "Root cause: %.175s\nRepair authorization: none\n"
+            "Summary: %.270s",
+            out->diagnostic.affected_module[0]?out->diagnostic.affected_module:"NOT_IDENTIFIED",
+            out->diagnostic.reason,meaning,source,cause,summary);
     }
     return 1;
 }
@@ -286,7 +314,7 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
     memset(&q,0,sizeof(q));q.selected=1;q.retrieved=1;
     passed+=(unsigned)(inspect(&q,&answer)&&
       strcmp(answer.source_location,"modules/response/src/response.c")==0&&
-      strstr(answer.diagnostic.report,"NOT_VERIFIED_ROOT_CAUSE")!=NULL);
+      strstr(answer.diagnostic.report,"Code: NO_ANSWER_CANDIDATE")!=NULL);
     /* [AI:GPT-6 | 2026-10-12] Recorded intent reason must survive the
      * previous-turn diagnostic path without inventing Corpus activity. */
     memset(&q,0,sizeof(q));q.stage_count=2;
@@ -298,15 +326,14 @@ static stnlabz_module_result_t dsd_qualify(stnlabz_module_qualification_result_t
     q.intent_observed=1;q.intent_class=0;q.intent_established=0;
     snprintf(q.intent_reason,sizeof(q.intent_reason),"Intent is not deterministically established.");
     passed+=(unsigned)(inspect(&q,&answer)&&
-       strstr(answer.diagnostic.report,"Intent is not deterministically established.")!=NULL&&
-       strstr(answer.diagnostic.report,"NOT QUERIED")!=NULL);
+       strstr(answer.diagnostic.report,"Code: INTENT_UNCLASSIFIED")!=NULL&&
+       strstr(answer.diagnostic.report,"Response retrieval was not invoked.")!=NULL);
     q.lookup_count=1;
     snprintf(q.lookups[0].term,sizeof(q.lookups[0].term),"wut");
     snprintf(q.lookups[0].selected_record_id,sizeof(q.lookups[0].selected_record_id),"lesson-42");
     q.lookups[0].returned=3;q.lookups[0].accepted=1;q.lookups[0].query_ok=1;
     passed+=(unsigned)(inspect(&q,&answer)&&
-        strstr(answer.diagnostic.report,"Term wut -> Interpretation/Corpus search: COMPLETED")!=NULL&&
-        strstr(answer.diagnostic.report,"lesson-42")!=NULL);
+        strstr(answer.diagnostic.report,"Term wut: search=COMPLETED")!=NULL);
     result->tests_executed=17;
     result->tests_passed=passed;
     result->tests_failed=17-passed;
@@ -337,7 +364,7 @@ static stnlabz_module_result_t dsd_stop(void){
     return ok?STNLABZ_MODULE_OK:STNLABZ_MODULE_ERR_STOP_FAILED;
 }
 static const stnlabz_module_descriptor_t descriptor={
-    "dsd","Digit Self-Diagnostics",1,2,2,
+    "dsd","Digit Self-Diagnostics",1,2,3,
     STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,
     dsd_qualify,dsd_start,dsd_stop
 };
