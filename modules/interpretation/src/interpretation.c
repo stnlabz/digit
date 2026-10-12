@@ -144,11 +144,13 @@ static int unique_learned_meaning(const digit_corpus_search_result_t *result,
     return 1;
 }
 
-static int learned_meaning(const char *word, char *out, size_t out_size)
+static int learned_meaning_observed(const char *word, char *out, size_t out_size,
+    digit_interpretation_lookup_t *trace)
 {
     digit_corpus_search_request_t request;
     digit_corpus_search_result_t result;
-    size_t used=0;
+    size_t used=0,i;int accepted;
+    if(trace){memset(trace,0,sizeof(*trace));snprintf(trace->term,sizeof(trace->term),"%s",word?word:"");}
     if(word==NULL||out==NULL||out_size==0||interpretation_host==NULL||
        interpretation_host->invoke_service==NULL)return 0;
     memset(&request,0,sizeof(request));
@@ -156,7 +158,24 @@ static int learned_meaning(const char *word, char *out, size_t out_size)
     snprintf(request.query,sizeof(request.query),"%s",word);
     if(interpretation_host->invoke_service(DIGIT_CORPUS_SEARCH_SERVICE,&request,sizeof(request),
        &result,sizeof(result),&used)!=STNLABZ_MODULE_OK||used!=sizeof(result))return 0;
-    return unique_learned_meaning(&result,word,out,out_size);
+    if(trace){trace->query_ok=1;trace->returned=(unsigned int)result.count;}
+    accepted=unique_learned_meaning(&result,word,out,out_size);
+    if(trace&&accepted){
+        trace->accepted=1;
+        for(i=0;i<result.count&&i<DIGIT_CORPUS_SEARCH_MAX;++i){
+            char candidate[128];
+            if((parse_learned_definition(&result.records[i],word,candidate,sizeof(candidate))||
+                parse_learned_equivalence(&result.records[i],word,candidate,sizeof(candidate)))&&
+                strcasecmp(candidate,out)==0){
+                snprintf(trace->selected_record_id,sizeof(trace->selected_record_id),"%s",result.records[i].id);
+                break;
+            }
+        }
+    }
+    return accepted;
+}
+static int learned_meaning(const char *word,char *out,size_t out_size){
+    return learned_meaning_observed(word,out,out_size,NULL);
 }
 
 static void trim_trailing_space(char *text)
@@ -256,7 +275,8 @@ static int definition_target_span(const char *input,const char **begin,const cha
  return *p=='?'||*p=='.'||*p=='\0';
 }
 
-static int resolve_text(const char *input, char *output, size_t output_size, unsigned int *substitutions)
+static int resolve_text_observed(const char *input, char *output, size_t output_size,
+    unsigned int *substitutions,digit_interpretation_lookup_t *lookups,unsigned int *lookup_count)
 {
     const char *p = input;
     size_t used = 0;
@@ -278,12 +298,18 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
             if (n >= sizeof(word)) n = sizeof(word) - 1;
             memcpy(word, start, n);
             word[n] = '\0';
-            if (!quote && !(definition_begin&&start==definition_begin&&p==definition_end) &&
-                learned_meaning(word, meaning, sizeof(meaning)))
+            if (!quote && !(definition_begin&&start==definition_begin&&p==definition_end))
             {
+                digit_interpretation_lookup_t *observation=NULL;
+                int substituted;
+                if(lookups&&lookup_count&&*lookup_count<DIGIT_INTERPRETATION_TRACE_MAX)
+                    observation=&lookups[(*lookup_count)++];
+                substituted=learned_meaning_observed(word,meaning,sizeof(meaning),observation);
+                if(substituted){
                 start = meaning;
                 n = strlen(meaning);
                 ++changed;
+                }
             }
             if (n >= output_size - used) return 0;
             memcpy(output + used, start, n);
@@ -306,6 +332,10 @@ static int resolve_text(const char *input, char *output, size_t output_size, uns
     output[used] = '\0';
     if (substitutions != NULL) *substitutions = changed;
     return 1;
+}
+
+static int resolve_text(const char *input,char *output,size_t capacity,unsigned int *substitutions){
+    return resolve_text_observed(input,output,capacity,substitutions,NULL,NULL);
 }
 
 /* [AI:GPT-6 | 2026-10-10] Expose bounded Corpus-authorized
@@ -345,7 +375,8 @@ static stnlabz_module_result_t interpretation_service(const void *request, size_
     if (memchr(input->text, '\0', sizeof(input->text)) == NULL || input->text[0] == '\0')
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     memset(&result, 0, sizeof(result));
-    if (!resolve_text(input->text, result.normalized, sizeof(result.normalized), &result.substitutions))
+    if (!resolve_text_observed(input->text, result.normalized, sizeof(result.normalized),
+        &result.substitutions,result.lookups,&result.lookup_count))
         return STNLABZ_MODULE_ERR_INVALID_ARGUMENT;
     {
         int addressee_removed = strip_terminal_addressee(result.normalized);
