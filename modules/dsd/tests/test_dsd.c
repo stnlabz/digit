@@ -15,7 +15,7 @@ int main(void){
           module->version_patch==0,"DSD 1.2.0 version");
     check(module&&module->qualify&&module->qualify(&result)==STNLABZ_MODULE_OK,
           "executable qualification");
-    check(result.tests_executed==16&&result.tests_passed==16&&
+    check(result.tests_executed==17&&result.tests_passed==17&&
           result.tests_failed==0,"all diagnostic cases measured");
     check(result.negative_test_executed==3&&result.negative_test_passed==3,
           "negative tests measured");
