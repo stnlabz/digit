@@ -959,6 +959,18 @@ static void interface_handle(int client){char request[INTERFACE_BUFFER_MAX],id[D
 if(strncmp(request,"GET /health ",12)==0){interface_reply(client,200,"{\"status\":\"READY\"}\n");return;}
 /* Fixed operator key is checked against the existing MCP credentials/registry.
  * Only verified ai.* principal is passed to the ChatGPT OAuth service. */
+/* Trace successful OAuth discovery, without logging query parameters or secrets. */
+if(interface_host && interface_host->send_message &&
+   (strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0 ||
+    strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0 ||
+    strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0)){
+ const char *kind=strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0
+                    ?"authorization_server":"protected_resource";
+ char note[160];
+ snprintf(note,sizeof(note),
+          "[INTERFACE] OAUTH_DISCOVERY kind=%s method=GET outcome=SERVED",kind);
+ (void)interface_host->send_message(note);
+}
 if(strncmp(request,"GET /.well-known/oauth-authorization-server HTTP/1.1",52)==0||
    (strncmp(request,"GET /.well-known/oauth-protected-resource HTTP/1.1",50)==0||
    strncmp(request,"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1",54)==0)){
@@ -1888,5 +1900,5 @@ failed:
 static stnlabz_module_result_t interface_stop(void){if(interface_fd>=0){interface_running=0;shutdown(interface_fd,SHUT_RDWR);close(interface_fd);interface_fd=-1;(void)pthread_join(interface_thread,NULL);}digit_session_store_init(&interface_sessions);interface_host=NULL;if(interface_tls_context){SSL_CTX_free(interface_tls_context);interface_tls_context=NULL;}return STNLABZ_MODULE_OK;}
 /* [AI:GPT-6 | 2026-10-08] Advertise the qualified 1.5.3 Builder response release. */
 /* [AI:GPT-6 | 2026-10-09] Version increment for structured Alerts-channel output. */
-static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,9,8,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
+static const stnlabz_module_descriptor_t interface_descriptor={"interface","Digit Interface",1,9,9,STNLABZ_MODULE_API_MAJOR,STNLABZ_MODULE_API_MINOR,interface_qualify,interface_start,interface_stop};
 const stnlabz_module_descriptor_t *stnlabz_module_get_descriptor(void){return &interface_descriptor;}
